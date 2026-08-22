@@ -7,15 +7,15 @@ d'administration côté plateforme.
 
 ## Arborescence du monorepo
 
-| Dossier                           | Rôle                                                                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker/`                         | Configurations de conteneurisation : Dockerfiles des services et scripts d'initialisation.                                             |
-| `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                       |
-| `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                     |
-| `frontend/frontend-individual/`   | Interface **B2C** — application des propriétaires d'animaux.                                                                           |
-| `frontend/frontend-admin/`        | Interface d'**administration** — back-office de la plateforme.                                                                         |
-| `packages/`                       | Bibliothèques et composants partagés par les trois frontends (UI shadcn en mode monorepo, configurations communes, client API généré). |
-| `documentation/`                  | Documentation technique du projet, publiée avec Docusaurus.                                                                            |
+| Dossier                           | Rôle                                                                                                                                             |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `docker/`                         | Configurations de conteneurisation : le `docker-compose.yml` qui assemble la pile, les Dockerfiles des services et les scripts d'initialisation. |
+| `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                                 |
+| `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                               |
+| `frontend/frontend-individual/`   | Interface **B2C** — application des propriétaires d'animaux.                                                                                     |
+| `frontend/frontend-admin/`        | Interface d'**administration** — back-office de la plateforme.                                                                                   |
+| `packages/`                       | Bibliothèques et composants partagés par les trois frontends (UI shadcn en mode monorepo, configurations communes, client API généré).           |
+| `documentation/`                  | Documentation technique du projet, publiée avec Docusaurus.                                                                                      |
 
 Les dossiers encore vides contiennent un `.gitkeep` afin que l'arborescence soit
 versionnée dès maintenant : chacun sera rempli par le ticket qui lui correspond.
@@ -35,7 +35,15 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 ## Démarrage rapide
 
+Une partie seulement de la pile démarre aujourd'hui : le service d'API. Les
+bases de données, le stockage objet et les trois frontends arrivent avec les
+tickets INFRA et FRONT. Cette section décrit donc **deux parcours** — celui qui
+fonctionne maintenant, puis la cible conteneurisée — et l'allocation de ports
+que cette cible devra respecter.
+
 ### Prérequis
+
+Pour le parcours qui fonctionne aujourd'hui :
 
 - **Node 24 LTS** — la version de référence est déclarée dans [`.nvmrc`](.nvmrc) :
   avec `nvm` ou `fnm`, `nvm use` suffit à s'y aligner.
@@ -44,7 +52,48 @@ Il sera repris et enrichi dans le site `documentation/`.
 - **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api`. Il
   télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
 
+Deux outils de plus pour le parcours conteneurisé. **Rien ne les réclame
+encore** ; les installer maintenant évite seulement d'avoir à revenir ici :
+
+- **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
+  [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).
+  C'est bien `docker compose`, sous-commande du client, qu'attendent INFRA-01 et
+  suivants — pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
+- **`make`** — sur macOS, il vient des Command Line Tools :
+  `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est déjà
+  elle qui exécute [`backend/api/Makefile`](backend/api/Makefile).
+
 ### Installation
+
+```bash
+git clone git@github.com:kederiku/juui.git && cd juui
+```
+
+Aucun `.env` n'est versionné — [`.gitignore`](.gitignore) les exclut tous et
+n'excepte que les gabarits. Chaque fichier d'environnement se crée à partir du
+sien, en retirant le suffixe `.example` :
+
+| Gabarit versionné               | Fichier à créer    | Lu par                                 |
+| ------------------------------- | ------------------ | -------------------------------------- |
+| `.env.example`                  | `.env`             | `docker compose` — toute la pile       |
+| `backend/api/.env.example`      | `backend/api/.env` | l'API lancée **hors** Docker (BACK-03) |
+| `frontend/*/.env.local.example` | `.env.local`       | chaque application Next.js             |
+
+```bash
+cp .env.example .env
+cp backend/api/.env.example backend/api/.env
+```
+
+Les valeurs livrées conviennent telles quelles sur un poste vierge : rien n'est
+à modifier pour un premier démarrage. **Chaque variable est documentée dans son
+gabarit** — les commentaires y font foi, ce README ne les recopie pas pour
+éviter qu'ils divergent. Une seule mérite d'être changée dès qu'on quitte le
+poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
+`openssl rand -hex 32`.
+
+> **Note.** Les trois gabarits `frontend/*/.env.local.example` sont déjà là,
+> mais les applications qui les liront n'existent pas encore : leur copie
+> n'aura d'utilité qu'à partir de FRONT-01.
 
 Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre.
 
@@ -65,7 +114,9 @@ workspaces et piloté par `uv` :
 cd backend/api && uv sync
 ```
 
-### Démarrer l'API
+### Démarrer aujourd'hui, sans Docker
+
+Un seul service démarre : l'API.
 
 ```bash
 cd backend/api && uv run uvicorn app.main:app --reload
@@ -73,6 +124,126 @@ cd backend/api && uv run uvicorn app.main:app --reload
 
 La documentation interactive répond sur <http://localhost:8000/docs>. L'API ne
 sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.md).
+
+`pnpm dev` ne démarre rien pour l'instant : aucun workspace pnpm ne définit
+encore de script `dev`, et ceux qui n'en définissent pas sont ignorés. Les
+serveurs de développement apparaîtront avec FRONT-01 à FRONT-03 et DOC-01, sur
+les ports du tableau plus bas.
+
+### La pile complète, avec Docker
+
+> **Note.** Cette séquence n'est **pas encore opérationnelle** : il n'existe ni
+> `Makefile` à la racine, ni `docker/docker-compose.yml`. Elle figure ici parce
+> qu'elle est le contrat que les tickets d'infrastructure doivent honorer —
+> INFRA-01 et BACK-03 dépendent l'un et l'autre de SETUP-05, et toute la chaîne
+> INFRA-02 à INFRA-06 découle d'INFRA-01. À relire une fois INFRA-06 livré.
+
+Une fois la pile conteneurisée en place, l'installation se réduira à trois
+commandes :
+
+```bash
+git clone git@github.com:kederiku/juui.git && cd juui
+cp .env.example .env
+make up
+```
+
+| Cible                   | Effet                                       |
+| ----------------------- | ------------------------------------------- |
+| `make up`               | Démarre toute la pile en arrière-plan.      |
+| `make down`             | Arrête la pile et libère les ports.         |
+| `make logs service=api` | Suit les logs d'un service.                 |
+| `make help`             | Cible par défaut : liste toutes les cibles. |
+
+INFRA-06 en prévoit d'autres — migrations, seed, tests, shell dans un conteneur.
+`make help` fera foi, comme dans [`backend/api/Makefile`](backend/api/Makefile),
+qui adopte déjà ces conventions et auquel le Makefile racine n'aura qu'à
+déléguer.
+
+Le fichier compose vivra dans `docker/`, le `.env` à la racine. Sans
+`--project-directory`, `docker compose` chercherait son `.env` dans `docker/` et
+n'en trouverait pas : c'est cette commande que `make up` encapsulera.
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml up -d
+```
+
+Ajouter `--profile tools` pour démarrer en plus les consoles d'inspection
+optionnelles.
+
+> **Après modification d'un mot de passe dans `.env`.** PostgreSQL et MinIO ne
+> lisent leurs identifiants qu'à la **première** création de leur volume. Les
+> changer ensuite reste sans effet jusqu'à un `docker compose down -v`, qui
+> détruit les données au passage. La cible `make db-reset` (INFRA-06) fera cela
+> proprement.
+
+Node et `uv` restent utiles sur le poste même avec ce parcours : les hooks de
+pre-commit s'exécutent en dehors des conteneurs.
+
+### Ports et URLs des services
+
+Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'ait
+à en choisir un dans son coin :
+
+| Service                       | Port hôte | Port interne | Arrive avec |
+| ----------------------------- | --------- | ------------ | ----------- |
+| API FastAPI                   | 8000      | 8000         | disponible  |
+| `frontend-professional`       | 3001      | 3000         | FRONT-01    |
+| `frontend-individual`         | 3002      | 3000         | FRONT-02    |
+| `frontend-admin`              | 3003      | 3000         | FRONT-03    |
+| Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
+| PostgreSQL                    | 5432      | 5432         | INFRA-01    |
+| pgAdmin                       | 5050      | 80           | INFRA-01    |
+| Redis                         | 6379      | 6379         | INFRA-02    |
+| RedisInsight (profil `tools`) | 5540      | 5540         | INFRA-02    |
+| MinIO — API S3                | 9000      | 9000         | INFRA-03    |
+| MinIO — console web           | 9001      | 9001         | INFRA-03    |
+| Worker TaskIQ                 | aucun     | —            | BACK-15     |
+
+Quelques choix méritent leur explication :
+
+- **3000 n'apparaît pas.** C'est le port d'écoute interne des conteneurs
+  Next.js, jamais publié : INFRA-05 le mappe sur 3001, 3002 et 3003 côté hôte.
+  Ce sont donc les mêmes ports qu'en développement local — d'où la règle : ne
+  pas lancer `pnpm dev` et `make up` en même temps.
+- **pgAdmin sur 5050.** Ni SETUP-05 ni INFRA-01 ne fixent ce port, et un tableau
+  censé garantir l'absence de collision ne peut pas laisser de case vide. 5050
+  est le port des exemples Compose de pgAdmin — le moins surprenant — et il
+  évite `8080`, déjà disputé par trop d'outils, comme les ports 5000 et 7000 que
+  le récepteur AirPlay de macOS occupe par défaut.
+- **RedisInsight sur 5540**, port d'écoute par défaut de l'image : le publier
+  tel quel évite une correspondance de plus à retenir. Le service reste derrière
+  le profil Compose `tools` et ne démarre donc pas avec `make up`.
+- **Le worker n'écoute rien.** Il consomme la file Redis et n'ouvre aucun port
+  entrant : rien à publier, rien à réserver.
+
+Les ports publiés sur le poste sont tous **configurables** par une variable
+`*_HOST_PORT` du `.env` : un PostgreSQL ou un Redis déjà installé localement se
+contourne en changeant une ligne, sans rien toucher aux conteneurs, qui
+continuent de se parler sur les ports internes.
+
+Les adresses à ouvrir dans un navigateur :
+
+| Service                         | URL                                  | Identifiants                                         |
+| ------------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| API — documentation interactive | <http://localhost:8000/docs>         | —                                                    |
+| API — contrat OpenAPI           | <http://localhost:8000/openapi.json> | —                                                    |
+| `frontend-professional`         | <http://localhost:3001>              | —                                                    |
+| `frontend-individual`           | <http://localhost:3002>              | —                                                    |
+| `frontend-admin`                | <http://localhost:3003>              | —                                                    |
+| Documentation                   | <http://localhost:3004>              | —                                                    |
+| pgAdmin                         | <http://localhost:5050>              | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
+| MinIO — console web             | <http://localhost:9001>              | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`            |
+| RedisInsight                    | <http://localhost:5540>              | —                                                    |
+
+PostgreSQL et Redis ne parlent pas HTTP : ils s'atteignent par une chaîne de
+connexion, que l'API compose elle-même à partir des variables `POSTGRES_*` et
+`REDIS_*`. Redis sépare ses usages par base — la base 0 pour le cache
+applicatif, la base 1 pour le broker TaskIQ.
+
+Les identifiants ne sont pas recopiés ici, seulement nommés : leurs valeurs sont
+celles du `.env`, dont [`.env.example`](.env.example) porte les exemples de
+développement. Une seule source de vérité — un mot de passe écrit à deux
+endroits finit toujours par diverger.
 
 ### Scripts racine
 
@@ -104,8 +275,23 @@ serait un double parcours, et laisserait de côté les fichiers de la racine, qu
 
 > **Note.** Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
 > siens, décrits dans [`backend/api/README.md`](backend/api/README.md). Les
-> variables d'environnement et la séquence de démarrage de l'ensemble de la
-> pile arrivent avec les tickets SETUP-05 et INFRA-06.
+> cibles `make` qui réuniront les deux chaînes derrière une interface unique
+> arrivent avec INFRA-06.
+
+### Écarts assumés avec le ticket SETUP-05
+
+| Écart                                                             | Raison                                                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Deux parcours au lieu de la seule séquence `make up`              | `make up` n'existe pas : le Makefile racine relève d'INFRA-06, qui dépend d'INFRA-05, donc de FRONT-01 à FRONT-03. Une séquence unique laisserait le nouvel arrivant sur `No rule to make target 'up'`.                                                                      |
+| Docker et `make` signalés comme pas encore nécessaires            | Le ticket les liste en prérequis. Les présenter sans réserve ferait installer Docker Desktop à qui veut seulement lancer un `uvicorn`.                                                                                                                                       |
+| `env_prefix` par sous-modèle plutôt que `env_nested_delimiter`    | BACK-03 prévoit `DB__`, `JWT__`… mais `POSTGRES_*`, `MINIO_ROOT_*` et `PGADMIN_DEFAULT_*` sont imposés par les images Docker. Le préfixe simple donne les mêmes sous-modèles sans couche de traduction.                                                                      |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` → `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Pour que le bloc JWT tienne dans un unique `env_prefix`. Seul renommage appliqué à la liste du ticket.                                                                                                                                                                       |
+| `DATABASE_URL` et `REDIS_URL` documentées mais commentées         | Valeurs dérivées : BACK-03 recompose l'URL à partir des composants. Les activer créerait une seconde source de vérité, qui divergerait au premier changement de mot de passe.                                                                                                |
+| `.env.local.example` côté frontend plutôt que `.env.example`      | `.env` est ignoré par le [`.gitignore`](.gitignore) : `.env.local` est le seul fichier que Next.js puisse charger, et la règle « retirer `.example` » reste vraie partout.                                                                                                   |
+| Port de pgAdmin fixé à 5050                                       | Ni SETUP-05 ni INFRA-01 ne le fixent. Un tableau qui doit garantir l'absence de collision ne peut pas laisser de case vide : le choix se fait ici, INFRA-01 en hérite.                                                                                                       |
+| Deux services de plus que la liste du ticket                      | Le tableau ne vaut comme garantie d'absence de collision que s'il est exhaustif. DOC-01 réserve déjà 3004 et INFRA-02 prévoit RedisInsight — les omettre rendrait la garantie fausse.                                                                                        |
+| Variables ajoutées hors de la liste du ticket                     | `CORS_ORIGINS` (BACK-11), `JWT_REFRESH_TOKEN_EXPIRE_DAYS` (BACK-10), `POSTGRES_TEST_DB` (INFRA-01), `REDIS_CACHE_DB` et `REDIS_BROKER_DB` (INFRA-02), `S3_REGION` (boto3), `API_INTERNAL_URL` (INFRA-05), `COMPOSE_PROJECT_NAME` et les `*_HOST_PORT` (INFRA-01 à INFRA-05). |
+| Identifiants nommés par leur variable, jamais recopiés            | INFRA-03 demande de documenter ceux de la console MinIO. Les nommer renvoie à [`.env.example`](.env.example), seule source de vérité.                                                                                                                                        |
 
 ## Conventions
 
