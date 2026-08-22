@@ -1,0 +1,29 @@
+# Prettier lit par defaut `./.gitignore` ET `./.prettierignore`, tous deux
+# resolus depuis le REPERTOIRE DE TRAVAIL. Lance depuis la racine — ce que font
+# les scripts `pnpm format` et `pnpm format:check` — il herite donc deja des
+# exclusions du .gitignore.
+
+# --- Versionne, mais a ne jamais reformater ---
+
+# Regenere par pnpm dans son propre format : le confier a Prettier ouvrirait une
+# boucle « pnpm reecrit / prettier --check refuse ».
+pnpm-lock.yaml
+
+# Client API produit par Orval depuis l'OpenAPI (SHARED-03) : versionne, mais
+# regenere a chaque modification d'un contrat — le reformater serait perdu.
+**/generated/
+
+# Deja minifie.
+*.min.*
+
+# --- Filet pour un lancement depuis un sous-dossier ---
+# Dans ce cas le .gitignore de la racine n'est plus lu, et ces chemins doivent
+# etre exclus ici. Garder aligne avec le .gitignore.
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.venv/
+documentation/.docusaurus/
+documentation/build/
