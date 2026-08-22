@@ -1,0 +1,24 @@
+# Conventions d'edition partagees par tout le monorepo.
+# Reference : https://editorconfig.org
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Python (backend/api) : 4 espaces, conformement a PEP 8 et a Ruff.
+[*.py]
+indent_size = 4
+
+# En Markdown, deux espaces en fin de ligne signifient un saut de ligne :
+# les supprimer changerait le rendu.
+[*.md]
+trim_trailing_whitespace = false
+
+# make refuse les espaces en debut de recette (INFRA-06).
+[Makefile]
+indent_style = tab

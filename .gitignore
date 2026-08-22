@@ -1,0 +1,49 @@
+# --- Python (backend/api) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+# Mesures partielles : une par suite de tests, fusionnees par `coverage combine`.
+.coverage.*
+coverage.xml
+
+# --- Node / Next.js (frontend/*, packages/*, documentation/) ---
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+# Rapports de couverture Vitest.
+coverage/
+# Regenere par `next build` a chaque demarrage : jamais commite.
+next-env.d.ts
+*.tsbuildinfo
+*-debug.log*
+
+# --- Documentation (Docusaurus) ---
+# `.docusaurus/` = cache de build, `build/` = site genere : les deux sont
+# reconstruits a la demande et republies par la CI. Chemins ancres sur
+# `documentation/` a dessein, un `build/` nu attraperait aussi d'autres dossiers.
+documentation/.docusaurus/
+documentation/build/
+
+# --- Env & secrets ---
+# Aucun secret dans le depot. Les gabarits `.env.example` (SETUP-05) sont la
+# seule exception : ils doivent rester committables, d'ou les negations.
+.env
+.env.*
+!.env.example
+!.env.local.example
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+.DS_Store
+
+# NB : les fichiers de verrouillage (uv.lock, pnpm-lock.yaml) et le client API
+# genere par Orval sont VERSIONNES a dessein — ne pas les ajouter ici.
