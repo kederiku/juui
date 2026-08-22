@@ -94,7 +94,115 @@ build-backend = "uv_build"
 # src/juui_api/ et echouerait.
 module-name = "app"
 
-# NOTE POUR BACK-02 : le ticket de configuration Ruff annonce
-# `target-version = "py312"`. Lire py314 -- c'est la version arretee ici, et
-# Ruff doit cibler la meme, sans quoi il refuserait la syntaxe recente et
-# reecrirait du code deja moderne.
+# ---------------------------------------------------------------------------
+# Qualite et typage (BACK-02)
+# ---------------------------------------------------------------------------
+# Ruff assure le lint ET le formatage : `ruff format` remplace Black, il n'y a
+# donc aucune section [tool.black] ni aucune autre dependance de formatage.
+
+[tool.ruff]
+line-length = 100
+
+# Le ticket BACK-02 annonce `py312`. On lit py314, et c'est delibere : le projet
+# est verrouille sur requires-python = ">=3.14,<3.15". Cibler py312 ferait
+# refuser a Ruff la syntaxe recente et lui ferait reecrire du code deja moderne.
+target-version = "py314"
+
+# Racine des sources, pour que le tri des imports (I) reconnaisse `app` comme
+# premier-parti meme lorsque Ruff est lance depuis la racine du monorepo --
+# ce que fera lint-staged en SETUP-04, qui passe des chemins absolus.
+src = ["src"]
+
+[tool.ruff.lint]
+# E/F      pycodestyle + Pyflakes : le socle.
+# I        tri des imports (remplace isort).
+# N        conventions de nommage PEP 8.
+# UP       modernisation de la syntaxe vers la cible py314.
+# B        pieges classiques (flake8-bugbear).
+# A        masquage des builtins.
+# C4       comprehensions inutilement verbeuses.
+# SIM      simplifications logiques.
+# RUF      regles propres a Ruff (dont RUF100, qui traque les `noqa` inutiles
+#          et fait pendant au warn_unused_ignores de Mypy).
+# ANN      annotations de type obligatoires -- la premiere barriere, Mypy etant
+#          la seconde.
+# S        securite (bandit).
+# D        docstrings (pydocstyle).
+#
+# S et D ne figuraient pas dans la liste du ticket, alors que celui-ci demande
+# d'autoriser `assert` et de dispenser de docstrings dans tests/. Sans eux cet
+# assouplissement n'aurait relache rien du tout : ce sont precisement S101 et
+# D1xx qui le rendent effectif.
+#
+# ANN101/ANN102 (annotation de self/cls) ne sont PAS ignorees, contrairement a
+# ce que demande le ticket : Ruff les a RETIREES. Les nommer dans `ignore`
+# n'aurait aucun effet, sinon un avertissement a chaque execution et dans chaque
+# log de CI. L'intention du ticket est de toute facon satisfaite d'office.
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ANN", "S", "D"]
+
+[tool.ruff.lint.pydocstyle]
+# Convention Google : desactive les regles de mise en forme incompatibles avec
+# les docstrings multi-lignes deja ecrites en BACK-01.
+convention = "google"
+
+[tool.ruff.lint.pep8-naming]
+# Un @field_validator Pydantic recoit `cls` sans forcement porter @classmethod.
+# Sans cette ligne, N805 reclame de le renommer en `self` -- un correctif qui
+# CASSERAIT le validateur. On apprend donc a Ruff que ces decorateurs
+# produisent des methodes de classe.
+classmethod-decorators = ["pydantic.field_validator", "pydantic.model_validator"]
+
+[tool.ruff.lint.per-file-ignores]
+# tests/ n'existe pas encore -- il arrive avec BACK-12. La regle est posee
+# d'avance pour que la suite de tests naisse conforme.
+#
+# S101 : `assert` est la maniere normale d'ecrire un test, pas une faille.
+# D1   : un test se nomme, il ne se documente pas.
+#
+# ANN reste ACTIF ici : le ticket ne demandait d'assouplir que ces deux points,
+# et `-> None` sur une fonction de test coute huit caracteres. A rediscuter en
+# BACK-12 si la contrainte se revele penible.
+"tests/**/*.py" = ["S101", "D1"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.mypy]
+python_version = "3.14"
+
+# `strict` active a lui seul les trois drapeaux nommes par le ticket --
+# disallow_untyped_defs, warn_return_any et warn_unused_ignores -- ainsi que
+# disallow_any_generics, disallow_untyped_calls, disallow_incomplete_defs,
+# check_untyped_defs, disallow_untyped_decorators, warn_redundant_casts,
+# no_implicit_reexport, strict_equality et extra_checks. Les redeclarer serait
+# du bruit : la liste ci-dessus tient lieu de documentation.
+strict = true
+
+# Le plugin Pydantic apprend a Mypy la signature reelle des __init__ generes.
+plugins = ["pydantic.mypy"]
+
+# Disposition src/ : permet de verifier un fichier isole (`mypy src/app/x.py`,
+# ce que font les editeurs) sans perdre la resolution des imports `app.*`.
+mypy_path = "src"
+
+# Rend `uv run mypy` nu equivalent a `uv run mypy src`, la commande du ticket.
+# tests/ reste volontairement hors perimetre : c'est BACK-12 qui decidera de
+# l'y faire entrer.
+files = ["src"]
+
+# Aucune dependance n'a besoin d'ignore_missing_imports aujourd'hui : toutes
+# livrent un py.typed, et boto3 est couvert par boto3-stubs[s3]. Si une
+# librairie sans stubs entre un jour, la derogation se declare PAR MODULE sur
+# ce modele -- jamais globalement, ce qui aveuglerait Mypy sur tout le projet :
+#
+# [[tool.mypy.overrides]]
+# module = ["librairie_sans_stubs.*"]
+# ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+# Un champ non annote, un kwargs inconnu ou mal type dans un Model(...) devient
+# une erreur de typage plutot qu'une erreur de validation a l'execution.
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+warn_untyped_fields = true
