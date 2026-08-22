@@ -41,16 +41,35 @@ Il sera repris et enrichi dans le site `documentation/`.
   avec `nvm` ou `fnm`, `nvm use` suffit à s'y aligner.
 - **pnpm** — rien à installer soi-même : le champ `packageManager` du
   `package.json` racine épingle la version exacte, que pnpm récupère seul.
+- **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api`. Il
+  télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
 
 ### Installation
+
+Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre.
+
+Côté JavaScript, les workspaces pnpm — `frontend/*`, `packages/*` et
+`documentation`, déclarés dans [`pnpm-workspace.yaml`](pnpm-workspace.yaml) :
 
 ```bash
 pnpm install
 ```
 
-Le dépôt est piloté par les workspaces pnpm — `frontend/*`, `packages/*` et
-`documentation`, déclarés dans [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
-`backend/api` en est exclu à dessein : c'est un projet Python, outillé par `uv`.
+Côté Python, le seul service `backend/api`, volontairement absent de ces
+workspaces et piloté par `uv` :
+
+```bash
+cd backend/api && uv sync
+```
+
+### Démarrer l'API
+
+```bash
+cd backend/api && uv run uvicorn app.main:app --reload
+```
+
+La documentation interactive répond sur <http://localhost:8000/docs>. L'API ne
+sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.md).
 
 ### Scripts racine
 
@@ -76,9 +95,10 @@ celle de la racine au reste. Prettier procède de même. Déléguer aux workspac
 serait un double parcours, et laisserait de côté les fichiers de la racine, que
 `pnpm -r` n'atteint pas.
 
-> **Note.** Aucun service n'est encore démarrable : les variables
-> d'environnement et la séquence de démarrage complète arrivent avec les tickets
-> SETUP-05 et INFRA-06.
+> **Note.** Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
+> siens, décrits dans [`backend/api/README.md`](backend/api/README.md). Les
+> variables d'environnement et la séquence de démarrage de l'ensemble de la
+> pile arrivent avec les tickets SETUP-05 et INFRA-06.
 
 ## Conventions
 

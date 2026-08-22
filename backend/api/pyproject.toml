@@ -1,0 +1,100 @@
+# Service d'API Juui (BACK-01).
+#
+# Projet Python outille par uv, volontairement hors des workspaces pnpm : le
+# pnpm-workspace.yaml de la racine ne le liste pas, et l'eslint.config.mjs
+# ignore backend/**. Les deux outillages coexistent sans se marcher dessus.
+
+[project]
+name = "juui-api"
+version = "0.1.0"
+description = "API du SaaS veterinaire Juui (FastAPI, architecture hexagonale et DDD)"
+readme = "README.md"
+# Expression SPDX (PEP 639). Le fichier LICENSE vit a la racine du monorepo,
+# hors du repertoire de build : on ne declare donc que l'identifiant.
+license = "MIT"
+
+# Borne HAUTE volontaire, en plus de la borne basse. Sans elle, uv choisirait
+# sur un poste neuf la version la plus recente disponible -- y compris une
+# alpha de 3.15 -- et le .python-version ne vaudrait plus que pour ce poste-ci.
+# La montee de version est ainsi un geste explicite, visible en diff.
+requires-python = ">=3.14,<3.15"
+
+dependencies = [
+    # --- Coeur HTTP ---
+    "fastapi~=0.141.1",
+    # L'extra `standard` apporte uvloop, httptools et watchfiles : la boucle
+    # d'evenements rapide, le parseur HTTP en C et le rechargement a chaud
+    # (--reload). Tous publient des roues pour Python 3.14, rien ne compile.
+    "uvicorn[standard]~=0.52.4",
+
+    # --- Validation et configuration ---
+    "pydantic~=2.13",
+    # Lu par BACK-03 pour l'objet Settings ; declare des maintenant pour que le
+    # lock soit resolu une seule fois sur l'ensemble du jeu de dependances.
+    "pydantic-settings~=2.15",
+
+    # --- Persistance ---
+    # SQLAlchemy reste en 2.0.x : la 2.1 modifie l'API declarative, et toute la
+    # couche de persistance a venir (BACK-05 a BACK-07) est ecrite pour 2.0.
+    # L'extra `asyncio` tire greenlet, sans lequel le mode asynchrone ne
+    # fonctionne pas -- ce n'est pas une dependance optionnelle deguisee.
+    "sqlalchemy[asyncio]>=2.0.52,<2.1",
+    "asyncpg~=0.31.0",
+    "alembic~=1.19",
+
+    # --- Securite ---
+    "pyjwt~=2.13",
+
+    # --- Infrastructure ---
+    "redis~=8.1",
+    "taskiq~=0.12.5",
+    # Le broker Redis de TaskIQ (taskiq-redis) viendra avec BACK-15 : ici on ne
+    # declare que le coeur, qui n'impose aucun broker.
+    "boto3~=1.43",
+]
+
+[dependency-groups]
+# Groupe `dev` : jamais installe en production. Le build Docker d'INFRA-04
+# passera `uv sync --frozen --no-dev`, ce qui l'ecarte entierement de l'image.
+dev = [
+    # Qualite et typage -- CONFIGURES en BACK-02, seulement declares ici.
+    #
+    # Ruff est epingle a l'exact et non en `~=`. Un linter qui change d'avis
+    # tout seul entre deux `uv sync` ferait echouer la CI de QA-01 sans qu'une
+    # ligne de code ait bouge : sa montee de version doit etre un commit dedie.
+    "ruff==0.16.4",
+    "mypy~=2.3",
+
+    # Tests -- la strategie a trois niveaux est l'objet de BACK-12.
+    "pytest~=9.1",
+    "pytest-asyncio~=1.4",
+    "pytest-cov~=7.1",
+    # Client HTTP de test (ASGITransport). Egalement utile comme client sortant
+    # si un adaptateur en a besoin, auquel cas il passera en dependance
+    # applicative.
+    "httpx~=0.28.1",
+
+    # Stubs de typage. Le ticket demandait « types-* » au pluriel ; en pratique
+    # boto3 est le seul de la liste a ne pas embarquer son propre `py.typed`.
+    # fastapi, pydantic, sqlalchemy, pyjwt, redis et httpx sont tous types a la
+    # source, et leurs paquets `types-*` d'antan sont depuis retires de PyPI.
+    # L'extra [s3] limite les stubs au service reellement utilise (BACK-13) :
+    # boto3-stubs complet, c'est plus de 400 sous-paquets.
+    "boto3-stubs[s3]~=1.43",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Le ticket impose le chemin backend/api/src/app/main.py et la cible
+# `uvicorn app.main:app` : le module s'appelle donc `app`, alors que le projet
+# se nomme juui-api. Sans cette ligne, le backend de build chercherait
+# src/juui_api/ et echouerait.
+module-name = "app"
+
+# NOTE POUR BACK-02 : le ticket de configuration Ruff annonce
+# `target-version = "py312"`. Lire py314 -- c'est la version arretee ici, et
+# Ruff doit cibler la meme, sans quoi il refuserait la syntaxe recente et
+# reecrirait du code deja moderne.
