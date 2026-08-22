@@ -53,6 +53,7 @@ backend/api/
 ├── pyproject.toml     dépendances, métadonnées, configuration des outils
 ├── uv.lock            versions résolues — versionné, jamais édité à la main
 ├── .python-version    interpréteur du projet (3.14)
+├── Makefile           raccourcis de lint, formatage et typage
 └── src/app/
     ├── __init__.py
     └── main.py        assemblage de l'application FastAPI
@@ -120,11 +121,81 @@ linter qui change d'avis tout seul entre deux `uv sync` ferait échouer la CI sa
 qu'une ligne de code ait bougé : sa montée de version doit rester un commit
 délibéré.
 
+## Qualité et typage
+
+Ruff et Mypy sont configurés dans [`pyproject.toml`](pyproject.toml), chaque
+réglage accompagné de sa justification. Trois vérifications, toutes lançables
+depuis ce dossier :
+
+| Commande                       | Raccourci           | Rôle                      |
+| ------------------------------ | ------------------- | ------------------------- |
+| `uv run ruff check .`          | `make lint`         | Lint                      |
+| `uv run ruff format --check .` | `make format-check` | Formatage (lecture seule) |
+| `uv run mypy src`              | `make typecheck`    | Typage strict             |
+
+`make check` enchaîne les trois **dans l'ordre qu'aura la CI** (QA-01) : un échec
+local reproduit donc un échec de CI. `make` seul liste toutes les cibles.
+
+Deux cibles réécrivent le code : `make format` (`ruff format .`) et `make lint-fix`
+(`ruff check --fix .`, corrections sûres uniquement).
+
+### Ruff
+
+Lint **et** formatage : `ruff format` remplace Black, il n'y a aucune autre
+dépendance de formatage. Ligne à 100 caractères, cible `py314`.
+
+Le jeu de règles : `E`/`F` (socle), `I` (tri des imports), `N` (nommage), `UP`
+(modernisation de la syntaxe), `B` (pièges classiques), `A` (masquage des
+builtins), `C4`, `SIM`, `RUF`, `ANN` (annotations obligatoires), `S` (sécurité)
+et `D` (docstrings).
+
+Dans `tests/` — à venir en BACK-12 — `assert` (S101) et les docstrings (D1xx)
+sont relâchés. Les annotations, non : `-> None` sur une fonction de test coûte
+huit caractères.
+
+À noter : `ruff format` traite aussi les blocs de code Python **de la
+documentation Markdown**, ce qui garde les exemples conformes. Un extrait
+volontairement incomplet est ignoré sans erreur, et `ruff check` ne lint jamais
+les fichiers Markdown.
+
+### Mypy
+
+Mode `strict`, plugin Pydantic activé, périmètre `src/` (les tests y entreront
+avec BACK-12 si ce ticket le décide). `strict` couvre à lui seul
+`disallow_untyped_defs`, `warn_return_any` et `warn_unused_ignores`, entre
+autres — d'où l'absence de ces clés dans le `pyproject.toml`.
+
+Aucune dépendance ne réclame `ignore_missing_imports` : toutes livrent un
+`py.typed`, et `boto3` est couvert par `boto3-stubs[s3]`. Si une librairie sans
+stubs entre un jour, la dérogation se déclare **par module** — jamais
+globalement, ce qui aveuglerait Mypy sur tout le projet. Le modèle est en
+commentaire dans le `pyproject.toml`.
+
+Pour vérifier que le filet tient, une fonction non annotée doit faire échouer
+Mypy :
+
+```bash
+printf '"""Sonde."""\n\n\ndef f(x):\n    """Doc."""\n    return x\n' > src/app/_sonde.py
+uv run mypy src ; uv run ruff check src/app/_sonde.py ; rm src/app/_sonde.py
+```
+
+Attendu : `[no-untyped-def]` côté Mypy, `ANN001` et `ANN202` côté Ruff — les deux
+barrières répondent.
+
+### Écarts assumés avec le ticket BACK-02
+
+| Écart                                               | Raison                                                                                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `target-version = "py314"` et non `py312`           | Le projet est verrouillé sur Python 3.14. Cibler py312 ferait réécrire par Ruff du code déjà moderne.                            |
+| ANN101/ANN102 ne sont pas ignorées                  | Ruff les a **retirées**. Les nommer dans `ignore` ne produirait qu'un avertissement à chaque exécution et dans chaque log de CI. |
+| `S` et `D` ajoutés au jeu de règles                 | Sans eux, l'assouplissement demandé pour `tests/` (« assert autorisé, docstrings non requises ») n'aurait relâché rien du tout.  |
+| Les trois drapeaux Mypy nommés ne sont pas réécrits | `strict = true` les active déjà tous les trois.                                                                                  |
+| Aucun `[[tool.mypy.overrides]]` vivant              | Aucune dépendance n'en a besoin ; le motif est documenté en commentaire.                                                         |
+
 ## Ce qui n'est pas encore là
 
 | Sujet                                         | Ticket   |
 | --------------------------------------------- | -------- |
-| Configuration de Ruff et Mypy                 | BACK-02  |
 | Configuration applicative (Pydantic Settings) | BACK-03  |
 | Structure hexagonale des dossiers             | BACK-04  |
 | Moteur SQLAlchemy et session asynchrone       | BACK-05  |
@@ -133,5 +204,6 @@ délibéré.
 | `Dockerfile` et `.dockerignore`               | INFRA-04 |
 | Intégration continue                          | QA-01    |
 
-Les dépendances de qualité et de test sont **déclarées** ici, mais aucune n'est
-configurée : c'est volontaire, chaque ticket porte son propre outil.
+Ruff et Mypy sont désormais configurés (BACK-02). Les dépendances de test, elles,
+restent **déclarées sans être configurées** : c'est volontaire, chaque ticket
+porte son propre outil.
