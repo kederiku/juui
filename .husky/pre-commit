@@ -1,0 +1,15 @@
+# Hook de pre-commit (SETUP-04) : deleguer a lint-staged, et rien d'autre.
+#
+# Husky execute ce fichier avec `sh -e` -- ni shebang ni bit d'execution ne sont
+# necessaires, et la premiere commande en echec interrompt le commit. Les deux
+# lignes d'amorcage des versions anterieures a 9.1 (`#!/usr/bin/env sh` puis
+# `. "$(dirname -- "$0")/_/husky.sh"`) sont DEPRECIEES et seront FATALES en
+# v10 : ne pas les remettre.
+#
+# `lint-staged` est appele nu, sans `pnpm exec` : husky place deja
+# `node_modules/.bin` en tete du PATH, et git lance ses hooks depuis la racine du
+# depot. On economise ainsi le demarrage d'un pnpm, ce qui compte pour tenir le
+# budget de 10 s du ticket.
+#
+# Ce qui tourne, et sur quels fichiers : lint-staged.config.mjs.
+lint-staged

@@ -139,6 +139,12 @@ local reproduit donc un échec de CI. `make` seul liste toutes les cibles.
 Deux cibles réécrivent le code : `make format` (`ruff format .`) et `make lint-fix`
 (`ruff check --fix .`, corrections sûres uniquement).
 
+Ces deux-là s'appliquent aussi **toutes seules au moment du commit** : le hook de
+pre-commit du monorepo (SETUP-04) passe chaque fichier `.py` indexé par
+`ruff check --fix` puis `ruff format`, et interrompt le commit sur ce qui reste.
+Voir [Hooks de pre-commit](../../README.md#hooks-de-pre-commit). Le typage, lui,
+n'entre pas dans le hook — il reste à lancer à la main, et la CI le vérifiera.
+
 ### Ruff
 
 Lint **et** formatage : `ruff format` remplace Black, il n'y a aucune autre

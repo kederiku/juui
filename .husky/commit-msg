@@ -1,0 +1,11 @@
+# Hook de commit-msg (SETUP-04) : valider le message avec commitlint.
+#
+# git passe en `$1` le chemin du fichier ou il vient d'ecrire le message ;
+# `--edit` demande a commitlint de l'y lire. Un message hors convention fait
+# sortir commitlint en erreur, et le commit est refuse.
+#
+# Memes remarques que pour pre-commit : fichier execute par `sh -e`, sans
+# shebang, avec `node_modules/.bin` deja dans le PATH.
+#
+# Les regles : commitlint.config.mjs.
+commitlint --edit "$1"
