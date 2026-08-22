@@ -35,10 +35,40 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 ## Démarrage rapide
 
-> **À venir.** Le squelette du dépôt est en place, mais aucun service n'est encore
-> démarrable. Les prérequis, les variables d'environnement et la séquence de
-> démarrage seront documentés ici une fois l'environnement de développement en
-> place (tickets SETUP-05 et INFRA-06).
+### Prérequis
+
+- **Node 24 LTS** — la version de référence est déclarée dans [`.nvmrc`](.nvmrc) :
+  avec `nvm` ou `fnm`, `nvm use` suffit à s'y aligner.
+- **pnpm** — rien à installer soi-même : le champ `packageManager` du
+  `package.json` racine épingle la version exacte, que pnpm récupère seul.
+
+### Installation
+
+```bash
+pnpm install
+```
+
+Le dépôt est piloté par les workspaces pnpm — `frontend/*`, `packages/*` et
+`documentation`, déclarés dans [`pnpm-workspace.yaml`](pnpm-workspace.yaml).
+`backend/api` en est exclu à dessein : c'est un projet Python, outillé par `uv`.
+
+### Scripts racine
+
+Chaque script délègue aux workspaces qui définissent le script de même nom ;
+ceux qui ne le définissent pas sont simplement ignorés.
+
+| Commande | Effet |
+|---|---|
+| `pnpm dev` | Démarre en parallèle les serveurs de développement. |
+| `pnpm build` | Construit chaque workspace, dans l'ordre de ses dépendances. |
+| `pnpm lint` | Analyse statique ESLint (SETUP-03). |
+| `pnpm typecheck` | Vérification des types TypeScript. |
+| `pnpm test` | Suites de tests des workspaces. |
+| `pnpm format` | Formatage Prettier (SETUP-03). |
+
+> **Note.** Aucun service n'est encore démarrable : les variables
+> d'environnement et la séquence de démarrage complète arrivent avec les tickets
+> SETUP-05 et INFRA-06.
 
 ## Conventions
 
