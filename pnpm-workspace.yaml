@@ -1,0 +1,24 @@
+# Perimetre des workspaces pnpm : les dossiers listes ici sont les projets que
+# pnpm installe et pilote. `backend/api` en est volontairement absent, c'est un
+# projet Python outille par uv (BACK-01), pas par pnpm.
+packages:
+  - "frontend/*"
+  - "packages/*"
+  # Site Docusaurus : workspace a part entiere des DOC-01. Un motif qui ne
+  # correspond a aucun package.json est simplement ignore par pnpm, donc le
+  # declarer des maintenant ne coute rien.
+  - "documentation"
+
+# Reglages pnpm. Depuis pnpm 11, seuls `auth` et `registry` sont encore lus dans
+# .npmrc : ce fichier est la source de verite pour tout le reste.
+# Ces trois valeurs sont les defauts actuels de pnpm ; on les fige pour que le
+# comportement du depot ne change pas si une version future change d'avis.
+
+# Ne pas echouer sur une peer dependency manquante ou incompatible : l'ecosysteme
+# React publie trop de plages de versions en retard pour que ce soit tenable.
+strictPeerDependencies: false
+# Installer automatiquement les peer dependencies non optionnelles absentes.
+autoInstallPeers: true
+# Garder un node_modules strict : un package ne peut importer que ce qu'il
+# declare. C'est ce qui empeche les dependances fantomes entre workspaces.
+shamefullyHoist: false
