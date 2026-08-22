@@ -21,8 +21,8 @@ import * as tailwindcss from 'prettier-plugin-tailwindcss';
  * @type {import('prettier').Config}
  */
 const config = {
-  // `semi: true` — defaut Prettier, et formatage deja en place sur le projet
-  // precedent (VetoLib). Le ticket SETUP-03 laissait le choix ouvert.
+  // `semi: true` — le defaut de Prettier. Le ticket SETUP-03 laissait le choix
+  // ouvert : on ne s'ecarte pas du defaut sans raison.
   semi: true,
   singleQuote: true,
   trailingComma: 'all',
