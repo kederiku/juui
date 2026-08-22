@@ -1,0 +1,3 @@
+# Normalise les fins de ligne en LF dans le depot, quel que soit l'OS du poste.
+# Complement de `.editorconfig`, qui ne contraint que les editeurs qui le lisent.
+* text=auto eol=lf
