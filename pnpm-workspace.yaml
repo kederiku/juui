@@ -2,12 +2,12 @@
 # pnpm installe et pilote. `backend/api` en est volontairement absent, c'est un
 # projet Python outille par uv (BACK-01), pas par pnpm.
 packages:
-  - "frontend/*"
-  - "packages/*"
+  - 'frontend/*'
+  - 'packages/*'
   # Site Docusaurus : workspace a part entiere des DOC-01. Un motif qui ne
   # correspond a aucun package.json est simplement ignore par pnpm, donc le
   # declarer des maintenant ne coute rien.
-  - "documentation"
+  - 'documentation'
 
 # Reglages pnpm. Depuis pnpm 11, seuls `auth` et `registry` sont encore lus dans
 # .npmrc : ce fichier est la source de verite pour tout le reste.
@@ -22,3 +22,13 @@ autoInstallPeers: true
 # Garder un node_modules strict : un package ne peut importer que ce qu'il
 # declare. C'est ce qui empeche les dependances fantomes entre workspaces.
 shamefullyHoist: false
+# Scripts d'installation autorises. pnpm 11 les bloque par defaut et attend un
+# arbitrage explicite, package par package.
+allowBuilds:
+  # Chargeur du binding natif de `unrs-resolver`, le resolveur de modules
+  # d'eslint-plugin-import-x (SETUP-03). Le binding prebuild est normalement
+  # installe comme dependance optionnelle selon la plateforme ; ce postinstall
+  # est le chemin de repli quand ce mecanisme echoue (proxy, --no-optional,
+  # image Docker exotique). Le refuser ferait planter le lint au chargement du
+  # plugin sur ces machines-la, sans message clair.
+  unrs-resolver: true
