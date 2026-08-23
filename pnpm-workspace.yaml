@@ -32,3 +32,9 @@ allowBuilds:
   # image Docker exotique). Le refuser ferait planter le lint au chargement du
   # plugin sur ces machines-la, sans message clair.
   unrs-resolver: true
+  # Surveillance de fichiers de `@tailwindcss/cli` (SHARED-01), dont se sert
+  # son mode `--watch` -- que le depot n'emploie pas : `check:css` compile une
+  # fois et s'arrete. Le binding natif est par ailleurs livre prebuild en
+  # dependance optionnelle selon la plateforme ; ce script n'est que le repli
+  # qui le recompile depuis les sources. Rien a y gagner ici, donc refuse.
+  '@parcel/watcher': false
