@@ -1,0 +1,21 @@
+{
+  "name": "@repo/typescript-config",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./base.json": "./base.json",
+    "./react-library.json": "./react-library.json",
+    "./nextjs.json": "./nextjs.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "base.json",
+    "react-library.json",
+    "nextjs.json"
+  ],
+  "devDependencies": {
+    "typescript": "6.0.3"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  // Applications Next.js (SHARED-02).
+  //
+  // Cible : frontend/frontend-professional, -individual et -admin (FRONT-01 a
+  // FRONT-03). Aucune ne l'utilise encore -- le fichier est pose maintenant pour
+  // que les trois demarrent identiques.
+  //
+  // Chaque application doit completer chez elle ce que ce fichier ne peut pas
+  // porter (chemins relatifs, cf. l'avertissement de `base.json`) :
+  //
+  //   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  //   "exclude": ["node_modules"],
+  //   "compilerOptions": {
+  //     "paths": { "@/*": ["./*"], "@repo/ui/*": ["../../packages/ui/src/*"] }
+  //   }
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+
+    // `preserve` et NON `react-jsx` : le JSX est transmis tel quel a Next, qui
+    // le compile lui-meme avec SWC. C'est ce qui permet le Fast Refresh et les
+    // composants serveur.
+    "jsx": "preserve",
+
+    // Le plugin d'editeur de Next : il type les segments de route, les
+    // metadonnees et la frontiere serveur/client. Il ne s'active que dans un
+    // editeur branche sur le TypeScript du projet, jamais pendant `tsc`.
+    "plugins": [{ "name": "next" }],
+
+    // Next genere du JavaScript (next.config.js dans certains gabarits, et le
+    // contenu de .next/) que `tsc` doit pouvoir traverser sans le typer.
+    "allowJs": true,
+
+    // Cache de compilation incremental : sans lui, `next build` reprend le
+    // typage a zero a chaque passe. Le .tsbuildinfo produit est deja ignore par
+    // le .gitignore de la racine.
+    "incremental": true
+  }
+}
