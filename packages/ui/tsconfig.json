@@ -1,0 +1,52 @@
+{
+  // Configuration TypeScript de `@repo/ui` (SHARED-01).
+  //
+  // AUTONOME A DESSEIN, ET PROVISOIREMENT : le package de configurations
+  // partagees `@repo/config-typescript` releve de SHARED-02. Les options
+  // ci-dessous sont deja celles que ce ticket annonce, si bien que SHARED-02
+  // n'aura qu'a les deplacer dans `react-library.json` et remplacer ce fichier
+  // par un `"extends": "@repo/config-typescript/react-library.json"` -- sans
+  // changer un seul reglage.
+  //
+  // Le package n'est PAS compile : les applications le consomment en source et
+  // le transpilent (`transpilePackages`, FRONT-01). D'ou `noEmit` -- `tsc` ne
+  // sert ici qu'a verifier les types (`pnpm typecheck`).
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+
+    // React 19 : la transformation automatique, pas d'import de React a ecrire.
+    "jsx": "react-jsx",
+
+    // Le socle de rigueur annonce par SHARED-02.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // `verbatimModuleSyntax` impose `import type` explicite ; c'est le pendant
+    // de la regle ESLint `@typescript-eslint/consistent-type-imports`, deja
+    // active dans packages/config-eslint/rules.js.
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    // Ce qui permet a la CLI shadcn de resoudre les alias de components.json
+    // (`@repo/ui/lib/utils`, `@repo/ui/components/...`) a l'interieur meme du
+    // package -- sans eux, les composants ajoutes ne compileraient pas ici.
+    //
+    // Pas de `baseUrl` : TypeScript 6 le declare deprecie (TS5101) et resout
+    // desormais les `paths` relativement a CE fichier.
+    "paths": {
+      "@repo/ui/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}

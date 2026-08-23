@@ -44,13 +44,19 @@ const config = {
 
   plugins: [tailwindcss],
 
-  // A COMPLETER EN SHARED-01 : une fois `packages/ui/src/styles/globals.css`
-  // cree, ajouter ici
-  //   tailwindStylesheet: './packages/ui/src/styles/globals.css'
-  // (chemin resolu relativement au fichier de configuration Prettier qui porte
-  // l'option). Sans elle, le plugin retombe silencieusement sur la configuration
-  // Tailwind par defaut : le tri des classes fonctionne, mais ignore le theme et
-  // les utilitaires maison.
+  // Feuille de style qui porte le theme Tailwind v4 du depot (SHARED-01).
+  //
+  // Sans elle, prettier-plugin-tailwindcss retombe silencieusement sur la
+  // configuration Tailwind par defaut : le tri des classes fonctionne, mais
+  // ignore le theme et les utilitaires maison de `@repo/ui`.
+  //
+  // ATTENTION AU CHEMIN : il est resolu relativement au FICHIER DE
+  // CONFIGURATION PRETTIER qui porte l'option -- ici le prettier.config.mjs de
+  // la racine, qui se contente de re-exporter cet objet. Une application qui
+  // poserait un jour sa propre configuration locale devra donc redefinir cette
+  // valeur avec son propre chemin relatif, sans quoi le plugin ne trouvera
+  // rien.
+  tailwindStylesheet: './packages/ui/src/styles/globals.css',
 };
 
 export default config;

@@ -466,6 +466,129 @@ export default defineConfig([...next, globalIgnores(['.next/**'])]);
 Le socle de règles se modifie en un seul endroit :
 [`packages/config-eslint/rules.js`](packages/config-eslint/rules.js).
 
+### Bibliothèque de composants (`@repo/ui`)
+
+[`packages/ui`](packages/ui) porte les composants, le thème et les utilitaires
+partagés par les trois frontends. Le package n'est **jamais compilé** : il
+s'exporte en source TypeScript, et chaque application le transpile.
+
+| Chemin                   | Contenu                                                             |
+| ------------------------ | ------------------------------------------------------------------- |
+| `src/components/`        | Composants shadcn/ui et `theme-provider.tsx`.                       |
+| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.   |
+| `src/styles/globals.css` | Le thème : variables clair et sombre, échelle de rayons, `@source`. |
+| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                    |
+| `postcss.config.mjs`     | Chaîne PostCSS, ré-exportée par les applications.                   |
+
+Les imports passent par la carte `exports` du package, jamais par un chemin
+relatif :
+
+```ts
+import { Button } from '@repo/ui/components/button';
+import { ThemeProvider } from '@repo/ui/components/theme-provider';
+import { cn } from '@repo/ui/lib/utils';
+```
+
+#### Identité visuelle
+
+shadcn décrit un thème par quatre dimensions indépendantes. Celles de Juui :
+
+| Dimension          | Valeur    | Où elle est inscrite                                        |
+| ------------------ | --------- | ----------------------------------------------------------- |
+| Base de primitives | `radix`   | `components.json` — `"style": "radix-vega"`                 |
+| Style              | `vega`    | idem                                                        |
+| Couleur de base    | `mist`    | `components.json` — `"baseColor": "mist"`, et `globals.css` |
+| Couleur d'accent   | `emerald` | `globals.css` — `--primary`, `--ring`, `--sidebar-primary`  |
+
+`pnpm dlx shadcn@4.19.0 info -c packages/ui` relit ces quatre valeurs depuis le
+dépôt et doit répondre `vega` / `mist` / `emerald` — c'est le contrôle à faire
+après toute retouche du thème.
+
+Toutes les couleurs sont des variables CSS définies **une seule fois**, dans
+[`packages/ui/src/styles/globals.css`](packages/ui/src/styles/globals.css).
+Changer `--primary` y suffit à repeindre les trois applications ; aucune ne
+redéfinit de couleur chez elle.
+
+Le mode sombre est piloté par la classe `.dark` sur `<html>`, posée par le
+`ThemeProvider` du package. Rien ne dépend de `prefers-color-scheme` : c'est ce
+qui permet à l'utilisateur de choisir un thème indépendamment de son système.
+
+#### Ajouter un composant
+
+Depuis la racine du dépôt, `-c packages/ui` désignant le workspace cible :
+
+```bash
+pnpm dlx shadcn@4.19.0 add tooltip -c packages/ui
+```
+
+Le fichier atterrit dans `packages/ui/src/components/`, ses imports réécrits en
+`@repo/ui/...` grâce aux alias de `components.json`. Le registre livre en
+guillemets doubles et sans point-virgule : enchaîner systématiquement
+
+```bash
+pnpm format && pnpm lint:fix
+```
+
+**Épingler la version de la CLI** (`shadcn@4.19.0`) plutôt que `@latest` : une
+version plus récente pourrait servir un autre style que `radix-vega` et faire
+diverger le socle.
+
+Le socle installé couvre Button, Input, Label, Card, Dialog, DropdownMenu,
+Select, Sonner (notifications), Field (primitives de formulaire), Table, Badge,
+Skeleton — plus Separator, tiré par Field.
+
+#### Vérifier le thème sans application
+
+Tant que les trois frontends n'existent pas, la seule preuve que le thème
+compile est de le compiler :
+
+```bash
+pnpm --filter @repo/ui run check:css
+```
+
+La sortie `packages/ui/dist/globals.built.css` (non versionnée) doit contenir
+le bloc `:root`, le bloc `.dark`, et les classes utilisées par les composants du
+package — signe que la directive `@source` fait bien son travail.
+
+#### Ce qu'une application devra faire (FRONT-01 à FRONT-03)
+
+1. `"@repo/ui": "workspace:*"` en dépendance, et
+   `transpilePackages: ['@repo/ui']` dans `next.config.ts` — le package est
+   livré en TypeScript non compilé.
+2. `export { default } from '@repo/ui/postcss.config';` dans son
+   `postcss.config.mjs`.
+3. Un `app/globals.css` à elle, qui ré-importe celui du package et déclare ses
+   propres sources — la détection automatique de Tailwind part du fichier qui
+   porte `@import 'tailwindcss'`, lequel vit dans `packages/ui` :
+
+   ```css
+   @import '@repo/ui/globals.css';
+
+   @source '../app/**/*.{ts,tsx}';
+   @source '../components/**/*.{ts,tsx}';
+   ```
+
+   C'est ce fichier-là, et non celui du package, que `app/layout.tsx` importe.
+
+4. `<html lang="fr" suppressHydrationWarning>` et `<ThemeProvider>` autour de
+   l'arbre — sans `suppressHydrationWarning`, next-themes provoque un
+   avertissement d'hydratation à chaque rendu.
+5. `"@repo/ui/*": ["../../packages/ui/src/*"]` dans les `paths` de son
+   `tsconfig.json`.
+
+### Écarts assumés avec le ticket SHARED-01
+
+| Écart                                                             | Raison                                                                                                                                                                                                                                                                |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critère « les 3 applications affichent un composant » non vérifié | `frontend/*` ne contient encore que des `.gitkeep` : FRONT-01 à FRONT-03 restent à faire. Le contrat qu'elles devront honorer est décrit ci-dessus, et ce qui était vérifiable ici l'a été — typage, lint, et compilation réelle du thème.                            |
+| `sonner` à la place du composant `toast`                          | Le registre shadcn n'expose plus de `toast` pour la base `radix` ; `sonner` est son composant de notification. `toast` n'existe que pour la base Base UI.                                                                                                             |
+| `field` à la place du composant `form`                            | L'entrée `form` du registre est devenue un stub sans fichier. L'ancien `form.tsx` était soudé à react-hook-form, que FRONT-05 remplace par TanStack Form. `field` fournit les mêmes primitives — label, description, message d'erreur — sans imposer de bibliothèque. |
+| `ThemeProvider` ajouté au périmètre                               | Le ticket ne demandait que les variables. Sans le fournisseur qui pose la classe `.dark`, chaque application recâblerait next-themes de son côté et les trois finiraient par diverger — l'inverse de l'objectif du package.                                           |
+| Accent `emerald` écrit à la main dans `globals.css`               | La CLI shadcn sait poser une couleur de base, pas une couleur d'accent : seul le générateur web `ui.shadcn.com/create` le fait. Les valeurs employées restent celles du registre au caractère près, ce que confirme `shadcn info`.                                    |
+| Pas de preset Tailwind partagé                                    | Tailwind v4 n'a plus de fichier de configuration JavaScript : le thème **est** `globals.css`, et le `content` d'autrefois s'écrit `@source`. SHARED-02 devra en tenir compte pour `packages/config-tailwind`.                                                         |
+| `@tailwindcss/cli` en dépendance de développement                 | Ni le ticket ni le build ne le réclament, mais c'est le seul moyen de prouver que le thème compile tant qu'aucune application n'existe.                                                                                                                               |
+| `shadcn` et `tw-animate-css` en `dependencies`                    | Le registre les place en `devDependencies`. Ce sont des `@import` de `globals.css`, donc nécessaires au **build des applications** : en devDependencies, un `pnpm install --prod` en image Docker (INFRA-05) casserait la compilation CSS.                            |
+
 ### Hooks de pre-commit
 
 `pnpm install` installe les hooks Git en même temps que les dépendances : le
