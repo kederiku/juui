@@ -557,9 +557,19 @@ package — signe que la directive `@source` fait bien son travail.
    livré en TypeScript non compilé.
 2. `export { default } from '@repo/ui/postcss.config';` dans son
    `postcss.config.mjs`.
-3. `import '@repo/ui/globals.css';` dans `app/layout.tsx`, suivi d'un
-   `@source` pointant ses propres fichiers : la détection automatique de
-   Tailwind part du fichier CSS, qui vit ici dans `packages/ui`.
+3. Un `app/globals.css` à elle, qui ré-importe celui du package et déclare ses
+   propres sources — la détection automatique de Tailwind part du fichier qui
+   porte `@import 'tailwindcss'`, lequel vit dans `packages/ui` :
+
+   ```css
+   @import '@repo/ui/globals.css';
+
+   @source '../app/**/*.{ts,tsx}';
+   @source '../components/**/*.{ts,tsx}';
+   ```
+
+   C'est ce fichier-là, et non celui du package, que `app/layout.tsx` importe.
+
 4. `<html lang="fr" suppressHydrationWarning>` et `<ThemeProvider>` autour de
    l'arbre — sans `suppressHydrationWarning`, next-themes provoque un
    avertissement d'hydratation à chaque rendu.
