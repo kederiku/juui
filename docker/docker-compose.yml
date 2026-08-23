@@ -1,4 +1,5 @@
-# Pile de developpement conteneurisee (INFRA-01).
+# Pile de developpement conteneurisee (INFRA-01 pour le socle ; ensuite un
+# service par ticket, chacun nomme dans le commentaire qui l'introduit).
 #
 # Ce fichier assemble les services d'infrastructure du poste. INFRA-01 en pose
 # les deux premiers -- PostgreSQL et pgAdmin -- et surtout le socle dont
@@ -179,6 +180,143 @@ services:
     networks: [app_network]
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Redis -- cache applicatif ET broker de taches (INFRA-02, consomme par
+  # BACK-14 et BACK-15)
+  # ---------------------------------------------------------------------------
+  # Une seule instance, deux usages separes par le NUMERO DE BASE : la 0 pour le
+  # cache, la 1 pour la file de taches. Rien ici ne l'impose -- la convention
+  # vit dans REDIS_CACHE_DB et REDIS_BROKER_DB, et dans les clients qui les
+  # lisent. Ce service se contente de ne jamais la contredire, et la console
+  # plus bas la rend visible.
+  redis:
+    # Le ticket demande une 7 ; on lit une 8. Voir « Ecarts assumes avec le
+    # ticket INFRA-02 » dans le README.
+    image: redis:8-alpine
+
+    # Deux arguments, deux natures. Le fichier porte les reglages statiques et
+    # les raisons qui les accompagnent ; le port vient du .env, et il ne peut
+    # venir que d'ici -- un redis.conf n'interpole aucune variable
+    # d'environnement. En cas de desaccord, la ligne de commande l'emporte.
+    #
+    # Chemin relatif a la RACINE et non a docker/ : meme mise en garde qu'en
+    # tete de fichier.
+    command: redis-server /usr/local/etc/redis/redis.conf --port ${REDIS_PORT}
+
+    ports:
+      # Rattache a la BOUCLE LOCALE, contrairement a `postgres` ci-dessus.
+      # L'asymetrie est voulue : postgres exige un mot de passe, cette instance
+      # Redis n'en a pas. Sans le `127.0.0.1:`, Docker publierait sur toutes les
+      # interfaces du poste, et n'importe qui sur le meme reseau -- un wifi
+      # partage suffit -- pourrait y lire et y ecrire sans rien presenter. Les
+      # conteneurs, eux, passent par app_network et ne sont pas concernes.
+      - '127.0.0.1:${REDIS_HOST_PORT}:${REDIS_PORT}'
+
+    volumes:
+      # /data est a la fois le VOLUME declare par l'image et son repertoire de
+      # travail ; c'est la que redis.conf pointe `dir`, donc la que Redis cree
+      # `appendonlydir/`. Rien a deplacer, contrairement au piege de postgres 18.
+      - redis_data:/data
+
+      # Lecture seule : voir « COMMENT IL EST LU » en tete du redis.conf.
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    healthcheck:
+      # `| grep -q PONG` n'est pas une coquetterie. Au demarrage, le temps de
+      # rejouer l'AOF, le serveur repond `LOADING Redis is loading the dataset
+      # in memory` : il ecoute deja, mais ne sert encore rien. C'est le grep, et
+      # non le code de retour de redis-cli, qui distingue les deux -- et qui
+      # rendra fiables les `service_healthy` de BACK-15 et INFRA-04.
+      test: ['CMD-SHELL', 'redis-cli -p ${REDIS_PORT} ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      # Bien plus court que celui de postgres : Redis n'a aucune initialisation
+      # de cluster a mener, il relit un journal deja ecrit.
+      start_period: 10s
+      retries: 5
+
+    # Pas de depends_on : Redis ne depend de rien. C'est l'inverse qui viendra,
+    # le worker de BACK-15 et l'API d'INFRA-04 attendant le healthcheck ci-dessus.
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # RedisInsight -- console d'inspection de Redis (INFRA-02, profil `tools`)
+  # ---------------------------------------------------------------------------
+  redisinsight:
+    # Pas de tag de majeure nue chez cette image -- `3` n'existe pas : on
+    # epingle la ligne mineure courante, plus proche equivalent du
+    # `dpage/pgadmin4:9` d'INFRA-01.
+    image: redis/redisinsight:3.8
+
+    # Le ticket demande que cette console ne demarre PAS d'office. Un service
+    # rattache a un profil est ignore par `docker compose up` tant que
+    # `--profile tools` n'est pas passe ; son port n'est donc occupe que sur
+    # demande.
+    profiles: [tools]
+
+    environment:
+      # Connexions pre-remplies : l'equivalent RedisInsight du servers.json de
+      # pgAdmin. Le suffixe numerique distingue les entrees, et il commence a 1.
+      #
+      # Elles sont DEUX a dessein. C'est le seul endroit du depot ou la
+      # convention « base 0 = cache, base 1 = broker » cesse d'etre un
+      # commentaire pour devenir quelque chose qu'on voit en ouvrant la console.
+      #
+      # A SAVOIR : ces variables font autorite a chaque demarrage. Une connexion
+      # ajoutee a la main dans l'interface disparaitra au redemarrage suivant.
+      RI_REDIS_HOST1: redis
+      RI_REDIS_PORT1: ${REDIS_PORT}
+      RI_REDIS_DB1: ${REDIS_CACHE_DB}
+      RI_REDIS_ALIAS1: 'Juui - cache applicatif (base ${REDIS_CACHE_DB})'
+
+      RI_REDIS_HOST2: redis
+      RI_REDIS_PORT2: ${REDIS_PORT}
+      RI_REDIS_DB2: ${REDIS_BROKER_DB}
+      RI_REDIS_ALIAS2: 'Juui - broker TaskIQ (base ${REDIS_BROKER_DB})'
+
+      # Sans cela, la console s'ouvre sur des conditions d'utilisation a
+      # accepter -- exactement la saisie manuelle qu'INFRA-01 s'etait attache a
+      # eviter cote pgAdmin. C'est deja le defaut de l'image ; l'ecrire met le
+      # comportement a l'abri d'un changement de defaut.
+      RI_ACCEPT_TERMS_AND_CONDITIONS: 'true'
+
+    ports:
+      # 5540 en dur a droite : l'image ecrit elle-meme que le port est fige, et
+      # RI_APP_PORT ne ferait que deplacer la question. Boucle locale a gauche,
+      # comme redis, et pour une raison de plus : cette console n'a AUCUNE
+      # authentification et donne acces a toutes les donnees de l'instance.
+      - '127.0.0.1:${REDISINSIGHT_HOST_PORT}:5540'
+
+    volumes:
+      # Base locale de la console : connexions, historique du Workbench, index.
+      # L'image tourne en uid 1000 et cree /data a ce compte ; un volume nomme
+      # encore vide en herite les droits, il n'y a rien a ajuster a la main.
+      - redisinsight_data:/data
+
+    healthcheck:
+      # Sonde que la console expose pour cet usage, sur le meme modele que celle
+      # de pgAdmin -- a UN detail pres, verifie a la main : `127.0.0.1` et non
+      # `localhost`. Le /etc/hosts du conteneur fait pointer `localhost` sur
+      # 127.0.0.1 ET sur ::1, wget tente l'IPv6 d'abord, et RedisInsight
+      # n'ecoute qu'en IPv4 (RI_APP_HOST vaut 0.0.0.0). Avec `localhost` la
+      # sonde echoue donc en boucle sur un `Connection refused`, alors meme que
+      # la console repond parfaitement depuis le navigateur.
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://127.0.0.1:5540/api/health/']
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+    depends_on:
+      # Ici la dependance n'est pas decorative, comme elle l'etait pour pgAdmin :
+      # sans Redis joignable, la console ouvre sur deux connexions en erreur.
+      redis:
+        condition: service_healthy
+
+    networks: [app_network]
+    restart: unless-stopped
+
 # -----------------------------------------------------------------------------
 # Fichiers de configuration injectes dans les conteneurs
 # -----------------------------------------------------------------------------
@@ -243,3 +381,5 @@ networks:
 volumes:
   postgres_data:
   pgadmin_data:
+  redis_data:
+  redisinsight_data:
