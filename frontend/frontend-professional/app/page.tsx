@@ -7,8 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@repo/ui/components/card';
-
-import { ThemeToggle } from '@/components/theme-toggle';
+import { ThemeToggle } from '@repo/ui/components/theme-toggle';
 
 /**
  * Page d'accueil de frontend-professional (FRONT-01).
