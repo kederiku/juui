@@ -35,10 +35,10 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 ## Démarrage rapide
 
-Une partie seulement de la pile démarre aujourd'hui : le service d'API, et
-depuis les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis, et
-le stockage objet MinIO. Les trois frontends arrivent avec les tickets FRONT
-suivants.
+Une partie seulement de la pile démarre aujourd'hui : le service d'API, depuis
+les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis et le
+stockage objet MinIO, et depuis FRONT-01 l'interface professionnelle. Les deux
+autres frontends arrivent avec FRONT-02 et FRONT-03.
 Cette section décrit donc **deux parcours** — celui qui fonctionne maintenant,
 puis la cible conteneurisée — et l'allocation de ports que cette cible devra
 respecter.
@@ -97,9 +97,10 @@ gabarit** — les commentaires y font foi, ce README ne les recopie pas pour
 poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 `openssl rand -hex 32`.
 
-> **Note.** Les trois gabarits `frontend/*/.env.local.example` sont déjà là,
-> mais les applications qui les liront n'existent pas encore : leur copie
-> n'aura d'utilité qu'à partir de FRONT-01.
+> **Note.** Des trois gabarits `frontend/*/.env.local.example`, seul celui de
+> `frontend-professional` a aujourd'hui une application pour le lire. Sa copie
+> n'est d'ailleurs pas nécessaire pour démarrer : les deux variables qu'il porte
+> désignent l'API, que l'interface n'appelle pas encore (SHARED-03).
 
 Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre.
 
@@ -155,10 +156,17 @@ sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.m
 Elle ne parle pas encore à PostgreSQL non plus : le branchement de SQLAlchemy
 est l'objet de BACK-05.
 
-`pnpm dev` ne démarre rien pour l'instant : aucun workspace pnpm ne définit
-encore de script `dev`, et ceux qui n'en définissent pas sont ignorés. Les
-serveurs de développement apparaîtront avec FRONT-01 à FRONT-03 et DOC-01, sur
-les ports du tableau plus bas.
+Enfin l'interface professionnelle, seul workspace pnpm à définir aujourd'hui un
+script `dev` :
+
+```bash
+pnpm dev
+```
+
+Elle répond sur <http://localhost:3001>. La commande démarre en parallèle les
+serveurs de développement de tout le dépôt : les deux autres frontends et la
+documentation s'y ajouteront avec FRONT-02, FRONT-03 et DOC-01, chacun sur le
+port du tableau ci-dessous.
 
 ### La pile complète, avec Docker
 
@@ -222,7 +230,7 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | Service                       | Port hôte | Port interne | Arrive avec |
 | ----------------------------- | --------- | ------------ | ----------- |
 | API FastAPI                   | 8000      | 8000         | disponible  |
-| `frontend-professional`       | 3001      | 3000         | FRONT-01    |
+| `frontend-professional`       | 3001      | 3000         | disponible  |
 | `frontend-individual`         | 3002      | 3000         | FRONT-02    |
 | `frontend-admin`              | 3003      | 3000         | FRONT-03    |
 | Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
@@ -458,15 +466,27 @@ Les trois presets ESLint forment une chaîne — `next` étend `react`, qui éte
 Une application les consomme ainsi :
 
 ```js
-// frontend/frontend-admin/eslint.config.mjs
+// frontend/frontend-professional/eslint.config.mjs
 import next from '@repo/eslint-config/next';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
-export default defineConfig([...next, globalIgnores(['.next/**'])]);
+export default defineConfig([globalIgnores(['.next/**']), ...next]);
 ```
+
+La ré-exclusion locale de `.next/` n'est pas redondante avec celle de la racine :
+la recherche de configuration partant du fichier analysé, ce fichier **remplace**
+celui de la racine pour son workspace — ses exclusions comprises.
 
 Le socle de règles se modifie en un seul endroit :
 [`packages/config-eslint/rules.js`](packages/config-eslint/rules.js).
+
+Le preset `base` y branche aussi le **résolveur d'imports** — la variante
+TypeScript, seule à lire les `paths` des `tsconfig` et la carte `exports` des
+packages du dépôt. C'est ce qui donne leur objet à `import-x/no-unresolved` et
+`import-x/no-cycle` : sans résolveur, ces deux règles ne signalent jamais rien.
+Les motifs qu'il reçoit suivent [`pnpm-workspace.yaml`](pnpm-workspace.yaml) et
+sont ancrés sur la racine du dépôt, pour qu'un lint lancé depuis un sous-dossier
+trouve les mêmes `tsconfig`.
 
 #### `@repo/typescript-config`
 
@@ -530,8 +550,9 @@ export { default } from '@repo/tailwind-config/postcss.config';
 
 Enfin, la typographie est un **contrat**, pas une police : le preset déclare
 `--font-sans: var(--font-juui-sans, …)`, à charge pour chaque application
-d'alimenter `--font-juui-sans` avec `next/font` (FRONT-01). Tant qu'aucune ne le
-fait, la valeur de repli s'applique et rien ne casse.
+d'alimenter `--font-juui-sans` avec `next/font`. `frontend-professional` y charge
+Geist depuis FRONT-01, en sans et en mono ; une application qui ne le ferait pas
+retomberait sur la valeur de repli, sans rien casser.
 
 ### Bibliothèque de composants (`@repo/ui`)
 
@@ -606,10 +627,10 @@ Le socle installé couvre Button, Input, Label, Card, Dialog, DropdownMenu,
 Select, Sonner (notifications), Field (primitives de formulaire), Table, Badge,
 Skeleton — plus Separator, tiré par Field.
 
-#### Vérifier le thème sans application
+#### Vérifier le thème sans lancer d'application
 
-Tant que les trois frontends n'existent pas, la seule preuve que le thème
-compile est de le compiler :
+Une retouche du thème se contrôle sans démarrer quoi que ce soit, en le
+compilant :
 
 ```bash
 pnpm --filter @repo/ui run check:css
@@ -619,8 +640,8 @@ La sortie `packages/ui/dist/globals.built.css` (non versionnée) doit contenir
 le bloc `:root`, le bloc `.dark`, et les classes utilisées par les composants du
 package — signe que la directive `@source` fait bien son travail. Depuis
 SHARED-02 la preuve est plus forte qu'elle n'en a l'air : le thème est atteint
-**par le lien symbolique pnpm** de `node_modules`, exactement comme le feront
-les applications.
+**par le lien symbolique pnpm** de `node_modules`, exactement comme le fait
+`frontend-professional`.
 
 Le pendant du côté TypeScript, qui vérifie du même coup que l'héritage des
 configurations partagées se résout :
@@ -629,17 +650,24 @@ configurations partagées se résout :
 pnpm typecheck
 ```
 
-#### Ce qu'une application devra faire (FRONT-01 à FRONT-03)
+#### Ce que fait une application (FRONT-01 à FRONT-03)
+
+FRONT-01 a livré la première, [`frontend/frontend-professional`](frontend/frontend-professional).
+Elle sert de **patron** : FRONT-02 et FRONT-03 reprennent ces sept points à
+l'identique, seuls leur port et leurs métadonnées les distinguent. Les fichiers
+cités sont donc à lire tels quels avant d'en écrire une deuxième.
 
 1. Quatre dépendances de workspace — `@repo/ui`, `@repo/tailwind-config`,
-   `@repo/typescript-config` et `@repo/eslint-config`, toutes en
-   `"workspace:*"` — et `transpilePackages: ['@repo/ui']` dans `next.config.ts`,
-   le package étant livré en TypeScript non compilé.
+   `@repo/typescript-config` et `@repo/eslint-config`, toutes en `"workspace:*"`
+   — et `transpilePackages: ['@repo/ui']` dans
+   [`next.config.ts`](frontend/frontend-professional/next.config.ts), le package
+   étant livré en TypeScript non compilé.
 2. `export { default } from '@repo/tailwind-config/postcss.config';` dans son
-   `postcss.config.mjs`.
-3. Un `app/globals.css` à elle, qui ré-importe celui de `@repo/ui` et déclare
-   ses propres sources — la détection automatique de Tailwind part du fichier
-   qui porte `@import 'tailwindcss'`, lequel vit dans `packages/config-tailwind` :
+   [`postcss.config.mjs`](frontend/frontend-professional/postcss.config.mjs).
+3. Un [`app/globals.css`](frontend/frontend-professional/app/globals.css) à elle,
+   qui ré-importe celui de `@repo/ui` et déclare ses propres sources — la
+   détection automatique de Tailwind part du fichier qui porte
+   `@import 'tailwindcss'`, lequel vit dans `packages/config-tailwind` :
 
    ```css
    @import '@repo/ui/globals.css';
@@ -654,11 +682,23 @@ pnpm typecheck
    l'arbre — sans `suppressHydrationWarning`, next-themes provoque un
    avertissement d'hydratation à chaque rendu.
 5. Une police chargée avec `next/font` et exposée en `--font-juui-sans` sur
-   `<html>` : c'est la variable que lit le `--font-sans` du preset.
-6. Un `tsconfig.json` qui étend `@repo/typescript-config/nextjs.json` et déclare
-   chez lui ce qu'un fichier partagé ne peut pas porter — ses `paths` (`@/*` et
-   `"@repo/ui/*": ["../../packages/ui/src/*"]`), son `include` et son
-   `exclude`.
+   `<html>` : c'est la variable que lit le `--font-sans` du preset. La classe
+   `font-sans` doit en outre être posée sur `<body>` — le thème définit le token,
+   il ne l'applique à aucun élément.
+6. Un [`tsconfig.json`](frontend/frontend-professional/tsconfig.json) qui étend
+   `@repo/typescript-config/nextjs.json` et déclare chez lui ce qu'un fichier
+   partagé ne peut pas porter — ses `paths` (`@/*` et
+   `"@repo/ui/*": ["../../packages/ui/src/*"]`), son `include` et son `exclude`.
+7. `output: 'standalone'` **et** un `outputFileTracingRoot` pointant la racine du
+   dépôt. Le second n'est pas facultatif dans un monorepo : sans lui, le traçage
+   part du dossier de l'application et n'embarque pas les dépendances atteintes
+   par les liens symboliques pnpm. La sortie se construit alors sans erreur et
+   échoue au démarrage.
+
+Ni `src/`, ni `tailwind.config.ts`, ni `prettier.config.mjs` local : le code
+applicatif vit dans `app/` et `components/`, le thème est du CSS depuis
+Tailwind v4, et une configuration Prettier locale devrait redéfinir son
+`tailwindStylesheet` sous peine de trier les classes sans le thème.
 
 ### Écarts assumés avec le ticket SHARED-01
 
@@ -686,6 +726,29 @@ pnpm typecheck
 | Dépendances Tailwind en `dependencies`                             | `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` et `shadcn` sont nécessaires au **build** des applications. En `devDependencies`, un `pnpm install --prod` en image Docker (INFRA-05) casserait la compilation CSS — même raisonnement qu'en SHARED-01.          |
 | Critère « une modification du preset se répercute sur les 3 apps » | `frontend/*` ne contient encore que des `.gitkeep`. Ce qui était vérifiable l'a été : changer `--primary` dans le preset change bien le CSS compilé de `@repo/ui`, atteint par le même lien symbolique que celui qu'emprunteront les applications.                       |
 | `nextjs.json` livré sans consommateur                              | FRONT-01 à FRONT-03 en dépendent ; le poser maintenant est précisément ce qui garantit que les trois applications démarreront identiques.                                                                                                                                |
+
+### Écarts assumés avec le ticket FRONT-01
+
+| Écart                                                               | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pas de `tailwind.config.ts`                                         | Le ticket demande un fichier qui n'existe plus : Tailwind v4 n'a pas de configuration JavaScript. Le thème **est** le CSS partagé, et le `content` d'autrefois s'écrit `@source` — arbitrage déjà rendu en SHARED-02.                                                                                                                                                                                                                                                  |
+| `@repo/api-client` absent des dépendances et de `transpilePackages` | Le package est l'objet de SHARED-03 et n'existe pas : une dépendance `workspace:*` vers un package inexistant fait échouer `pnpm install`. Les deux lignes reviendront au ticket qui le crée.                                                                                                                                                                                                                                                                          |
+| `@repo/typescript-config` et `@repo/tailwind-config`                | Le ticket écrit `@repo/config-typescript` et `@repo/config-tailwind`. Ce sont les noms des dossiers, pas ceux des packages — même écart qu'en SHARED-02.                                                                                                                                                                                                                                                                                                               |
+| `outputFileTracingRoot` ajouté à `next.config.ts`                   | Non demandé. Sans lui la sortie `standalone` est tracée depuis le dossier de l'application et n'embarque pas les dépendances atteintes par les liens symboliques pnpm : elle se construit sans erreur puis échoue au démarrage, ce qui rendrait le critère d'acceptation faux tout en le laissant passer.                                                                                                                                                              |
+| `agentRules: false`                                                 | Next 16 dépose de lui-même un `AGENTS.md` et un `CLAUDE.md` dans l'application à chaque `next dev`. Le dépôt n'a aucun fichier de ce genre ; les garder imposerait soit une modification non commitée en permanence, soit de la prose générée à relire à chaque PR. La documentation du dépôt reste ce README et `documentation/`.                                                                                                                                     |
+| Deux renvois de SETUP-03 levés, deux conservés                      | `REACT_VERSION` est figée — les applications épinglent react 19.2.8 — et le résolveur TypeScript est posé, ce qui active `import-x/no-unresolved` et `import-x/no-cycle`. En revanche `tseslint.configs.recommendedTypeChecked` et `eslint-plugin-jsx-a11y` restent hors du socle : le premier change le coût de chaque `pnpm lint` et mérite sa propre mesure, le second est un vrai sujet que le commentaire d'origine rattache au parcours de prise de rendez-vous. |
+| Réordonnancement des imports `@repo/*`                              | Effet du résolveur, pas une préférence : sans lui `@repo/eslint-config/base` était classé comme un paquet externe, et le `pathGroups` de `rules.js` qui le range en « interne » restait sans effet. Un seul fichier du dépôt était concerné, [`eslint.config.mjs`](eslint.config.mjs), corrigé automatiquement.                                                                                                                                                        |
+| `typescript@6.0.3`, et non le motif d'alias TypeScript 7            | SETUP-03 renvoyait ce choix ici. TypeScript 7 est bien la version `latest` sur npm, mais ne livre toujours pas d'API compilateur — annoncée pour la 7.1, encore en pré-publication — ce qui bloque typescript-eslint ; et le paquet `@typescript/typescript6` que le motif utilise plafonne à 6.0.2, une version derrière celle du dépôt. L'adopter aujourd'hui désalignerait le dépôt pour un gain nul.                                                               |
+| `lucide-react` déclarée par l'application                           | `@repo/ui` la porte déjà, mais le `node_modules` strict de pnpm interdit d'importer ce qu'on ne déclare pas — et la bascule de thème utilise ses icônes directement. Même version que le package, pour que pnpm n'en installe qu'une.                                                                                                                                                                                                                                  |
+| Page d'accueil plus fournie que « minimale »                        | Le ticket demande d'afficher un composant. Un bouton seul prouve la transpilation, mais ni le thème sombre, ni la police, ni la non-purge des classes de l'application. Chaque élément de la page atteste un maillon précis, et sa disparition désignerait la pièce cassée.                                                                                                                                                                                            |
+| Textes d'interface accentués                                        | Le reste du dépôt écrit son français sans accents hors des `.md`. La règle ne peut pas s'étendre à ce qui s'affiche : « cliniques veterinaires » sur l'écran d'un cabinet serait une faute, pas une convention. Commentaires et messages de commit restent sans accents.                                                                                                                                                                                               |
+
+> **Note.** Les deux critères que SHARED-01 et SHARED-02 avaient dû laisser en
+> suspens faute d'application — « les trois applications affichent un composant »
+> et « une modification du preset se répercute visuellement » — sont désormais
+> vérifiables, et vérifiés sur `frontend-professional`. Les deux tableaux
+> précédents gardent leur rédaction d'origine : ils décrivent l'état du dépôt au
+> moment de leur ticket, pas celui d'aujourd'hui.
 
 ### Hooks de pre-commit
 

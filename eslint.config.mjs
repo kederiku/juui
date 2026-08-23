@@ -1,5 +1,6 @@
-import base from '@repo/eslint-config/base';
 import { defineConfig, globalIgnores } from 'eslint/config';
+
+import base from '@repo/eslint-config/base';
 
 /**
  * Configuration ESLint de la racine du monorepo (SETUP-03).

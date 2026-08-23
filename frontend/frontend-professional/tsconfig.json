@@ -1,0 +1,26 @@
+{
+  // Configuration TypeScript de frontend-professional (FRONT-01).
+  //
+  // Tout le socle vient de `@repo/typescript-config/nextjs.json` (SHARED-02) :
+  // mode strict complet, cible ES2023, `jsx: preserve`, plugin d'editeur `next`.
+  // Ne restent ici que les cles qu'un fichier partage ne PEUT PAS porter, parce
+  // que TypeScript resout leurs chemins relativement au fichier qui les declare.
+  "extends": "@repo/typescript-config/nextjs.json",
+  "compilerOptions": {
+    // Pas de `baseUrl` : TypeScript 6 le declare deprecie (TS5101) et resout
+    // desormais les `paths` relativement a CE fichier.
+    "paths": {
+      "@/*": ["./*"],
+      // `@repo/ui` est consomme en source. La carte `exports` du package suffit a
+      // Next, mais pas a `tsc`, qui doit pouvoir remonter aux .tsx d'origine pour
+      // les typer.
+      "@repo/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  // `next-env.d.ts` et `.next/types/` sont generes par Next -- le premier a
+  // chaque demarrage, les seconds au fil des routes -- et tous deux ignores par
+  // git. Les omettre priverait `tsc` des types du framework et de ceux des
+  // segments de route.
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
