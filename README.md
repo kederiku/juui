@@ -36,8 +36,9 @@ Il sera repris et enrichi dans le site `documentation/`.
 ## Démarrage rapide
 
 Une partie seulement de la pile démarre aujourd'hui : le service d'API, et
-depuis INFRA-01 la base PostgreSQL avec sa console pgAdmin. Redis, le stockage
-objet et les trois frontends arrivent avec les tickets INFRA et FRONT suivants.
+depuis les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis, et
+le stockage objet MinIO. Les trois frontends arrivent avec les tickets FRONT
+suivants.
 Cette section décrit donc **deux parcours** — celui qui fonctionne maintenant,
 puis la cible conteneurisée — et l'allocation de ports que cette cible devra
 respecter.
@@ -121,10 +122,11 @@ cd backend/api && uv sync
 
 ### Démarrer aujourd'hui
 
-Deux morceaux démarrent : la base de données, en conteneur, et l'API, sur le
-poste.
+Deux morceaux démarrent : les services d'infrastructure, en conteneurs, et
+l'API, sur le poste.
 
-D'abord la base — PostgreSQL, la base de test `app_test` et la console pgAdmin :
+D'abord l'infrastructure — PostgreSQL avec sa base de test `app_test` et la
+console pgAdmin, Redis, et MinIO avec son bucket applicatif :
 
 ```bash
 docker compose --project-directory . -f docker/docker-compose.yml up -d
@@ -139,7 +141,8 @@ résolution des chemins montés — le détail est dans
 pgAdmin répond sur <http://localhost:5050> ; s'y connecter avec
 `PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur
 « Juui - PostgreSQL local » y est déjà enregistré, mot de passe compris : il n'y
-a **rien à saisir** pour ouvrir la base.
+a **rien à saisir** pour ouvrir la base. La console de MinIO, elle, répond sur
+<http://localhost:9001> — voir « Vérifier le stockage objet » plus bas.
 
 Puis l'API, hors conteneur tant qu'INFRA-04 n'a pas livré son image :
 
@@ -161,12 +164,12 @@ les ports du tableau plus bas.
 
 > **Note.** Cette séquence n'est **pas encore opérationnelle**.
 > [`docker/docker-compose.yml`](docker/docker-compose.yml) existe depuis
-> INFRA-01 et porte aujourd'hui `postgres`, `pgadmin`, `redis` et
-> `redisinsight` ; le `Makefile` de la racine, lui, n'existe pas — `make up`
-> répondrait `No rule to make target 'up'`. La séquence figure ici parce qu'elle
-> est le contrat que les tickets d'infrastructure doivent honorer : INFRA-03 à
-> INFRA-05 s'ajoutent au même fichier compose, INFRA-06 pose le Makefile qui
-> l'enveloppe. À relire une fois INFRA-06 livré.
+> INFRA-01 et porte aujourd'hui `postgres`, `pgadmin`, `redis`, `redisinsight`,
+> `minio` et `minio-init` ; le `Makefile` de la racine, lui, n'existe pas —
+> `make up` répondrait `No rule to make target 'up'`. La séquence figure ici
+> parce qu'elle est le contrat que les tickets d'infrastructure doivent
+> honorer : INFRA-04 et INFRA-05 s'ajoutent au même fichier compose, INFRA-06
+> pose le Makefile qui l'enveloppe. À relire une fois INFRA-06 livré.
 
 Une fois la pile conteneurisée en place, l'installation se réduira à trois
 commandes :
@@ -201,11 +204,12 @@ Ajouter `--profile tools` pour démarrer en plus les consoles d'inspection
 optionnelles — aujourd'hui RedisInsight, qui s'ouvre déjà raccordée aux deux
 bases Redis.
 
-> **Après modification d'un mot de passe dans `.env`.** PostgreSQL et MinIO ne
-> lisent leurs identifiants qu'à la **première** création de leur volume. Les
-> changer ensuite reste sans effet jusqu'à un `docker compose down -v`, qui
-> détruit les données au passage. La cible `make db-reset` (INFRA-06) fera cela
-> proprement.
+> **Après modification d'un mot de passe dans `.env`.** PostgreSQL ne lit ses
+> identifiants qu'à la **première** création de son volume : les changer ensuite
+> reste sans effet jusqu'à un `docker compose down -v`, qui détruit les données
+> au passage. La cible `make db-reset` (INFRA-06) fera cela proprement. MinIO,
+> lui, relit les siens à chaque démarrage — un `restart` suffit, sans rien
+> perdre.
 
 Node et `uv` restent utiles sur le poste même avec ce parcours : les hooks de
 pre-commit s'exécutent en dehors des conteneurs.
@@ -226,8 +230,8 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | pgAdmin                       | 5050      | 80           | disponible  |
 | Redis                         | 6379      | 6379         | disponible  |
 | RedisInsight (profil `tools`) | 5540      | 5540         | disponible  |
-| MinIO — API S3                | 9000      | 9000         | INFRA-03    |
-| MinIO — console web           | 9001      | 9001         | INFRA-03    |
+| MinIO — API S3                | 9000      | 9000         | disponible  |
+| MinIO — console web           | 9001      | 9001         | disponible  |
 | Worker TaskIQ                 | aucun     | —            | BACK-15     |
 
 Quelques choix méritent leur explication :
@@ -283,6 +287,38 @@ Les identifiants ne sont pas recopiés ici, seulement nommés : leurs valeurs so
 celles du `.env`, dont [`.env.example`](.env.example) porte les exemples de
 développement. Une seule source de vérité — un mot de passe écrit à deux
 endroits finit toujours par diverger.
+
+### Vérifier le stockage objet
+
+MinIO tient lieu d'Amazon S3 sur le poste, et le bucket applicatif — `S3_BUCKET`,
+`juui-dev` par défaut — est créé au démarrage par le service éphémère
+`minio-init`. Celui-ci s'arrête une fois son travail fait : `docker compose ps`
+le montre en `Exited (0)`, ce qui est le résultat attendu et non une panne. Son
+journal dit exactement ce qu'il a fait :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml logs minio-init
+```
+
+La console web s'ouvre sur <http://localhost:9001>, avec `MINIO_ROOT_USER` et
+`MINIO_ROOT_PASSWORD` pour identifiants. Depuis `RELEASE.2025-05-24T17-08-30Z`,
+l'édition communautaire n'y conserve que le **navigateur d'objets** — parcourir
+les buckets, téléverser, télécharger, supprimer. Les écrans d'administration
+(utilisateurs, politiques, clés d'accès) sont passés à l'édition payante ;
+`mc admin` les remplace.
+
+Pour un aller-retour complet sans rien installer sur le poste — le conteneur
+`minio-init` a déjà l'endpoint, les identifiants et le nom du bucket dans son
+environnement :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml run --rm --entrypoint sh minio-init -c 'mc alias set t "$S3_ENDPOINT_URL" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && echo bonjour | mc pipe "t/$S3_BUCKET/essai.txt" && mc cat "t/$S3_BUCKET/essai.txt" && mc rm "t/$S3_BUCKET/essai.txt"'
+```
+
+Le bucket est **privé** : une requête anonyme sur un objet répond `403`. C'est
+délibéré — BACK-13 servira les fichiers par des URLs pré-signées, qui portent
+leur propre autorisation et expirent, plutôt que par un bucket ouvert en
+lecture.
 
 ### Scripts racine
 
@@ -359,6 +395,21 @@ serait un double parcours, et laisserait de côté les fichiers de la racine, qu
 | Deux connexions pré-remplies dans RedisInsight                                            | Une aurait suffi. Deux font de la convention « base 0 = cache, base 1 = broker » quelque chose qui se voit en ouvrant la console, au lieu d'un commentaire de plus.                                                                          |
 | Sonde de RedisInsight sur `127.0.0.1` et non `localhost`                                  | Le `/etc/hosts` du conteneur fait pointer `localhost` sur `127.0.0.1` **et** sur `::1` ; `wget` tente l'IPv6 d'abord, or la console n'écoute qu'en IPv4. Avec `localhost`, le service reste indéfiniment `unhealthy` tout en répondant.      |
 | `REDIS_PASSWORD` déclarée mais sans effet côté serveur                                    | Variable cliente, consommée par BACK-14 et BACK-15. Lui donner un effet supposerait un `requirepass`, hors de propos pour une instance de développement qui n'est joignable que depuis le poste.                                             |
+
+### Écarts assumés avec le ticket INFRA-03
+
+| Écart                                                               | Raison                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RELEASE.2025-09-07T16-13-09Z` épinglée                             | Convention d'INFRA-01 et INFRA-02, arbitrage inverse : c'est ici la **dernière** image publiée, sur Docker Hub comme sur quay.io — MinIO n'y publie plus depuis septembre 2025. Le correctif de CVE-2025-62506 (octobre 2025) n'existe qu'en binaire ; il vise les comptes de service à politique restreinte, qu'une instance à compte racine unique n'utilise pas.                       |
+| Console réduite au navigateur d'objets                              | `RELEASE.2025-05-24T17-08-30Z` a retiré les écrans d'administration de l'édition communautaire. Le ticket demande de documenter l'URL et les identifiants de développement : c'est fait, en disant ce qu'on y trouve réellement plutôt qu'en promettant une console complète.                                                                                                             |
+| Sonde `/minio/health/live` conservée, en `curl`                     | Les exemples officiels de MinIO ont basculé sur `mc ready local` parce que `curl` avait disparu de l'image fin 2023. Il est **revenu** : vérifié dans le tag épinglé avant d'écrire la ligne, ce qui permet de garder l'endpoint que demande le ticket. À revérifier à tout changement de tag — sans `curl`, la sonde échouerait en boucle et INFRA-04 attendrait un service jamais sain. |
+| `mc anonymous set none` écrit alors que c'est déjà le défaut        | Le ticket dit « applique la policy voulue ». La policy voulue est l'absence d'accès anonyme, puisque BACK-13 passe par des URLs pré-signées. L'écrire referme au démarrage suivant un bucket qu'on aurait ouvert depuis la console.                                                                                                                                                       |
+| Alias `mc` nommé `juui` et non `local`                              | `local` existe déjà dans la configuration par défaut de `mc`, avec le couple `minioadmin/minioadmin`. Le réutiliser donne un « Access Denied » à la création du bucket, sans rapport visible avec sa cause.                                                                                                                                                                               |
+| `restart: 'no'` explicite sur `minio-init`                          | C'est déjà le défaut de Compose, mais les quatre services précédents portent tous `unless-stopped` : recopié par réflexe, il relancerait sans fin un conteneur dont le travail **est** de se terminer.                                                                                                                                                                                    |
+| `MINIO_SITE_REGION` ajoutée au service                              | Sans elle, `S3_REGION` ne décrirait que le client, le serveur acceptant n'importe quelle région annoncée. Même raisonnement que le `PGPORT` d'INFRA-01 : une variable doit décrire ce qu'elle prétend décrire.                                                                                                                                                                            |
+| Script versionné dans `docker/minio/` plutôt qu'`entrypoint` inline | Le ticket place l'amorçage dans `docker/minio/`, et c'est le raisonnement du `redis.conf` d'INFRA-02 : l'essentiel de ces trois commandes tient dans leurs raisons, qu'un fichier peut porter.                                                                                                                                                                                            |
+| Ports publiés sur toutes les interfaces                             | Contrairement à Redis et RedisInsight, MinIO réclame des identifiants et sa console a une page de connexion. La règle du dépôt tient en une phrase : service sans authentification → boucle locale.                                                                                                                                                                                       |
+| Correction de ce que SETUP-05 disait des identifiants racine        | Le README et `.env.example` affirmaient que MinIO, comme PostgreSQL, ne les lit qu'à la première création de son volume. Vérifié : ils sont relus à **chaque** démarrage, les anciens sont refusés aussitôt et les données restent. Le vrai piège est ailleurs — les clés d'accès créées sous l'ancien compte racine deviennent inaccessibles.                                            |
 
 ## Conventions
 

@@ -317,6 +317,114 @@ services:
     networks: [app_network]
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # MinIO -- stockage objet compatible S3 (INFRA-03, consomme par BACK-13)
+  # ---------------------------------------------------------------------------
+  # Tient lieu d'Amazon S3 sur le poste. UN SEUL parametre distinguera les deux
+  # cote application : S3_ENDPOINT_URL, laisse vide en production. Rien dans le
+  # code de BACK-13 ne saura donc s'il parle a ce conteneur ou a AWS.
+  minio:
+    # Derniere image publiee, sur Docker Hub comme sur quay.io : MinIO n'y
+    # publie plus rien depuis septembre 2025. Le correctif de CVE-2025-62506
+    # (octobre 2025) n'existe donc qu'en binaire -- voir « Ecarts assumes avec
+    # le ticket INFRA-03 » dans le README, qui dit pourquoi il ne concerne pas
+    # cette instance.
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+
+    # `server /data` : un seul disque, ce qui suffit a un poste. Sans
+    # `--console-address`, la console web choisirait un port AU HASARD a chaque
+    # demarrage, et le mapping ci-dessous ne pointerait sur rien.
+    command: server /data --console-address ":9001"
+
+    environment:
+      # Noms imposes par l'image. Contrairement a ceux de PostgreSQL, ils sont
+      # relus a CHAQUE demarrage : les changer dans le .env puis redemarrer
+      # suffit, sans `down -v`.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+      # Region du site. Tant que rien n'est declare ici, MinIO accepte celle que
+      # le client annonce, quelle qu'elle soit ; l'ecrire fait de S3_REGION une
+      # description exacte du serveur plutot qu'une valeur que seul le client
+      # connaitrait.
+      MINIO_SITE_REGION: ${S3_REGION}
+
+    ports:
+      # API S3 : c'est ce port que vise S3_ENDPOINT_URL depuis un client lance
+      # HORS Docker. 9000 et 9001 sont figes a droite, comme le 5540 de
+      # redisinsight -- `--console-address` ci-dessus fixe le second, et le
+      # premier est celui qu'ecrit deja S3_ENDPOINT_URL.
+      - '${MINIO_API_HOST_PORT}:9000'
+
+      # Console web. Publiee sur toutes les interfaces, contrairement a redis et
+      # a redisinsight : MinIO, lui, reclame des identifiants.
+      - '${MINIO_CONSOLE_HOST_PORT}:9001'
+
+    volumes:
+      # `/data` est l'argument de `server` ci-dessus, et le VOLUME que declare
+      # l'image. Rien a deplacer, contrairement au piege de postgres 18.
+      - minio_data:/data
+
+    healthcheck:
+      # La sonde de vivacite que demande le ticket, non authentifiee. `curl` est
+      # bien present dans cette image : il en avait disparu fin 2023, d'ou le
+      # `mc ready local` qu'on lit encore dans les exemples de MinIO. Verifie
+      # avant d'ecrire cette ligne, et a reverifier avant tout changement de tag.
+      #
+      # `127.0.0.1` et non `localhost`, meme raison qu'en INFRA-02 : le resolveur
+      # du conteneur tente l'IPv6 en premier.
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      # Court : MinIO ne formate son disque qu'au tout premier demarrage, et
+      # cela prend moins d'une seconde.
+      start_period: 15s
+      retries: 5
+
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # minio-init -- amorcage du bucket applicatif (INFRA-03)
+  # ---------------------------------------------------------------------------
+  # Conteneur EPHEMERE : il attend un MinIO sain, cree le bucket s'il manque,
+  # confirme qu'il reste prive, puis se termine. `docker compose ps` le montre
+  # ensuite en `Exited (0)` -- c'est le resultat attendu, pas une panne.
+  minio-init:
+    # Le client en ligne de commande de MinIO, dans sa derniere version publiee
+    # -- celle-la meme qu'embarque l'image serveur ci-dessus.
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+
+    environment:
+      # Le script ne lit que ces quatre variables.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      S3_BUCKET: ${S3_BUCKET}
+
+    # L'entrypoint de l'image est `mc` lui-meme : sans cette ligne, le chemin du
+    # script serait pris pour une sous-commande de mc.
+    entrypoint: ['/bin/sh', '/scripts/init-bucket.sh']
+
+    volumes:
+      # Chemin relatif a la RACINE et non a docker/ -- voir la mise en garde en
+      # tete de fichier. Lecture seule : ce script n'a rien a reecrire.
+      - ./docker/minio/init-bucket.sh:/scripts/init-bucket.sh:ro
+
+    depends_on:
+      # Dependance VITALE, la ou celle de pgadmin etait decorative : sans un
+      # MinIO qui repond deja, `mc` echouerait des la premiere commande.
+      minio:
+        condition: service_healthy
+
+    # Deja le defaut de compose, ecrit malgre tout : les quatre services
+    # au-dessus portent tous `unless-stopped`, et le recopier ici relancerait
+    # sans fin un conteneur dont le travail EST de se terminer. Entre quotes,
+    # sans quoi YAML lirait `no` comme le booleen `false`.
+    restart: 'no'
+
+    networks: [app_network]
+
 # -----------------------------------------------------------------------------
 # Fichiers de configuration injectes dans les conteneurs
 # -----------------------------------------------------------------------------
@@ -383,3 +491,4 @@ volumes:
   pgadmin_data:
   redis_data:
   redisinsight_data:
+  minio_data:
