@@ -1,0 +1,56 @@
+{
+  // Socle TypeScript commun a tout le depot (SHARED-02).
+  //
+  // Ces reglages etaient ceux, ecrits a la main, de packages/ui/tsconfig.json :
+  // ils n'ont pas ete retouches en changeant de fichier, seulement deplaces.
+  //
+  // CE FICHIER NE DECLARE NI `include`, NI `exclude`, NI `paths`, NI `baseUrl`,
+  // et c'est delibere : TypeScript resout les chemins relatifs d'un tsconfig
+  // « relativement au fichier de configuration dont ils proviennent ». Un
+  // `include` pose ici designerait donc packages/config-typescript, jamais le
+  // projet qui herite. Ces cles restent la responsabilite du consommateur.
+  //
+  // A ne pas etendre directement : passer par `react-library.json` (bibliotheques
+  // React, dont `@repo/ui`) ou `nextjs.json` (les trois applications).
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    // Node 24 et les navigateurs vises couvrent ES2023 sans transpilation.
+    "target": "ES2023",
+    "module": "ESNext",
+
+    // `bundler` : la resolution de Next et de Vite, celle qui accepte les
+    // imports sans extension et lit la carte `exports` des packages.
+    "moduleResolution": "bundler",
+
+    // Tout fichier est un module, meme sans import ni export -- sans quoi un
+    // fichier « nu » polluerait la portee globale.
+    "moduleDetection": "force",
+
+    // --- Le socle de rigueur exige par le ticket ---
+    "strict": true,
+    // `tableau[i]` est type `T | undefined` : c'est le controle d'index que
+    // `strict` seul n'active pas.
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+
+    // Impose un `import type` explicite : c'est le pendant de la regle ESLint
+    // `@typescript-eslint/consistent-type-imports`, deja active dans
+    // packages/config-eslint/rules.js.
+    "verbatimModuleSyntax": true,
+    // Chaque fichier doit pouvoir etre transpile isolement : c'est ce que font
+    // SWC (Next) et esbuild, qui ne voient jamais le programme entier.
+    "isolatedModules": true,
+
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+
+    // Ne pas typer les .d.ts des dependances : quelques secondes gagnees a
+    // chaque `tsc`, et surtout aucune erreur venue d'un package tiers.
+    "skipLibCheck": true,
+
+    // Aucun de nos projets ne compile avec `tsc` : les packages sont consommes
+    // en source et transpiles par l'application (`transpilePackages`). `tsc` ne
+    // sert qu'a verifier les types -- d'ou `pnpm typecheck`.
+    "noEmit": true
+  }
+}

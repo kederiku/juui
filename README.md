@@ -438,10 +438,12 @@ tableaux, ce qui allonge leurs lignes source.
 
 ### Configurations partagées
 
-| Package                                             | Rôle                                                                                  |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@repo/eslint-config`](packages/config-eslint)     | Presets ESLint : `base`, `react`, `next`.                                             |
-| [`@repo/prettier-config`](packages/config-prettier) | Configuration Prettier, ré-exportée par [`prettier.config.mjs`](prettier.config.mjs). |
+| Package                                                 | Rôle                                                                                  |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@repo/eslint-config`](packages/config-eslint)         | Presets ESLint : `base`, `react`, `next`.                                             |
+| [`@repo/prettier-config`](packages/config-prettier)     | Configuration Prettier, ré-exportée par [`prettier.config.mjs`](prettier.config.mjs). |
+| [`@repo/typescript-config`](packages/config-typescript) | Trois `tsconfig` : `base.json`, `react-library.json`, `nextjs.json`.                  |
+| [`@repo/tailwind-config`](packages/config-tailwind)     | Le thème Tailwind v4 du dépôt, et la chaîne PostCSS.                                  |
 
 Les trois presets ESLint forment une chaîne — `next` étend `react`, qui étend
 `base` — et partagent donc exactement le même socle de règles :
@@ -466,19 +468,83 @@ export default defineConfig([...next, globalIgnores(['.next/**'])]);
 Le socle de règles se modifie en un seul endroit :
 [`packages/config-eslint/rules.js`](packages/config-eslint/rules.js).
 
+#### `@repo/typescript-config`
+
+Même principe, une chaîne : `react-library.json` et `nextjs.json` étendent tous
+deux `base.json`.
+
+| Fichier              | Pour qui                                     | Ce qu'il ajoute                                                                                                                                                                   |
+| -------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base.json`          | personne directement                         | Le socle : cible ES2023, résolution `bundler`, et le mode strict complet — `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`. |
+| `react-library.json` | `packages/ui`                                | `jsx: react-jsx` et les bibliothèques `DOM`.                                                                                                                                      |
+| `nextjs.json`        | les trois applications (FRONT-01 à FRONT-03) | `jsx: preserve` — le JSX est laissé à SWC —, le plugin d'éditeur `next`, `allowJs` et `incremental`.                                                                              |
+
+Un consommateur se réduit à ceci :
+
+```json
+// packages/ui/tsconfig.json
+{
+  "extends": "@repo/typescript-config/react-library.json",
+  "compilerOptions": { "paths": { "@repo/ui/*": ["./src/*"] } },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+**`include`, `exclude` et `paths` restent chez lui**, et ce n'est pas un oubli :
+TypeScript résout les chemins relatifs d'un `tsconfig` _relativement au fichier
+de configuration dont ils proviennent_. Un `include` posé dans `base.json`
+désignerait `packages/config-typescript`, jamais le projet qui hérite.
+
+#### `@repo/tailwind-config`
+
+Tailwind v4 n'a plus de `tailwind.config.js`, donc plus de preset au sens de la
+v3 : un thème partagé **est** un fichier CSS que l'on importe.
+[`packages/config-tailwind/theme.css`](packages/config-tailwind/theme.css) tient
+ce rôle et porte tout — palette claire et sombre, échelle de rayons,
+typographie, variante `.dark`. C'est le seul fichier du dépôt où une couleur est
+écrite ; en changer une y repeint les trois applications et `@repo/ui`.
+
+Une application n'y touche jamais : elle importe `@repo/ui/globals.css`, qui
+n'est qu'un renvoi vers ce fichier.
+
+La ligne à ne pas perdre de vue :
+
+```css
+@source '../ui/src/**/*.{ts,tsx}';
+```
+
+C'est le `content` d'autrefois. Tailwind ignore `node_modules` dans sa détection
+automatique — et c'est précisément par un lien symbolique de `node_modules`
+qu'une application atteint `@repo/ui`. Sans cette ligne, **toutes** les classes
+des composants seraient purgées du CSS final. Le chemin est résolu relativement
+à `theme.css`, d'où `../ui/src`.
+
+La chaîne PostCSS vit dans le même package ; les trois applications la
+ré-exportent au lieu de la réécrire :
+
+```js
+// frontend/frontend-professional/postcss.config.mjs
+export { default } from '@repo/tailwind-config/postcss.config';
+```
+
+Enfin, la typographie est un **contrat**, pas une police : le preset déclare
+`--font-sans: var(--font-juui-sans, …)`, à charge pour chaque application
+d'alimenter `--font-juui-sans` avec `next/font` (FRONT-01). Tant qu'aucune ne le
+fait, la valeur de repli s'applique et rien ne casse.
+
 ### Bibliothèque de composants (`@repo/ui`)
 
 [`packages/ui`](packages/ui) porte les composants, le thème et les utilitaires
 partagés par les trois frontends. Le package n'est **jamais compilé** : il
 s'exporte en source TypeScript, et chaque application le transpile.
 
-| Chemin                   | Contenu                                                             |
-| ------------------------ | ------------------------------------------------------------------- |
-| `src/components/`        | Composants shadcn/ui et `theme-provider.tsx`.                       |
-| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.   |
-| `src/styles/globals.css` | Le thème : variables clair et sombre, échelle de rayons, `@source`. |
-| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                    |
-| `postcss.config.mjs`     | Chaîne PostCSS, ré-exportée par les applications.                   |
+| Chemin                   | Contenu                                                               |
+| ------------------------ | --------------------------------------------------------------------- |
+| `src/components/`        | Composants shadcn/ui et `theme-provider.tsx`.                         |
+| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.     |
+| `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application. |
+| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                      |
 
 Les imports passent par la carte `exports` du package, jamais par un chemin
 relatif :
@@ -493,19 +559,19 @@ import { cn } from '@repo/ui/lib/utils';
 
 shadcn décrit un thème par quatre dimensions indépendantes. Celles de Juui :
 
-| Dimension          | Valeur    | Où elle est inscrite                                        |
-| ------------------ | --------- | ----------------------------------------------------------- |
-| Base de primitives | `radix`   | `components.json` — `"style": "radix-vega"`                 |
-| Style              | `vega`    | idem                                                        |
-| Couleur de base    | `mist`    | `components.json` — `"baseColor": "mist"`, et `globals.css` |
-| Couleur d'accent   | `emerald` | `globals.css` — `--primary`, `--ring`, `--sidebar-primary`  |
+| Dimension          | Valeur    | Où elle est inscrite                                      |
+| ------------------ | --------- | --------------------------------------------------------- |
+| Base de primitives | `radix`   | `components.json` — `"style": "radix-vega"`               |
+| Style              | `vega`    | idem                                                      |
+| Couleur de base    | `mist`    | `components.json` — `"baseColor": "mist"`, et `theme.css` |
+| Couleur d'accent   | `emerald` | `theme.css` — `--primary`, `--ring`, `--sidebar-primary`  |
 
 `pnpm dlx shadcn@4.19.0 info -c packages/ui` relit ces quatre valeurs depuis le
 dépôt et doit répondre `vega` / `mist` / `emerald` — c'est le contrôle à faire
 après toute retouche du thème.
 
 Toutes les couleurs sont des variables CSS définies **une seule fois**, dans
-[`packages/ui/src/styles/globals.css`](packages/ui/src/styles/globals.css).
+[`packages/config-tailwind/theme.css`](packages/config-tailwind/theme.css).
 Changer `--primary` y suffit à repeindre les trois applications ; aucune ne
 redéfinit de couleur chez elle.
 
@@ -522,8 +588,11 @@ pnpm dlx shadcn@4.19.0 add tooltip -c packages/ui
 ```
 
 Le fichier atterrit dans `packages/ui/src/components/`, ses imports réécrits en
-`@repo/ui/...` grâce aux alias de `components.json`. Le registre livre en
-guillemets doubles et sans point-virgule : enchaîner systématiquement
+`@repo/ui/...` grâce aux alias de `components.json`. Les variables de thème que
+le registre apporte, elles, vont dans `packages/config-tailwind/theme.css` :
+`components.json` désigne le preset, pas le `globals.css` du package — sans quoi
+le thème recommencerait à se disperser. Le registre livre en guillemets doubles
+et sans point-virgule : enchaîner systématiquement
 
 ```bash
 pnpm format && pnpm lint:fix
@@ -548,18 +617,29 @@ pnpm --filter @repo/ui run check:css
 
 La sortie `packages/ui/dist/globals.built.css` (non versionnée) doit contenir
 le bloc `:root`, le bloc `.dark`, et les classes utilisées par les composants du
-package — signe que la directive `@source` fait bien son travail.
+package — signe que la directive `@source` fait bien son travail. Depuis
+SHARED-02 la preuve est plus forte qu'elle n'en a l'air : le thème est atteint
+**par le lien symbolique pnpm** de `node_modules`, exactement comme le feront
+les applications.
+
+Le pendant du côté TypeScript, qui vérifie du même coup que l'héritage des
+configurations partagées se résout :
+
+```bash
+pnpm typecheck
+```
 
 #### Ce qu'une application devra faire (FRONT-01 à FRONT-03)
 
-1. `"@repo/ui": "workspace:*"` en dépendance, et
-   `transpilePackages: ['@repo/ui']` dans `next.config.ts` — le package est
-   livré en TypeScript non compilé.
-2. `export { default } from '@repo/ui/postcss.config';` dans son
+1. Quatre dépendances de workspace — `@repo/ui`, `@repo/tailwind-config`,
+   `@repo/typescript-config` et `@repo/eslint-config`, toutes en
+   `"workspace:*"` — et `transpilePackages: ['@repo/ui']` dans `next.config.ts`,
+   le package étant livré en TypeScript non compilé.
+2. `export { default } from '@repo/tailwind-config/postcss.config';` dans son
    `postcss.config.mjs`.
-3. Un `app/globals.css` à elle, qui ré-importe celui du package et déclare ses
-   propres sources — la détection automatique de Tailwind part du fichier qui
-   porte `@import 'tailwindcss'`, lequel vit dans `packages/ui` :
+3. Un `app/globals.css` à elle, qui ré-importe celui de `@repo/ui` et déclare
+   ses propres sources — la détection automatique de Tailwind part du fichier
+   qui porte `@import 'tailwindcss'`, lequel vit dans `packages/config-tailwind` :
 
    ```css
    @import '@repo/ui/globals.css';
@@ -573,8 +653,12 @@ package — signe que la directive `@source` fait bien son travail.
 4. `<html lang="fr" suppressHydrationWarning>` et `<ThemeProvider>` autour de
    l'arbre — sans `suppressHydrationWarning`, next-themes provoque un
    avertissement d'hydratation à chaque rendu.
-5. `"@repo/ui/*": ["../../packages/ui/src/*"]` dans les `paths` de son
-   `tsconfig.json`.
+5. Une police chargée avec `next/font` et exposée en `--font-juui-sans` sur
+   `<html>` : c'est la variable que lit le `--font-sans` du preset.
+6. Un `tsconfig.json` qui étend `@repo/typescript-config/nextjs.json` et déclare
+   chez lui ce qu'un fichier partagé ne peut pas porter — ses `paths` (`@/*` et
+   `"@repo/ui/*": ["../../packages/ui/src/*"]`), son `include` et son
+   `exclude`.
 
 ### Écarts assumés avec le ticket SHARED-01
 
@@ -588,6 +672,20 @@ package — signe que la directive `@source` fait bien son travail.
 | Pas de preset Tailwind partagé                                    | Tailwind v4 n'a plus de fichier de configuration JavaScript : le thème **est** `globals.css`, et le `content` d'autrefois s'écrit `@source`. SHARED-02 devra en tenir compte pour `packages/config-tailwind`.                                                         |
 | `@tailwindcss/cli` en dépendance de développement                 | Ni le ticket ni le build ne le réclament, mais c'est le seul moyen de prouver que le thème compile tant qu'aucune application n'existe.                                                                                                                               |
 | `shadcn` et `tw-animate-css` en `dependencies`                    | Le registre les place en `devDependencies`. Ce sont des `@import` de `globals.css`, donc nécessaires au **build des applications** : en devDependencies, un `pnpm install --prod` en image Docker (INFRA-05) casserait la compilation CSS.                            |
+
+### Écarts assumés avec le ticket SHARED-02
+
+| Écart                                                              | Raison                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@repo/typescript-config` et `@repo/tailwind-config`               | Le ticket écrivait `@repo/config-typescript`. Les deux packages du même genre déjà en place s'appellent `@repo/eslint-config` et `@repo/prettier-config` : une seule convention de nommage vaut mieux que la fidélité littérale. Les dossiers, eux, sont ceux du ticket. |
+| Pas de preset Tailwind au sens de la v3                            | Tailwind v4 n'a plus de configuration JavaScript. Le preset est `theme.css`, un fichier importé — le mécanisme que Tailwind documente lui-même pour partager un thème entre projets.                                                                                     |
+| `content: ['../../packages/ui/src/**']` → `@source '../ui/src/**'` | Même directive, syntaxe v4, et surtout autre point d'origine : `@source` est résolu relativement à la feuille de style qui le porte, ici `packages/config-tailwind/theme.css`.                                                                                           |
+| `postcss.config.mjs` déplacé hors de `packages/ui`                 | Revient sur un choix de SHARED-01. La chaîne PostCSS est de l'outillage Tailwind : la laisser ailleurs que le thème obligeait les applications à connaître deux packages pour une seule préoccupation. Aucune n'existant encore, rien à casser.                          |
+| `components.json` pointe sur `theme.css`, hors du package          | Sans cela, `shadcn add` écrirait ses variables de thème dans le `globals.css` de `@repo/ui` et le thème se remettrait à diverger. `shadcn info` continue de répondre `vega` / `mist` / `emerald`, ce qui le vérifie.                                                     |
+| Variables de typographie ajoutées au périmètre                     | Le ticket demande que le preset porte « la typographie ». Il ne peut pas porter la police elle-même — c'est `next/font`, donc l'application. Le preset porte donc le contrat : `--font-sans` lit `--font-juui-sans`, avec repli.                                         |
+| Dépendances Tailwind en `dependencies`                             | `tailwindcss`, `@tailwindcss/postcss`, `tw-animate-css` et `shadcn` sont nécessaires au **build** des applications. En `devDependencies`, un `pnpm install --prod` en image Docker (INFRA-05) casserait la compilation CSS — même raisonnement qu'en SHARED-01.          |
+| Critère « une modification du preset se répercute sur les 3 apps » | `frontend/*` ne contient encore que des `.gitkeep`. Ce qui était vérifiable l'a été : changer `--primary` dans le preset change bien le CSS compilé de `@repo/ui`, atteint par le même lien symbolique que celui qu'emprunteront les applications.                       |
+| `nextjs.json` livré sans consommateur                              | FRONT-01 à FRONT-03 en dépendent ; le poser maintenant est précisément ce qui garantit que les trois applications démarreront identiques.                                                                                                                                |
 
 ### Hooks de pre-commit
 
@@ -672,7 +770,8 @@ point final :
 | `build`    | Build, conteneurs, publication.                       |
 
 Le scope est **facultatif** ; s'il est présent, il désigne un workspace : `api`,
-`professional`, `individual`, `admin`, `ui`, `docker`, `documentation`. La liste
+`professional`, `individual`, `admin`, `ui`, `config-typescript`,
+`config-tailwind`, `docker`, `documentation`. La liste
 suit l'arborescence réelle — **un nouveau workspace ajoute son scope à
 [`commitlint.config.mjs`](commitlint.config.mjs) dans la pull request qui le
 crée**.

@@ -1,14 +1,14 @@
 /**
- * Configuration PostCSS de la bibliotheque de composants (SHARED-01).
+ * Chaine PostCSS partagee par tout le depot (SHARED-02).
  *
  * Tailwind v4 n'a plus de fichier `tailwind.config.js` : tout passe par ce
- * plugin PostCSS, et le theme vit dans `src/styles/globals.css`.
+ * plugin, et le theme vit dans le `theme.css` voisin.
  *
  * Les trois applications ne redefinissent pas ce fichier, elles le
  * re-exportent -- une seule chaine PostCSS pour tout le monorepo :
  *
  *   // frontend/frontend-professional/postcss.config.mjs
- *   export { default } from '@repo/ui/postcss.config';
+ *   export { default } from '@repo/tailwind-config/postcss.config';
  *
  * @type {import('postcss-load-config').Config}
  */

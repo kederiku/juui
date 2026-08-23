@@ -1,0 +1,21 @@
+{
+  // Bibliotheques React sans Next (SHARED-02).
+  //
+  // Cible : `@repo/ui`, et toute future bibliotheque de composants. Une
+  // application Next etend `nextjs.json`, pas ce fichier.
+  //
+  // Equivalent TypeScript du preset ESLint `react` de packages/config-eslint :
+  // du React nu, sans routeur ni `next/image`.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    // Le DOM s'ajoute ici et non dans `base.json` : le socle sert aussi a du
+    // code Node, qui n'a pas a voir `document` ni `window`.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+
+    // React 19 : la transformation automatique. Aucun `import React` a ecrire,
+    // et le JSX est compile par `tsc` -- contrairement a `nextjs.json`, ou il
+    // est laisse au compilateur de Next.
+    "jsx": "react-jsx"
+  }
+}

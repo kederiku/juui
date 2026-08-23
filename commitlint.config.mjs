@@ -27,8 +27,8 @@ export default {
     //
     // La liste suit les workspaces REELS, pas une nomenclature figee. Regle a
     // tenir : un nouveau workspace ajoute son scope ici, dans la PR qui le cree
-    // -- `api-client` en SHARED-03, `config-typescript` et `config-tailwind` en
-    // SHARED-02.
+    // -- les deux packages de configuration l'ont fait en SHARED-02, reste
+    // `api-client` en SHARED-03.
     'scope-enum': [
       2,
       'always',
@@ -38,6 +38,8 @@ export default {
         'individual', // frontend/frontend-individual
         'admin', // frontend/frontend-admin
         'ui', // packages/ui (SHARED-01)
+        'config-typescript', // packages/config-typescript (SHARED-02)
+        'config-tailwind', // packages/config-tailwind (SHARED-02)
         'docker', // docker/
         'documentation', // documentation/ (DOC-01)
       ],
