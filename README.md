@@ -161,12 +161,12 @@ les ports du tableau plus bas.
 
 > **Note.** Cette séquence n'est **pas encore opérationnelle**.
 > [`docker/docker-compose.yml`](docker/docker-compose.yml) existe depuis
-> INFRA-01, mais il ne porte que `postgres` et `pgadmin` ; le `Makefile` de la
-> racine, lui, n'existe pas — `make up` répondrait
-> `No rule to make target 'up'`. La séquence figure ici parce qu'elle est le
-> contrat que les tickets d'infrastructure doivent honorer : INFRA-02 à INFRA-05
-> s'ajoutent au même fichier compose, INFRA-06 pose le Makefile qui l'enveloppe.
-> À relire une fois INFRA-06 livré.
+> INFRA-01 et porte aujourd'hui `postgres`, `pgadmin`, `redis` et
+> `redisinsight` ; le `Makefile` de la racine, lui, n'existe pas — `make up`
+> répondrait `No rule to make target 'up'`. La séquence figure ici parce qu'elle
+> est le contrat que les tickets d'infrastructure doivent honorer : INFRA-03 à
+> INFRA-05 s'ajoutent au même fichier compose, INFRA-06 pose le Makefile qui
+> l'enveloppe. À relire une fois INFRA-06 livré.
 
 Une fois la pile conteneurisée en place, l'installation se réduira à trois
 commandes :
@@ -198,7 +198,8 @@ docker compose --project-directory . -f docker/docker-compose.yml up -d
 ```
 
 Ajouter `--profile tools` pour démarrer en plus les consoles d'inspection
-optionnelles.
+optionnelles — aujourd'hui RedisInsight, qui s'ouvre déjà raccordée aux deux
+bases Redis.
 
 > **Après modification d'un mot de passe dans `.env`.** PostgreSQL et MinIO ne
 > lisent leurs identifiants qu'à la **première** création de leur volume. Les
@@ -223,8 +224,8 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
 | PostgreSQL                    | 5432      | 5432         | disponible  |
 | pgAdmin                       | 5050      | 80           | disponible  |
-| Redis                         | 6379      | 6379         | INFRA-02    |
-| RedisInsight (profil `tools`) | 5540      | 5540         | INFRA-02    |
+| Redis                         | 6379      | 6379         | disponible  |
+| RedisInsight (profil `tools`) | 5540      | 5540         | disponible  |
 | MinIO — API S3                | 9000      | 9000         | INFRA-03    |
 | MinIO — console web           | 9001      | 9001         | INFRA-03    |
 | Worker TaskIQ                 | aucun     | —            | BACK-15     |
@@ -244,6 +245,12 @@ Quelques choix méritent leur explication :
 - **RedisInsight sur 5540**, port d'écoute par défaut de l'image : le publier
   tel quel évite une correspondance de plus à retenir. Le service reste derrière
   le profil Compose `tools` et ne démarre donc pas avec `make up`.
+- **Redis et RedisInsight ne sont publiés que sur `127.0.0.1`.** Les autres
+  services le sont sur toutes les interfaces du poste ; ces deux-là non. Le
+  Redis de développement n'a pas de mot de passe et la console n'a pas de page
+  de connexion : les publier largement les offrirait en lecture et en écriture
+  à tout le réseau auquel le poste est raccordé — un wifi partagé suffit. Rien
+  ne change à l'usage, les URLs et les commandes restent celles de ce tableau.
 - **Le worker n'écoute rien.** Il consomme la file Redis et n'ouvre aucun port
   entrant : rien à publier, rien à réserver.
 
@@ -269,7 +276,8 @@ Les adresses à ouvrir dans un navigateur :
 PostgreSQL et Redis ne parlent pas HTTP : ils s'atteignent par une chaîne de
 connexion, que l'API compose elle-même à partir des variables `POSTGRES_*` et
 `REDIS_*`. Redis sépare ses usages par base — la base 0 pour le cache
-applicatif, la base 1 pour le broker TaskIQ.
+applicatif, la base 1 pour le broker TaskIQ — et RedisInsight les présente comme
+deux connexions distinctes, pré-remplies au démarrage.
 
 Les identifiants ne sont pas recopiés ici, seulement nommés : leurs valeurs sont
 celles du `.env`, dont [`.env.example`](.env.example) porte les exemples de
@@ -337,6 +345,20 @@ serait un double parcours, et laisserait de côté les fichiers de la racine, qu
 | `REPLACE_SERVERS_ON_STARTUP=True`                       | Par défaut, la définition de serveur n'est lue qu'à la création du volume `pgadmin_data`. Un changement d'identifiants dans le `.env` n'atteindrait jamais la console sans un `down -v`.                                                              |
 | Volume `pgadmin_data` nommé, `restart: unless-stopped`  | Le ticket demande « un volume » sans le nommer, et ne dit rien du redémarrage. Les deux suivent la convention posée pour `postgres`, que reprendront INFRA-02 à INFRA-05.                                                                             |
 | Chemin monté écrit `./docker/postgres/init`             | `--project-directory .` déplace aussi la résolution des chemins relatifs, qui partent donc de la racine et non de `docker/`. Le fichier compose n'est utilisable que lancé ainsi — c'est écrit en tête de fichier.                                    |
+
+### Écarts assumés avec le ticket INFRA-02
+
+| Écart                                                                                     | Raison                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `redis:8-alpine` au lieu de la 7 demandée                                                 | Même arbitrage qu'en INFRA-01 avec `postgres:18`. Accessoirement une question de licence : la 8 est disponible sous AGPLv3, quand `7-alpine` résout vers la 7.4, passée sous RSALv2/SSPL.                                                    |
+| Redis et RedisInsight publiés sur `127.0.0.1` seulement                                   | Contrairement à `postgres`, cette instance Redis n'a pas de mot de passe, et la console n'a pas de page de connexion. Une publication large les exposerait en écriture à tout le réseau du poste.                                            |
+| Un `docker/redis/redis.conf` versionné plutôt que `--appendonly yes` en ligne de commande | Le ticket le donne pour optionnel. Raisonnement inverse de celui du `servers.json` inline d'INFRA-01 : un `.json` ne peut porter aucun commentaire, un `redis.conf` si — et l'essentiel de ce fichier tient dans ses raisons.                |
+| Le port, lui, reste en ligne de commande                                                  | Un fichier de configuration Redis n'interpole aucune variable d'environnement. Y écrire `6379` créerait une seconde source de vérité à côté de `REDIS_PORT` ; la ligne de commande, elle, suit le `.env`.                                    |
+| `maxmemory` volontairement non défini                                                     | Cache et broker partagent l'instance, et la politique d'éviction ignore les bases. Un `allkeys-*` supprimerait des tâches en attente sans la moindre erreur. Le raisonnement et la seule politique acceptable sont écrits dans `redis.conf`. |
+| RedisInsight épinglé sur `3.8`                                                            | L'image ne publie pas de tag de majeure nue — `3` n'existe pas. La ligne mineure est le plus proche équivalent du `dpage/pgadmin4:9` d'INFRA-01.                                                                                             |
+| Deux connexions pré-remplies dans RedisInsight                                            | Une aurait suffi. Deux font de la convention « base 0 = cache, base 1 = broker » quelque chose qui se voit en ouvrant la console, au lieu d'un commentaire de plus.                                                                          |
+| Sonde de RedisInsight sur `127.0.0.1` et non `localhost`                                  | Le `/etc/hosts` du conteneur fait pointer `localhost` sur `127.0.0.1` **et** sur `::1` ; `wget` tente l'IPv6 d'abord, or la console n'écoute qu'en IPv4. Avec `localhost`, le service reste indéfiniment `unhealthy` tout en répondant.      |
+| `REDIS_PASSWORD` déclarée mais sans effet côté serveur                                    | Variable cliente, consommée par BACK-14 et BACK-15. Lui donner un effet supposerait un `requirepass`, hors de propos pour une instance de développement qui n'est joignable que depuis le poste.                                             |
 
 ## Conventions
 
