@@ -35,11 +35,12 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 ## Démarrage rapide
 
-Une partie seulement de la pile démarre aujourd'hui : le service d'API. Les
-bases de données, le stockage objet et les trois frontends arrivent avec les
-tickets INFRA et FRONT. Cette section décrit donc **deux parcours** — celui qui
-fonctionne maintenant, puis la cible conteneurisée — et l'allocation de ports
-que cette cible devra respecter.
+Une partie seulement de la pile démarre aujourd'hui : le service d'API, et
+depuis INFRA-01 la base PostgreSQL avec sa console pgAdmin. Redis, le stockage
+objet et les trois frontends arrivent avec les tickets INFRA et FRONT suivants.
+Cette section décrit donc **deux parcours** — celui qui fonctionne maintenant,
+puis la cible conteneurisée — et l'allocation de ports que cette cible devra
+respecter.
 
 ### Prérequis
 
@@ -52,13 +53,17 @@ Pour le parcours qui fonctionne aujourd'hui :
 - **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api`. Il
   télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
 
-Deux outils de plus pour le parcours conteneurisé. **Rien ne les réclame
-encore** ; les installer maintenant évite seulement d'avoir à revenir ici :
-
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
   [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).
-  C'est bien `docker compose`, sous-commande du client, qu'attendent INFRA-01 et
-  suivants — pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
+  Requis depuis INFRA-01 : c'est lui qui fait tourner PostgreSQL et pgAdmin. Qui
+  veut seulement lancer `uvicorn` peut encore s'en passer — l'API n'ouvre aucune
+  connexion à la base avant BACK-05. C'est bien `docker compose`, sous-commande
+  du client, qui est attendue — pas l'ancien binaire `docker-compose`, qui n'est
+  plus maintenu.
+
+Un outil de plus pour le parcours conteneurisé complet. **Rien ne le réclame
+encore** ; l'installer maintenant évite seulement d'avoir à revenir ici :
+
 - **`make`** — sur macOS, il vient des Command Line Tools :
   `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est déjà
   elle qui exécute [`backend/api/Makefile`](backend/api/Makefile).
@@ -114,9 +119,29 @@ workspaces et piloté par `uv` :
 cd backend/api && uv sync
 ```
 
-### Démarrer aujourd'hui, sans Docker
+### Démarrer aujourd'hui
 
-Un seul service démarre : l'API.
+Deux morceaux démarrent : la base de données, en conteneur, et l'API, sur le
+poste.
+
+D'abord la base — PostgreSQL, la base de test `app_test` et la console pgAdmin :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml up -d
+```
+
+Le `--project-directory .` n'est pas décoratif, et il n'est pas non plus
+facultatif : le fichier compose vit dans `docker/` alors que le `.env` est à la
+racine, et c'est ce drapeau qui accorde les deux. Il commande aussi la
+résolution des chemins montés — le détail est dans
+[`docker/docker-compose.yml`](docker/docker-compose.yml), en tête de fichier.
+
+pgAdmin répond sur <http://localhost:5050> ; s'y connecter avec
+`PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur
+« Juui - PostgreSQL local » y est déjà enregistré, mot de passe compris : il n'y
+a **rien à saisir** pour ouvrir la base.
+
+Puis l'API, hors conteneur tant qu'INFRA-04 n'a pas livré son image :
 
 ```bash
 cd backend/api && uv run uvicorn app.main:app --reload
@@ -124,6 +149,8 @@ cd backend/api && uv run uvicorn app.main:app --reload
 
 La documentation interactive répond sur <http://localhost:8000/docs>. L'API ne
 sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.md).
+Elle ne parle pas encore à PostgreSQL non plus : le branchement de SQLAlchemy
+est l'objet de BACK-05.
 
 `pnpm dev` ne démarre rien pour l'instant : aucun workspace pnpm ne définit
 encore de script `dev`, et ceux qui n'en définissent pas sont ignorés. Les
@@ -132,11 +159,14 @@ les ports du tableau plus bas.
 
 ### La pile complète, avec Docker
 
-> **Note.** Cette séquence n'est **pas encore opérationnelle** : il n'existe ni
-> `Makefile` à la racine, ni `docker/docker-compose.yml`. Elle figure ici parce
-> qu'elle est le contrat que les tickets d'infrastructure doivent honorer —
-> INFRA-01 et BACK-03 dépendent l'un et l'autre de SETUP-05, et toute la chaîne
-> INFRA-02 à INFRA-06 découle d'INFRA-01. À relire une fois INFRA-06 livré.
+> **Note.** Cette séquence n'est **pas encore opérationnelle**.
+> [`docker/docker-compose.yml`](docker/docker-compose.yml) existe depuis
+> INFRA-01, mais il ne porte que `postgres` et `pgadmin` ; le `Makefile` de la
+> racine, lui, n'existe pas — `make up` répondrait
+> `No rule to make target 'up'`. La séquence figure ici parce qu'elle est le
+> contrat que les tickets d'infrastructure doivent honorer : INFRA-02 à INFRA-05
+> s'ajoutent au même fichier compose, INFRA-06 pose le Makefile qui l'enveloppe.
+> À relire une fois INFRA-06 livré.
 
 Une fois la pile conteneurisée en place, l'installation se réduira à trois
 commandes :
@@ -159,7 +189,7 @@ INFRA-06 en prévoit d'autres — migrations, seed, tests, shell dans un contene
 qui adopte déjà ces conventions et auquel le Makefile racine n'aura qu'à
 déléguer.
 
-Le fichier compose vivra dans `docker/`, le `.env` à la racine. Sans
+Le fichier compose vit dans `docker/`, le `.env` à la racine. Sans
 `--project-directory`, `docker compose` chercherait son `.env` dans `docker/` et
 n'en trouverait pas : c'est cette commande que `make up` encapsulera.
 
@@ -191,8 +221,8 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | `frontend-individual`         | 3002      | 3000         | FRONT-02    |
 | `frontend-admin`              | 3003      | 3000         | FRONT-03    |
 | Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
-| PostgreSQL                    | 5432      | 5432         | INFRA-01    |
-| pgAdmin                       | 5050      | 80           | INFRA-01    |
+| PostgreSQL                    | 5432      | 5432         | disponible  |
+| pgAdmin                       | 5050      | 80           | disponible  |
 | Redis                         | 6379      | 6379         | INFRA-02    |
 | RedisInsight (profil `tools`) | 5540      | 5540         | INFRA-02    |
 | MinIO — API S3                | 9000      | 9000         | INFRA-03    |
@@ -205,11 +235,12 @@ Quelques choix méritent leur explication :
   Next.js, jamais publié : INFRA-05 le mappe sur 3001, 3002 et 3003 côté hôte.
   Ce sont donc les mêmes ports qu'en développement local — d'où la règle : ne
   pas lancer `pnpm dev` et `make up` en même temps.
-- **pgAdmin sur 5050.** Ni SETUP-05 ni INFRA-01 ne fixent ce port, et un tableau
-  censé garantir l'absence de collision ne peut pas laisser de case vide. 5050
-  est le port des exemples Compose de pgAdmin — le moins surprenant — et il
-  évite `8080`, déjà disputé par trop d'outils, comme les ports 5000 et 7000 que
-  le récepteur AirPlay de macOS occupe par défaut.
+- **pgAdmin sur 5050.** Ni SETUP-05 ni INFRA-01 ne fixaient ce port, et un
+  tableau censé garantir l'absence de collision ne peut pas laisser de case
+  vide : le choix a été fait ici, et INFRA-01 s'y est tenu. 5050 est le port des
+  exemples Compose de pgAdmin — le moins surprenant — et il évite `8080`, déjà
+  disputé par trop d'outils, comme les ports 5000 et 7000 que le récepteur
+  AirPlay de macOS occupe par défaut.
 - **RedisInsight sur 5540**, port d'écoute par défaut de l'image : le publier
   tel quel évite une correspondance de plus à retenir. Le service reste derrière
   le profil Compose `tools` et ne démarre donc pas avec `make up`.
@@ -292,6 +323,20 @@ serait un double parcours, et laisserait de côté les fichiers de la racine, qu
 | Deux services de plus que la liste du ticket                      | Le tableau ne vaut comme garantie d'absence de collision que s'il est exhaustif. DOC-01 réserve déjà 3004 et INFRA-02 prévoit RedisInsight — les omettre rendrait la garantie fausse.                                                                                        |
 | Variables ajoutées hors de la liste du ticket                     | `CORS_ORIGINS` (BACK-11), `JWT_REFRESH_TOKEN_EXPIRE_DAYS` (BACK-10), `POSTGRES_TEST_DB` (INFRA-01), `REDIS_CACHE_DB` et `REDIS_BROKER_DB` (INFRA-02), `S3_REGION` (boto3), `API_INTERNAL_URL` (INFRA-05), `COMPOSE_PROJECT_NAME` et les `*_HOST_PORT` (INFRA-01 à INFRA-05). |
 | Identifiants nommés par leur variable, jamais recopiés            | INFRA-03 demande de documenter ceux de la console MinIO. Les nommer renvoie à [`.env.example`](.env.example), seule source de vérité.                                                                                                                                        |
+
+### Écarts assumés avec le ticket INFRA-01
+
+| Écart                                                   | Raison                                                                                                                                                                                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `postgres:18-alpine` au lieu de la 16 demandée          | Le ticket a été rédigé avant la sortie de la 18. Naître avec deux majeures de retard imposerait une migration avant même la première mise en production. Même arbitrage qu'en BACK-02, où Ruff cible `py314` là où le ticket disait `py312`.          |
+| Volume monté sur `/var/lib/postgresql`                  | Depuis la 18, l'image place `PGDATA` dans `/var/lib/postgresql/18/docker` et déclare son volume sur le dossier parent. Le montage traditionnel sur `…/data` n'échoue pas : il perd les données en silence, ce que le critère de persistance interdit. |
+| Script d'initialisation en `.sh` et non en `.sql`       | Le ticket dit « scripts SQL » ; [`.env.example`](.env.example) promet que `POSTGRES_TEST_DB` reste modifiable sans toucher au script. Un `.sql` déposé dans `/docker-entrypoint-initdb.d` n'interpole aucune variable — le shell, si.                 |
+| `servers.json` inline plutôt que fichier versionné      | Un `.json` ne peut porter aucun commentaire, et il aurait figé `juui` et `5432` en dur à côté du `.env`. Le bloc `configs` du fichier compose interpole `${...}`, donc suit le `.env` sans seconde source de vérité.                                  |
+| `PGPORT` ajouté au service `postgres`                   | Sans lui, `POSTGRES_PORT` ne serait qu'une décoration : le serveur écouterait 5432 quoi qu'il arrive, et la variable mentirait sur ce qu'elle décrit.                                                                                                 |
+| `MASTER_PASSWORD_REQUIRED=False` et un fichier `pgpass` | Le ticket demande d'éviter la saisie manuelle. Sans le premier, pgAdmin réclame un mot de passe maître avant d'afficher quoi que ce soit ; sans le second, il réclame `POSTGRES_PASSWORD` à chaque ouverture de la connexion.                         |
+| `REPLACE_SERVERS_ON_STARTUP=True`                       | Par défaut, la définition de serveur n'est lue qu'à la création du volume `pgadmin_data`. Un changement d'identifiants dans le `.env` n'atteindrait jamais la console sans un `down -v`.                                                              |
+| Volume `pgadmin_data` nommé, `restart: unless-stopped`  | Le ticket demande « un volume » sans le nommer, et ne dit rien du redémarrage. Les deux suivent la convention posée pour `postgres`, que reprendront INFRA-02 à INFRA-05.                                                                             |
+| Chemin monté écrit `./docker/postgres/init`             | `--project-directory .` déplace aussi la résolution des chemins relatifs, qui partent donc de la racine et non de `docker/`. Le fichier compose n'est utilisable que lancé ainsi — c'est écrit en tête de fichier.                                    |
 
 ## Conventions
 

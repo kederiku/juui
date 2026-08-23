@@ -1,0 +1,245 @@
+# Pile de developpement conteneurisee (INFRA-01).
+#
+# Ce fichier assemble les services d'infrastructure du poste. INFRA-01 en pose
+# les deux premiers -- PostgreSQL et pgAdmin -- et surtout le socle dont
+# heriteront les suivants : le reseau `app_network`, la convention de
+# healthcheck, et l'interpolation systematique depuis le .env.
+#
+# OU VIT LE .env
+# Ce fichier est dans docker/, le .env est a la RACINE. Livre a lui-meme,
+# `docker compose` chercherait son .env a cote de lui, ne trouverait rien, et
+# toutes les `${...}` ci-dessous vaudraient la chaine vide -- sans la moindre
+# erreur. D'ou le `--project-directory .` de toutes les commandes du README, et
+# plus tard de `make up` (INFRA-06) :
+#
+#   docker compose --project-directory . -f docker/docker-compose.yml up -d
+#
+# CONSEQUENCE, contre-intuitive et verifiee : `--project-directory` ne deplace
+# pas seulement la recherche du .env, il deplace AUSSI la resolution des chemins
+# relatifs des montages. Ceux-ci partent donc de la RACINE, pas de docker/ --
+# d'ou le `./docker/postgres/init` plus bas, qui a l'air d'une faute de frappe
+# et n'en est pas une. Ce fichier n'est utilisable QUE lance ainsi ; toute autre
+# invocation monterait un dossier inexistant, que Docker creerait vide, sans
+# erreur et sans base de test.
+#
+# `docker compose config` imprime les chemins absolus finalement retenus : c'est
+# la verification a faire apres toute modification de ce fichier.
+#
+# Pas de cle `version:` : obsolete depuis Compose V2, qui avertit si elle est la.
+#
+# Chaque variable employee ici est documentee dans .env.example, ticket par
+# ticket. Ce fichier ne redit pas ce qu'elle vaut, seulement ce qu'il en fait.
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL -- base applicative (INFRA-01, consommee par BACK-05 et BACK-12)
+  # ---------------------------------------------------------------------------
+  postgres:
+    # Le ticket demande une 16 ; on lit une 18. Voir « Ecarts assumes avec le
+    # ticket INFRA-01 » dans le README.
+    image: postgres:18-alpine
+
+    environment:
+      # Noms IMPOSES par l'image officielle : les renommer casserait
+      # l'initialisation du cluster.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+      # Pas lu par l'image, mais par notre script d'initialisation : c'est ce qui
+      # permet a .env.example de promettre que le nom de la base de test reste
+      # modifiable sans toucher au script.
+      POSTGRES_TEST_DB: ${POSTGRES_TEST_DB}
+
+      # C'est cette ligne, et elle seule, qui rend POSTGRES_PORT effectif. Le
+      # postmaster prend PGPORT comme port par defaut ; le serveur temporaire de
+      # la phase d'initialisation le suit, et `pg_isready` aussi puisque c'est
+      # aussi une variable libpq. Sans elle, POSTGRES_PORT ne serait qu'une
+      # decoration a droite du mapping ci-dessous : le serveur ecouterait 5432
+      # quoi qu'il arrive, et le publier sur un autre port echouerait.
+      PGPORT: ${POSTGRES_PORT}
+
+    ports:
+      # <port publie sur le poste>:<port ecoute dans app_network>. Seul le
+      # premier a besoin de changer quand un PostgreSQL local occupe deja 5432.
+      - '${POSTGRES_HOST_PORT}:${POSTGRES_PORT}'
+
+    volumes:
+      # PIEGE MAJEUR, et la raison d'etre du critere d'acceptation « les donnees
+      # survivent a un down puis up ». Depuis la 18, l'image a DEPLACE ses
+      # donnees : PGDATA vaut /var/lib/postgresql/18/docker et le VOLUME declare
+      # est /var/lib/postgresql. Le montage traditionnel sur
+      # /var/lib/postgresql/data ne produit AUCUNE erreur -- il ne recoit
+      # simplement plus rien, les donnees partent dans un volume anonyme, et
+      # elles disparaissent au premier `down`. Monter le dossier parent, donc.
+      - postgres_data:/var/lib/postgresql
+
+      # Scripts joues UNE SEULE FOIS, a la creation du cluster. Chemin relatif
+      # a la RACINE et non a docker/ -- voir la mise en garde en tete de fichier.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+    healthcheck:
+      # `$$` echappe le `$` : sans cela compose interpolerait ces deux variables
+      # depuis le .env de l'hote au lieu de les laisser au shell du conteneur.
+      #
+      # `-h 127.0.0.1` n'est pas decoratif. Pendant l'initialisation, l'entrypoint
+      # demarre un serveur temporaire avec `listen_addresses=''` : joignable par
+      # la socket Unix, mais par aucune connexion TCP. Un `pg_isready` sans hote
+      # passerait par cette socket et declarerait le service sain alors qu'il
+      # n'accepte encore personne -- et les `service_healthy` des services
+      # dependants (INFRA-04) partiraient trop tot.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      # `start_period` couvre la premiere initialisation, la plus lente : les
+      # echecs qui y surviennent ne comptent pas dans `retries`.
+      start_period: 30s
+      retries: 5
+
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # pgAdmin -- console d'administration de la base (INFRA-01)
+  # ---------------------------------------------------------------------------
+  pgadmin:
+    # Tag de MAJEURE : les correctifs arrivent au prochain `docker pull`, jamais
+    # un changement d'interface en pleine semaine.
+    image: dpage/pgadmin4:9
+
+    environment:
+      # Noms imposes par l'image. L'adresse doit etre syntaxiquement valide,
+      # sinon le conteneur refuse de demarrer.
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+
+      # En mode serveur, pgAdmin reclame par defaut un « mot de passe maitre »
+      # a la premiere connexion, avant meme d'afficher quoi que ce soit. Ce
+      # serait exactement la saisie manuelle que le ticket demande d'eviter.
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+
+      # Sans cela l'image demarre un Postfix pour envoyer des courriels de
+      # reinitialisation de mot de passe. Sur un poste de developpement il
+      # n'enverra jamais rien, et il rallonge chaque demarrage.
+      PGADMIN_DISABLE_POSTFIX: 'True'
+
+      # Par defaut, la definition de serveur ci-dessous n'est lue qu'a la
+      # CREATION de la base de configuration de pgAdmin -- donc une seule fois
+      # dans la vie du volume `pgadmin_data`. Avec ce drapeau elle est rejouee a
+      # chaque demarrage : changer POSTGRES_USER dans le .env suffit alors a
+      # mettre la console a jour, sans `down -v`.
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: 'True'
+
+      # Fichier de mots de passe au format libpq, fabrique plus bas. C'est lui
+      # qui evite d'avoir a retaper POSTGRES_PASSWORD a chaque ouverture de la
+      # connexion.
+      PGPASS_FILE: /pgpass
+
+    configs:
+      # `/pgadmin4/servers.json` est le chemin que l'image lit d'office.
+      - source: pgadmin_servers
+        target: /pgadmin4/servers.json
+      # PGPASS_FILE fait recopier ce fichier par l'entrypoint dans l'espace de
+      # stockage de l'utilisateur, sous le nom `.pgpass` et en 0600 -- ce que
+      # libpq exige. `uid: '5050'` est necessaire : le montage est en lecture
+      # seule et 0400, donc illisible par le compte pgadmin s'il ne lui
+      # appartient pas. Le gid n'est pas force, le compte pgadmin de l'image
+      # etant du groupe root.
+      - source: pgadmin_pgpass
+        target: /pgpass
+        uid: '5050'
+        mode: 0400
+
+    ports:
+      # Le conteneur ecoute sur 80 ; PGADMIN_HOST_PORT vaut 5050 par defaut.
+      - '${PGADMIN_HOST_PORT}:80'
+
+    volumes:
+      # Base de configuration de pgAdmin, sessions et fichiers utilisateur.
+      # L'image tourne en uid 5050 ; un volume nomme encore vide herite des
+      # droits du dossier de l'image, il n'y a donc rien a ajuster a la main.
+      - pgadmin_data:/var/lib/pgadmin
+
+    healthcheck:
+      # /misc/ping repond `PING` en 200 sans authentification : c'est la sonde
+      # que pgAdmin expose pour cet usage. `wget` est present dans l'image.
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:80/misc/ping']
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+    depends_on:
+      # pgAdmin demarrerait tres bien sans base. La dependance est ici pour poser
+      # le motif que reprendront INFRA-04 et BACK-15, pour qui attendre un
+      # PostgreSQL REELLEMENT pret sera vital.
+      postgres:
+        condition: service_healthy
+
+    networks: [app_network]
+    restart: unless-stopped
+
+# -----------------------------------------------------------------------------
+# Fichiers de configuration injectes dans les conteneurs
+# -----------------------------------------------------------------------------
+# Le ticket parle d'« un fichier servers.json ». Il est ici INLINE plutot que
+# versionne dans docker/pgadmin/, pour deux raisons :
+#   - un fichier .json ne peut porter aucun commentaire, alors que tout le reste
+#     du depot en porte ;
+#   - surtout, compose interpole `${...}` ici comme ailleurs, la ou un fichier
+#     JSON aurait fige `juui`, `juui` et `5432` en dur -- une seconde source de
+#     verite a cote du .env, qui divergerait au premier renommage.
+configs:
+  # Definition de serveur pre-remplie, importee au demarrage de pgAdmin.
+  #
+  # Le mot de passe ne figure PAS ici : `passfile` renvoie au pgpass ci-dessous.
+  # Deux details qui ne s'inventent pas : depuis pgAdmin 6.9 `passfile` se range
+  # dans ConnectionParameters et non a la racine du serveur (a la racine, la cle
+  # est acceptee puis silencieusement ignoree) ; et le chemin `/.pgpass` est
+  # relatif a l'espace de stockage de l'utilisateur, pas a la racine du systeme
+  # de fichiers -- le point initial vient du nom que l'entrypoint donne a sa
+  # copie.
+  pgadmin_servers:
+    content: |
+      {
+        "Servers": {
+          "1": {
+            "Name": "Juui - PostgreSQL local",
+            "Group": "Servers",
+            "Host": "postgres",
+            "Port": ${POSTGRES_PORT},
+            "MaintenanceDB": "${POSTGRES_DB}",
+            "Username": "${POSTGRES_USER}",
+            "ConnectionParameters": {
+              "sslmode": "prefer",
+              "connect_timeout": 10,
+              "passfile": "/.pgpass"
+            }
+          }
+        }
+      }
+
+  # Format libpq : hote:port:base:utilisateur:motdepasse. `*` vaut pour toutes
+  # les bases, ce qui couvre `juui` comme `app_test`. `postgres` est le nom du
+  # service, resolu dans app_network.
+  pgadmin_pgpass:
+    content: |
+      postgres:${POSTGRES_PORT}:*:${POSTGRES_USER}:${POSTGRES_PASSWORD}
+
+# -----------------------------------------------------------------------------
+# Reseau et volumes
+# -----------------------------------------------------------------------------
+# Aucune cle `name:` nulle part : compose prefixe d'office par
+# COMPOSE_PROJECT_NAME, ce qui donne `juui_app_network`, `juui_postgres_data`...
+# C'est exactement la raison d'etre de cette variable -- ne pas entrer en
+# collision avec un autre projet organise de la meme facon sur le meme poste.
+
+networks:
+  # Reseau unique, partage par tous les services de la pile. C'est lui qui rend
+  # `postgres` resolvable comme nom d'hote depuis les autres conteneurs.
+  app_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  pgadmin_data:
