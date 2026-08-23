@@ -37,8 +37,8 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 Une partie seulement de la pile démarre aujourd'hui : le service d'API, depuis
 les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis et le
-stockage objet MinIO, et depuis FRONT-01 l'interface professionnelle. Les deux
-autres frontends arrivent avec FRONT-02 et FRONT-03.
+stockage objet MinIO, et depuis FRONT-01 et FRONT-02 les interfaces
+professionnelle et grand public. Le back-office arrive avec FRONT-03.
 Cette section décrit donc **deux parcours** — celui qui fonctionne maintenant,
 puis la cible conteneurisée — et l'allocation de ports que cette cible devra
 respecter.
@@ -156,17 +156,24 @@ sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.m
 Elle ne parle pas encore à PostgreSQL non plus : le branchement de SQLAlchemy
 est l'objet de BACK-05.
 
-Enfin l'interface professionnelle, seul workspace pnpm à définir aujourd'hui un
-script `dev` :
+Enfin les deux interfaces livrées, seuls workspaces pnpm à définir aujourd'hui
+un script `dev` :
 
 ```bash
 pnpm dev
 ```
 
-Elle répond sur <http://localhost:3001>. La commande démarre en parallèle les
-serveurs de développement de tout le dépôt : les deux autres frontends et la
-documentation s'y ajouteront avec FRONT-02, FRONT-03 et DOC-01, chacun sur le
-port du tableau ci-dessous.
+La commande démarre en parallèle les serveurs de développement de tout le
+dépôt : l'interface professionnelle répond sur <http://localhost:3001> et celle
+des particuliers sur <http://localhost:3002>. Le back-office et la documentation
+s'y ajouteront avec FRONT-03 et DOC-01, chacun sur le port du tableau
+ci-dessous.
+
+Pour n'en démarrer qu'une, la filtrer par le nom de son workspace :
+
+```bash
+pnpm --filter frontend-individual run dev
+```
 
 ### La pile complète, avec Docker
 
@@ -231,7 +238,7 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | ----------------------------- | --------- | ------------ | ----------- |
 | API FastAPI                   | 8000      | 8000         | disponible  |
 | `frontend-professional`       | 3001      | 3000         | disponible  |
-| `frontend-individual`         | 3002      | 3000         | FRONT-02    |
+| `frontend-individual`         | 3002      | 3000         | disponible  |
 | `frontend-admin`              | 3003      | 3000         | FRONT-03    |
 | Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
 | PostgreSQL                    | 5432      | 5432         | disponible  |
@@ -562,7 +569,7 @@ s'exporte en source TypeScript, et chaque application le transpile.
 
 | Chemin                   | Contenu                                                               |
 | ------------------------ | --------------------------------------------------------------------- |
-| `src/components/`        | Composants shadcn/ui et `theme-provider.tsx`.                         |
+| `src/components/`        | Composants shadcn/ui, `theme-provider.tsx` et `theme-toggle.tsx`.     |
 | `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.     |
 | `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application. |
 | `components.json`        | Configuration de la CLI shadcn en mode monorepo.                      |
@@ -627,6 +634,13 @@ Le socle installé couvre Button, Input, Label, Card, Dialog, DropdownMenu,
 Select, Sonner (notifications), Field (primitives de formulaire), Table, Badge,
 Skeleton — plus Separator, tiré par Field.
 
+S'y ajoutent deux composants maison, absents du registre shadcn :
+`theme-provider.tsx`, qui pose la classe `.dark`, et `theme-toggle.tsx`, le
+bouton qui la commande. Le second a d'abord vécu dans `frontend-professional`
+(FRONT-01) ; FRONT-02 l'a remonté ici plutôt que de le recopier dans une
+deuxième application — c'est la règle que pose le ticket, et la raison d'être du
+package.
+
 #### Vérifier le thème sans lancer d'application
 
 Une retouche du thème se contrôle sans démarrer quoi que ce soit, en le
@@ -652,10 +666,12 @@ pnpm typecheck
 
 #### Ce que fait une application (FRONT-01 à FRONT-03)
 
-FRONT-01 a livré la première, [`frontend/frontend-professional`](frontend/frontend-professional).
-Elle sert de **patron** : FRONT-02 et FRONT-03 reprennent ces sept points à
-l'identique, seuls leur port et leurs métadonnées les distinguent. Les fichiers
-cités sont donc à lire tels quels avant d'en écrire une deuxième.
+FRONT-01 a livré la première, [`frontend/frontend-professional`](frontend/frontend-professional),
+et FRONT-02 la deuxième, [`frontend/frontend-individual`](frontend/frontend-individual).
+La première sert de **patron**, et la deuxième a repris ces sept points à
+l'identique sans en amender aucun ; FRONT-03 fera de même. Seuls les distinguent
+leur port, leurs métadonnées, et — pour la seule application publique — le volet
+SEO décrit juste après.
 
 1. Quatre dépendances de workspace — `@repo/ui`, `@repo/tailwind-config`,
    `@repo/typescript-config` et `@repo/eslint-config`, toutes en `"workspace:*"`
@@ -699,6 +715,58 @@ Ni `src/`, ni `tailwind.config.ts`, ni `prettier.config.mjs` local : le code
 applicatif vit dans `app/` et `components/`, le thème est du CSS depuis
 Tailwind v4, et une configuration Prettier locale devrait redéfinir son
 `tailwindStylesheet` sous peine de trier les classes sans le thème.
+
+#### Le volet SEO de `frontend-individual`
+
+Des trois applications, `frontend-individual` est la seule à être **publique**
+et destinée à l'indexation — les deux autres sont des espaces authentifiés.
+C'est la seule différence de fond avec le patron, et elle tient dans quatre
+fichiers de `app/` :
+
+| Fichier       | Rôle                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `site-url.ts` | L'URL canonique du site, lue une fois dans `SITE_URL`. Les trois autres s'y réfèrent au lieu d'en garder chacun une copie. |
+| `robots.ts`   | Sert `/robots.txt` : indexation autorisée, et renvoi vers le sitemap.                                                      |
+| `sitemap.ts`  | Sert `/sitemap.xml` : les pages publiques — l'accueil pour l'instant.                                                      |
+| `layout.tsx`  | `metadataBase`, balise canonique, Open Graph, carte Twitter, directives `robots` et `googlebot`.                           |
+
+Rien n'est routé à la main : dans l'App Router, `robots.ts` et `sitemap.ts` sont
+des **fichiers de métadonnées** — leur nom suffit à servir la route qui leur
+correspond.
+
+**Tout est produit au build.** La page d'accueil n'appelle aucune API dynamique,
+Next la prérend donc, comme les deux fichiers de métadonnées. `pnpm build` le
+dit lui-même, `○` valant « prerendered as static content » :
+
+```text
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /robots.txt
+└ ○ /sitemap.xml
+```
+
+C'est la génération statique que demande le ticket, obtenue sans rien forcer :
+aucun `export const dynamic = 'force-static'` n'est écrit nulle part. Le jour où
+une page aura besoin d'un rendu par requête, elle le déclarera pour elle seule —
+et cette ligne-là méritera qu'on la remarque.
+
+**Ce qu'il faut en retenir** : `SITE_URL` est figée au moment du build, comme
+toute variable qui entre dans un rendu statique. La laisser à sa valeur de
+développement en production donnerait un `sitemap.xml` rempli d'URLs `localhost`,
+sans la moindre erreur au démarrage. Elle se déclare dans le
+[`.env.local.example`](frontend/frontend-individual/.env.local.example) de
+l'application sur le poste, et se passera en `build.args` en conteneur
+(INFRA-05), où le `.env` de la racine la porte sous le nom
+`FRONTEND_INDIVIDUAL_SITE_URL`.
+
+Ce qui n'y est **pas**, et pourquoi : ni image Open Graph (`opengraph-image`) ni
+manifest — les deux réclament des visuels que le dépôt n'a pas encore, et une
+carte de partage qui annonce une image absente est moins bonne qu'une carte
+sobre ; pas de `lastModified` dans le sitemap non plus — la seule date
+disponible aujourd'hui serait celle du build, qui changerait à chaque
+déploiement sans que la page ait bougé. Annoncer une modification qui n'a pas eu
+lieu est un signal que les moteurs finissent par ignorer.
 
 ### Écarts assumés avec le ticket SHARED-01
 
@@ -749,6 +817,30 @@ Tailwind v4, et une configuration Prettier locale devrait redéfinir son
 > vérifiables, et vérifiés sur `frontend-professional`. Les deux tableaux
 > précédents gardent leur rédaction d'origine : ils décrivent l'état du dépôt au
 > moment de leur ticket, pas celui d'aujourd'hui.
+
+### Écarts assumés avec le ticket FRONT-02
+
+| Écart                                                                      | Raison                                                                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ThemeToggle` remonté dans `@repo/ui`, et `frontend-professional` retouché | Le ticket l'impose : « tout élément visuel commun doit vivre dans `@repo/ui` », et la bascule de thème est le premier composant que deux applications se partagent. Une application déjà livrée est donc modifiée par le ticket d'une autre — c'est le prix de la règle, et il valait mieux le payer sur une copie que sur trois. |
+| `lucide-react` retiré de `frontend-professional`                           | Conséquence de la ligne précédente : l'application n'importe plus aucune icône directement, seul `@repo/ui` le fait. La ligne du tableau FRONT-01 qui justifiait cette dépendance n'est pas corrigée — elle décrivait l'état du dépôt à sa date.                                                                                  |
+| Un `.gitkeep` dans les `components/` des deux applications                 | Chaque `app/globals.css` porte `@source '../components/**/*.{ts,tsx}'`. Le dossier de `frontend-professional` s'est vidé, celui de `frontend-individual` naît vide : garder les deux présents évite de faire diverger trois feuilles de style pour une raison passagère.                                                          |
+| `app/site-url.ts` ajouté au périmètre                                      | Trois fichiers doivent s'accorder sur la même URL canonique — `metadataBase`, `robots.ts`, `sitemap.ts`. Trois copies divergeraient au premier changement de domaine, et la divergence serait silencieuse : un sitemap qui annonce un autre hôte que les balises canoniques n'échoue pas, il est ignoré.                          |
+| Variable `SITE_URL` ajoutée hors de la liste du ticket                     | Le ticket demande des métadonnées Open Graph et un sitemap, qui exigent tous deux une URL absolue. Sans préfixe `NEXT_PUBLIC_` : ses consommateurs tournent au build ou sur le serveur, jamais dans le navigateur — même raisonnement que pour `API_INTERNAL_URL`.                                                                |
+| Génération statique obtenue sans `force-static`                            | Le ticket demande de « l'activer lorsque c'est pertinent ». Rien à activer : sans API dynamique, Next prérend déjà tout au build. L'écrire quand même banaliserait la directive, alors que sa valeur tient à sa rareté.                                                                                                           |
+| Ni image Open Graph ni manifest                                            | Périmètre arbitré à l'ouverture du ticket. Les deux réclament des visuels que le dépôt n'a pas, et une carte de partage annonçant une image absente vaut moins qu'une carte sobre. Détaillé dans « Le volet SEO de `frontend-individual` ».                                                                                       |
+| Deuxième carte sur la page d'accueil                                       | Le ticket ne décrit pas la page. Celle du patron atteste le câblage du monorepo ; il manquait de quoi attester le volet propre à cette application-ci, d'où deux liens vers `/robots.txt` et `/sitemap.xml` qui se vérifient d'un coup d'œil.                                                                                     |
+| Pas de `tailwind.config.ts`                                                | Le ticket demande de reprendre « le tailwind.config de FRONT-01 », qui n'existe pas : Tailwind v4 n'a plus de configuration JavaScript. Même arbitrage qu'en SHARED-02 et FRONT-01 — le thème **est** le CSS partagé.                                                                                                             |
+| `@repo/api-client` absent des dépendances et de `transpilePackages`        | Le package relève de SHARED-03 et n'existe pas : une dépendance `workspace:*` vers un package inexistant fait échouer `pnpm install`. Même écart qu'en FRONT-01, et il se lèvera au même moment pour les trois applications.                                                                                                      |
+| `@repo/typescript-config` et `@repo/tailwind-config`                       | Le ticket écrit `@repo/config-typescript` et `@repo/config-tailwind` : ce sont les noms des dossiers, pas ceux des packages. Même écart qu'en SHARED-02 et FRONT-01.                                                                                                                                                              |
+| Textes d'interface accentués                                               | Le dépôt écrit son français sans accents hors des `.md`, mais la règle ne peut pas s'étendre à ce qui s'affiche — et moins encore ici : ces textes sont ceux que liront les propriétaires d'animaux, et les moteurs. Commentaires et messages de commit restent sans accents.                                                     |
+
+> **Note.** Le critère « aucun composant n'est dupliqué depuis
+> frontend-professional » a été tenu par la seule voie qui le rende vrai
+> durablement : déplacer le composant partagé plutôt que le copier. C'est
+> pourquoi ce ticket touche `frontend-professional` et `@repo/ui` en plus de son
+> propre dossier — les deux applications ont été relancées et comparées après le
+> déplacement, celle de FRONT-01 est inchangée à l'écran.
 
 ### Hooks de pre-commit
 
