@@ -47,10 +47,22 @@ export const sharedRules = {
   ],
   'import-x/no-duplicates': 'error',
 
-  // NB : `import-x/no-cycle` et `import-x/no-unresolved` ne sont pas activees.
-  // Elles exigent un resolveur capable de suivre les chemins TypeScript
-  // (eslint-import-resolver-typescript), donc un tsconfig.json — sans lui elles
-  // n'echouent pas, elles ne voient simplement rien. A poser en FRONT-01.
+  // Les deux regles qui exigent un resolveur capable de suivre les chemins
+  // TypeScript. Elles attendaient FRONT-01, qui a apporte le premier tsconfig
+  // d'application et, avec lui, les alias `@/*` et `@repo/ui/*` qu'une
+  // resolution purement node ne suit pas. `base.js` branche desormais
+  // eslint-import-resolver-typescript ; sans ce resolveur, ces deux regles
+  // n'echoueraient pas -- elles ne verraient simplement rien.
+  //
+  // Un import casse est une erreur d'execution que rien d'autre n'attrape avant
+  // le build : `tsc` ignore ce qui n'est pas type, et le lint est la seule passe
+  // qui parcourt tous les fichiers du depot.
+  'import-x/no-unresolved': 'error',
+  // Un cycle d'imports ne casse pas toujours, et c'est ce qui le rend penible :
+  // il rend l'ordre d'initialisation des modules dependant du point d'entree, si
+  // bien que le meme code fonctionne en developpement et rend `undefined` une
+  // fois groupe pour la production.
+  'import-x/no-cycle': 'error',
 };
 
 /**
@@ -59,6 +71,9 @@ export const sharedRules = {
  * ESLint 10 a supprime `context.getFilename()`, sur lequel repose la detection
  * automatique (`"detect"`) d'eslint-plugin-react — embarque par
  * eslint-config-next. Sans cette valeur explicite, le lint plante.
- * A remonter quand FRONT-01 figera la version de React des applications.
+ *
+ * Figee par FRONT-01 : les trois applications epinglent react 19.2.8, comme
+ * `packages/ui`. A remonter le jour ou elles changeront de mineure -- toutes
+ * ensemble, ce socle etant partage.
  */
 export const REACT_VERSION = '19.2';

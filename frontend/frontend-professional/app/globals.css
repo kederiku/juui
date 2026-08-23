@@ -1,0 +1,24 @@
+/*
+ * Point d'entree CSS de frontend-professional (FRONT-01) -- le fichier que
+ * `app/layout.tsx` importe, et non celui de `@repo/ui`.
+ *
+ * L'import ci-dessous suffit a tout le theme : il mene, de renvoi en renvoi, au
+ * `theme.css` de `@repo/tailwind-config` (SHARED-02), seul endroit du depot ou
+ * une couleur est ecrite. L'application n'en redefinit rien.
+ *
+ * POURQUOI CE FICHIER EXISTE MALGRE TOUT
+ * La detection automatique des sources de Tailwind v4 part du fichier qui porte
+ * `@import 'tailwindcss'` -- celui du package partage. Elle balaie donc
+ * `packages/`, jamais `frontend/`. Les `@source` ci-dessous reparent cela pour
+ * l'application : sans eux, ses propres classes seraient purgees du CSS final,
+ * alors meme que celles des composants de `@repo/ui` survivraient.
+ *
+ * Les chemins sont resolus relativement a CE fichier, qui vit dans `app/` :
+ * `../app` et `../components` designent bien les deux dossiers de code de
+ * l'application.
+ */
+
+@import '@repo/ui/globals.css';
+
+@source '../app/**/*.{ts,tsx}';
+@source '../components/**/*.{ts,tsx}';
