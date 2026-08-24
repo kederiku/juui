@@ -9,6 +9,7 @@ d'administration côté plateforme.
 
 | Dossier                           | Rôle                                                                                                                                             |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `.github/`                        | Workflows GitHub Actions. Une seule chaîne pour l'instant : la construction et la publication du site de documentation (DOC-01).                 |
 | `docker/`                         | Configurations de conteneurisation : le `docker-compose.yml` qui assemble la pile, les Dockerfiles des services et les scripts d'initialisation. |
 | `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                                 |
 | `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                               |
@@ -38,8 +39,8 @@ Il sera repris et enrichi dans le site `documentation/`.
 Une partie seulement de la pile démarre aujourd'hui : le service d'API, depuis
 les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis et le
 stockage objet MinIO, et depuis FRONT-01 à FRONT-03 les trois interfaces —
-professionnelle, grand public et back-office. La documentation arrive avec
-DOC-01. Cette section décrit donc **deux parcours** — celui qui fonctionne
+professionnelle, grand public et back-office, et depuis DOC-01 le site de
+documentation. Cette section décrit donc **deux parcours** — celui qui fonctionne
 maintenant, puis la cible conteneurisée — et l'allocation de ports que cette
 cible devra respecter.
 
@@ -252,7 +253,7 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | `frontend-professional`       | 3001      | 3000         | disponible  |
 | `frontend-individual`         | 3002      | 3000         | disponible  |
 | `frontend-admin`              | 3003      | 3000         | disponible  |
-| Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
+| Documentation (Docusaurus)    | 3004      | —            | disponible  |
 | PostgreSQL                    | 5432      | 5432         | disponible  |
 | pgAdmin                       | 5050      | 80           | disponible  |
 | Redis                         | 6379      | 6379         | disponible  |
@@ -637,6 +638,60 @@ cassé, une adresse erronée ou un gabarit vide.
 > service `api` : le fichier compose porte le bloc, en commentaires, à l'endroit
 > où BACK-22 le décommentera.
 
+### Le site de documentation
+
+La documentation technique du dépôt vit dans [`documentation/`](documentation) :
+un site [Docusaurus](https://docusaurus.io/) en TypeScript, workspace pnpm au
+même titre que les trois applications.
+
+```bash
+pnpm --filter documentation dev
+```
+
+Il écoute sur le port 3004 — <http://localhost:3004>. Il n'est pas conteneurisé :
+rien d'autre à démarrer, et le `pnpm dev` de la racine le lance en même temps que
+les trois interfaces.
+
+**La barre de recherche fait exception.** Le plugin de recherche locale ne
+construit son index qu'à la construction du site : sous `dev`, la barre est
+absente. Pour l'essayer, il faut construire puis servir :
+
+```bash
+pnpm --filter documentation build && pnpm --filter documentation start
+```
+
+Six sections attendent leur contenu — `getting-started/`, `architecture/`,
+`backend/`, `frontend/`, `infrastructure/`, `adr/`. Leur ordre de lecture est
+écrit à la main dans [`sidebars.ts`](documentation/sidebars.ts) plutôt que déduit
+de l'arborescence des fichiers ; DOC-02a, DOC-02b et DOC-02c les rempliront.
+
+Deux capacités sont acquises dès maintenant, parce qu'elles décident de la façon
+d'écrire la suite :
+
+- **Recherche locale**, sans service externe : l'index est un fichier du site,
+  aucune requête ne sort du navigateur.
+- **Diagrammes Mermaid** : un schéma d'architecture se versionne en texte et se
+  relit en diff, là où une image binaire ne se relit pas. La page d'accueil du
+  site en porte un.
+
+#### Publication
+
+[`.github/workflows/documentation.yml`](.github/workflows/documentation.yml)
+construit le site à chaque pull request touchant `documentation/` — un renvoi
+mort y fait échouer la CI, `onBrokenLinks` étant réglé sur `throw` — et le publie
+sur GitHub Pages à chaque `push` sur `main`, à l'adresse
+<https://kederiku.github.io/juui/>.
+
+Le workflow **active GitHub Pages lui-même** au premier passage
+(`actions/configure-pages` avec `enablement: true`) : rien à cocher dans les
+réglages du dépôt, et la chaîne se rejoue telle quelle sur un autre dépôt. Si une
+politique d'organisation venait à refuser cette activation par API, elle se fait
+à la main dans _Settings → Pages_, avec « GitHub Actions » comme source.
+
+C'est le premier workflow du dépôt, et sa portée s'arrête à `documentation/` :
+les pipelines de l'API, des frontends et des images reviennent aux tickets QA,
+les règles de protection de branche à QA-08.
+
 ### Scripts racine
 
 | Commande            | Effet                                                        |
@@ -796,6 +851,26 @@ partagées](#configurations-partagées).
 | Critère n°5 livré en commande documentée, pas en test pytest    | `backend/api/tests/` n'existe pas — `pyproject.toml` l'écrit noir sur blanc, il arrive avec BACK-12 — et il n'y a ni configuration pytest, ni adaptateur SMTP (BACK-22), ni parcours OTP (BACK-17). Amorcer un harnais de test ici empiéterait sur BACK-12 et contredirait la frontière que le ticket pose lui-même. Précédent exact d'INFRA-03, qui a documenté l'aller-retour MinIO au lieu de le tester. L'aller-retour livré passe bien par l'API HTTP, ce que le critère vise ; le test pytest revient à BACK-12 et BACK-22, l'helper de lecture d'OTP à QA-04. |
 | Cible `make mail` non livrée                                    | Le ticket la renvoie explicitement à INFRA-06, et le `Makefile` de la racine n'existe pas encore. La boîte est documentée en attendant.                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `MP_MAX_MESSAGES` laissé à son défaut de 500                    | Le ticket n'en dit rien. Sans volume, la boîte repart vide à chaque redémarrage : le plafond ne se rencontre pas sur un poste de développement, et l'écrire n'ajouterait qu'une variable à maintenir.                                                                                                                                                                                                                                                                                                                                                                |
+
+### Écarts assumés avec le ticket DOC-01
+
+| Écart                                                                 | Raison                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `"type": "module"` absent du `package.json` du site                   | Tous les autres workspaces le déclarent ; ici il **casse le build**. Le bundle serveur de Docusaurus est du CommonJS : chargé comme module ES, il sort sur `require.resolveWeak is not a function`. Vérifié dans les deux sens, et le gabarit officiel de Docusaurus ne le déclare pas non plus.                                                                   |
+| Documentation servie à la racine du site, `blog: false`               | Le ticket demande un site de documentation technique, ni blog ni vitrine. Une page d'accueil marketing serait un fichier de plus à tenir pour un lecteur qui cherche une réponse, et un segment `/docs/` de plus dans chaque URL.                                                                                                                                  |
+| `@repo/typescript-config/base.json` plutôt que `@docusaurus/tsconfig` | Le tsconfig de Docusaurus pose `baseUrl`, que TypeScript 6 déclare déprécié (TS5101) ; son gabarit s'en tire avec `ignoreDeprecations: "6.0"`, ce que [`packages/ui`](packages/ui/tsconfig.json) a déjà refusé de faire. Ses quatre réglages utiles sont recopiés dans le tsconfig du site, avec le renvoi qui va bien.                                            |
+| `@docusaurus/plugin-content-docs` en dépendance de développement      | `sidebars.ts` importe son type `SidebarsConfig`. Le gabarit officiel ne la déclare pas — npm aplatit son arbre et la rend visible quand même. Le `node_modules` strict de pnpm, lui, n'expose que ce qu'un package déclare.                                                                                                                                        |
+| `@easyops-cn/docusaurus-search-local` retenu                          | Le ticket demande un plugin hors ligne sans en nommer un. C'est le seul encore maintenu : `docusaurus-lunr-search` n'a pas publié depuis janvier 2025, et `@cmfcmf/docusaurus-search-local` est l'original dont celui-ci est la réécriture. Sa fonctionnalité « Ask AI » reste éteinte — le paquet qui la porte est une peer **optionnelle**, que rien n'installe. |
+| Recherche indisponible sous `pnpm dev`                                | Limite du plugin, pas un réglage : l'index n'est produit qu'au build. Le critère se vérifie donc sur un `build` suivi d'un `start`, et la page d'accueil du site le dit à son lecteur.                                                                                                                                                                             |
+| `documentation/i18n/fr/code.json` ajouté                              | Le plugin de recherche ne livre que les traductions `en`, `de`, `vi` et `zh-CN` : sans ce fichier, une interface par ailleurs française afficherait « Search ». Seules ses dix chaînes y figurent — recopier les 92 clés qu'écrit `docusaurus write-translations` figerait dans le dépôt des traductions que `@docusaurus/theme-translations` tient déjà à jour.   |
+| Job `build` déclenché aussi par les pull requests                     | Le critère ne parle que de la publication depuis `main`. Sans ce garde-fou, un renvoi mort ou un diagramme invalide ne se verrait qu'après le merge, sur le site en ligne. Le chevauchement avec QA-02 est borné à `documentation/**`.                                                                                                                             |
+| `actions/configure-pages` avec `enablement: true`                     | GitHub Pages n'était pas activé sur le dépôt, et le ticket veut une publication « opérationnelle ». Un clic dans les réglages ne se versionne pas, ne se relit pas et ne se rejoue pas ailleurs.                                                                                                                                                                   |
+| `documentation/tsconfig.json` ajouté au résolveur d'imports d'ESLint  | Hors du périmètre littéral du ticket, dans [`packages/config-eslint`](packages/config-eslint/base.js). Sans lui, `import-x/no-unresolved` n'a aucun projet TypeScript à opposer aux fichiers du site.                                                                                                                                                              |
+| `core-js` refusé dans `allowBuilds`                                   | Dépendance transitive de Docusaurus, dont pnpm 11 bloque le script d'installation et attend un arbitrage. Son `postinstall` ne compile rien : il affiche une bannière Open Collective, et rien d'autre — vérifié dans son `postinstall.js`.                                                                                                                        |
+| Barre latérale plate, six documents                                   | Six catégories d'une seule page afficheraient des sections qui ne se déplient pas. Chaque entrée devient une `category` le jour où DOC-02 lui ajoute une deuxième page ; la forme est écrite en commentaire dans `sidebars.ts`.                                                                                                                                    |
+| Ni service Compose, ni variable `.env`, ni cible `make`               | Le ticket s'arrête au workspace pnpm. Le port 3004 est donc porté par le script `dev` du site, là où les services conteneurisés tiennent le leur d'une variable `*_HOST_PORT`.                                                                                                                                                                                     |
+| Ni favicon, ni logo, ni feuille de style propre                       | Aucun habillage n'est demandé. Le thème par défaut suffit à lire, et `src/css/custom.css` viendra le jour où il y aura quelque chose à y écrire.                                                                                                                                                                                                                   |
+| Le site alourdit l'étage `deps` des images de frontend                | [`docker/frontend/Dockerfile`](docker/frontend/Dockerfile) installe tout le monorepo. Conséquence anticipée par le `.dockerignore` d'INFRA-05a, qui garde les sources du site dans le contexte de build pour cette raison exacte ; restreindre l'installation relèverait de ce ticket-là. L'étage a été reconstruit avec le site en place, il passe.               |
 
 ## Conventions
 

@@ -1,0 +1,41 @@
+{
+  "name": "documentation",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "dev": "docusaurus start --port 3004",
+    "build": "docusaurus build",
+    "start": "docusaurus serve --port 3004",
+    "typecheck": "tsc --noEmit",
+    "clear": "docusaurus clear"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@docusaurus/theme-mermaid": "3.10.2",
+    "@easyops-cn/docusaurus-search-local": "0.55.3",
+    "@mdx-js/react": "3.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@docusaurus/plugin-content-docs": "3.10.2",
+    "@docusaurus/types": "3.10.2",
+    "@repo/typescript-config": "workspace:*",
+    "@types/react": "19.2.18",
+    "typescript": "6.0.3"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 3 chrome version",
+      "last 3 firefox version",
+      "last 5 safari version"
+    ]
+  }
+}
