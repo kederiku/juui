@@ -1,0 +1,86 @@
+# Integration continue du service d'API (BACK-04b, a completer par QA-01).
+#
+# CE FICHIER APPARTIENT A QA-01, qui le nomme dans sa portee et viendra y
+# ajouter `ruff check`, `ruff format --check`, `mypy src`, `pytest`, les
+# services PostgreSQL et Redis des tests d'integration, le rapport de
+# couverture et le controle des migrations Alembic.
+#
+# BACK-04b n'y pose que ce qu'il livre : les contrats d'architecture. Les
+# poser ici plutot que d'attendre QA-01 est tout l'objet du ticket -- un
+# garde-fou qui ne tourne que sur le poste de celui qui ecrit le code n'est pas
+# un garde-fou. Ce que verifie ce workflow est declare dans
+# backend/api/pyproject.toml, section [tool.importlinter].
+name: CI backend
+
+# LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, comme dans
+# documentation.yml et pour la meme raison : GitHub Actions n'interprete pas
+# les ancres YAML. Les tenir alignees.
+#
+# `backend/**` et rien d'autre : les contrats ne portent que sur le paquet
+# `app`, un changement purement frontend n'a aucune raison de relancer ce job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+
+# Lecture seule : ce workflow ne publie rien et n'ecrit dans aucun reglage.
+permissions:
+  contents: read
+
+# Une execution a la fois par branche, et annulation de la precedente sur les
+# seules pull requests -- un nouveau commit rend la verification precedente
+# sans objet. Sur `main`, jamais : on veut l'historique complet des resultats.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contracts:
+    name: Contrats d'architecture
+    runs-on: ubuntu-latest
+
+    # Toutes les commandes se lancent depuis le projet Python. Import Linter
+    # cherche sa configuration dans le REPERTOIRE COURANT : lance de la racine
+    # du depot, il ne trouverait pas backend/api/pyproject.toml.
+    defaults:
+      run:
+        working-directory: backend/api
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v7
+
+      # VERSION EXACTE, la ou les autres actions du depot emploient un majeur
+      # nu (`actions/checkout@v7`). Ce n'est pas une inconsequence : setup-uv ne
+      # publie PLUS de tag flottant depuis la v8 -- le depot s'arrete a `v7`, et
+      # `@v10` echoue sur « unable to find version ». QA-07 epinglera de toute
+      # facon toutes les actions par SHA.
+      #
+      # AUCUNE VERSION DE PYTHON N'EST DEMANDEE ICI, et c'est voulu : l'etape
+      # suivante lit backend/api/.python-version et telecharge l'interpreteur
+      # s'il manque -- exactement ce que fait `uv sync` sur le poste. La nommer
+      # une seconde fois dans le workflow n'ajouterait qu'un endroit ou diverger.
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/api/uv.lock
+
+      # `--locked` et non `--frozen` : les deux installent les versions du
+      # lock, mais `--locked` echoue en plus si uv.lock est desaccorde de
+      # pyproject.toml. C'est le pendant exact du `--frozen-lockfile` de pnpm
+      # employe par documentation.yml, et ce qui evite qu'une dependance
+      # ajoutee sans `uv lock` soit verifiee dans un environnement qui n'est
+      # pas celui du depot.
+      - name: Synchroniser l'environnement
+        run: uv sync --locked
+
+      - name: Verifier les contrats d'architecture
+        run: uv run lint-imports --show-timings

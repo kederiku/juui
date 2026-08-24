@@ -65,6 +65,13 @@ dev = [
     "ruff==0.16.4",
     "mypy~=2.3",
 
+    # Garde-fous d'architecture (BACK-04b) -- les contrats sont plus bas, en
+    # [tool.importlinter]. Epingle a l'exact pour EXACTEMENT la meme raison que
+    # Ruff : il fait echouer la CI. Une regle durcie ou un graphe d'imports
+    # calcule autrement par grimp ne doit pas arriver par surprise entre deux
+    # `uv sync`.
+    "import-linter==2.13",
+
     # Tests -- la strategie a trois niveaux est l'objet de BACK-12.
     "pytest~=9.1",
     "pytest-asyncio~=1.4",
@@ -210,3 +217,198 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
+
+# ---------------------------------------------------------------------------
+# Garde-fous d'architecture (BACK-04b)
+# ---------------------------------------------------------------------------
+# BACK-04 a pose les regles ; elles n'existaient que dans les docstrings, le
+# README et quatre sondes `grep` qu'il fallait penser a lancer. Import Linter
+# les rend MECANIQUES : `lint-imports` lit le graphe d'imports reel du paquet
+# `app` et refuse ce qui ne respecte pas les contrats ci-dessous. Une violation
+# echoue donc en CI, elle ne se decouvre plus six mois plus tard en revue.
+#
+# Se lance par `make imports`, et par `make lint` qui l'enchaine apres Ruff.
+#
+# LES EXCEPTIONS. Aucune n'est necessaire aujourd'hui : les cinq contrats
+# passent sur le code existant. Le jour ou l'une devient inevitable, elle
+# s'ecrit dans le `ignore_imports` DU CONTRAT CONCERNE -- jamais en desactivant
+# le contrat -- et porte son motif et sa date de revue :
+#
+#     ignore_imports = [
+#         # MOTIF : <pourquoi cette entorse est tolerable>
+#         # REVUE : AAAA-MM-JJ  <date a laquelle elle doit etre reexaminee>
+#         "app.modules.x.domain -> paquet.y",
+#     ]
+#
+# Rien n'oblige a tenir la date, mais rien ne laisse non plus l'exception
+# dormir : `unmatched_ignore_imports_alerting` vaut "error" par defaut, si bien
+# qu'une exception devenue sans objet fait echouer le lint au lieu de survivre
+# a l'import qu'elle couvrait.
+
+[tool.importlinter]
+# Le paquet a analyser. Il doit etre IMPORTABLE : c'est le cas, `uv sync`
+# installe le projet lui-meme, et `module-name = "app"` plus haut lui donne ce
+# nom-la.
+root_package = "app"
+
+# Fait entrer les paquets EXTERNES dans le graphe. Sans cette ligne, `fastapi`
+# ou `sqlalchemy` n'y existeraient pas et le contrat 1 ne pourrait pas les
+# nommer. Leur code n'est pas analyse pour autant : seuls les imports QUE FAIT
+# `app` vers eux sont observes.
+include_external_packages = true
+
+# `exclude_type_checking_imports` reste a son defaut (false), A DESSEIN : un
+# import de SQLAlchemy sous `if TYPE_CHECKING:` dans une entite reste un
+# couplage du domaine a une technologie. Qu'il ne coute rien a l'execution ne
+# le rend pas acceptable -- c'est bien la signature de l'entite qui parlerait
+# ORM.
+
+# --- Contrat 1 : la purete du domaine --------------------------------------
+# Le coeur metier ne connait que la bibliotheque standard et lui-meme. C'est ce
+# qui le rend testable sans Docker et reutilisable depuis une tache de fond.
+#
+# `app.shared.domain` figure dans les sources en plus des modules : le ticket
+# ne nomme que `app.modules.*.domain`, mais la racine des erreurs metier est un
+# domaine comme un autre, et la sonde `grep` de BACK-04 la couvrait deja.
+#
+# La liste interdite depasse les cinq paquets nommes par le ticket, et il le
+# faut : `pydantic_settings` est un paquet DISTINCT de `pydantic`, et `jwt` est
+# le nom d'import reel de `pyjwt`. S'en tenir a cinq laisserait passer les
+# sept autres. Regle a tenir : toute dependance applicative ajoutee au projet
+# s'ajoute ici, dans la meme pull request.
+#
+# `app.core` n'y figure PAS, bien qu'un domaine pur ne devrait rien lire de sa
+# configuration. L'arbitrage appartient a BACK-04, qui l'a rendu par ecrit dans
+# la docstring de src/app/core/__init__.py -- « le domaine ne doit rien y
+# importer d'autre que des reglages ». Le contrat 5 garde le sens de la
+# dependance, il ne la supprime pas.
+#
+# `allow_indirect_imports` reste a son defaut (false) : une chaine
+# `domain -> X -> sqlalchemy` est une violation au meme titre qu'un import
+# direct. C'est precisement ce qu'aucun `grep` ne sait voir.
+[[tool.importlinter.contracts]]
+id = "domain-purity"
+name = "1. Purete du domaine"
+type = "forbidden"
+source_modules = [
+    "app.modules.*.domain",
+    "app.shared.domain",
+]
+forbidden_modules = [
+    # Les cinq du ticket.
+    "fastapi",
+    "sqlalchemy",
+    "pydantic",
+    "redis",
+    "boto3",
+    # Le reste des dependances applicatives declarees plus haut.
+    "pydantic_settings",
+    "asyncpg",
+    "alembic",
+    "jwt",
+    "taskiq",
+    "uvicorn",
+    # Client HTTP du groupe dev, qui deviendrait applicatif si un adaptateur
+    # sortant en avait besoin. Interdit d'avance : appeler le reseau depuis le
+    # domaine est exactement ce que les ports evitent.
+    "httpx",
+]
+
+# --- Contrat 2 : le sens des couches, dans chaque module --------------------
+# L'infrastructure depend de l'application, qui depend du domaine. Jamais
+# l'inverse : une entite qui importerait un modele SQLAlchemy retournerait la
+# fleche et rendrait le domaine intestable.
+#
+# `containers` porte un JOKER plutot qu'une liste nommee. Le contrat couvre
+# ainsi `organization` (BACK-16), `medical_records` (BACK-19) et les suivants
+# LE JOUR OU ILS NAISSENT : c'est la difference entre un garde-fou et une liste
+# a tenir a jour, qu'on oublie une fois.
+#
+# Les couches sont entre parentheses, donc OPTIONNELLES. Il le faut :
+# src/app/modules/organization/ ne porte encore qu'un __init__.py, et un module
+# vide ferait echouer un contrat qui exigerait ses trois couches.
+#
+# `exhaustive` rattrape tout ce que les parentheses relachent, et c'est ce qui
+# rend le contrat utile malgre elles : un `services/` ou un `utils.py` ajoute
+# dans un module fait echouer le contrat tant qu'il n'est pas declare comme une
+# couche. Un decoupage clandestin n'a donc pas d'endroit ou se cacher.
+#
+# `unit_of_work` est la seule exemption. Ce n'est pas une couche : BACK-04 le
+# range volontairement A LA RACINE du module, parce qu'il compose les trois.
+[[tool.importlinter.contracts]]
+id = "module-layers"
+name = "2. Sens des couches dans chaque module"
+type = "layers"
+layers = [
+    "(infrastructure)",
+    "(application)",
+    "(domain)",
+]
+containers = ["app.modules.*"]
+exhaustive = true
+exhaustive_ignores = ["unit_of_work"]
+
+# --- Contrat 3 : l'independance des modules ---------------------------------
+# LE contrat qui protege les frontieres de contexte, et celui qui manquait a la
+# version initiale de BACK-04. Un module n'importe jamais l'interieur d'un
+# autre : ni son entite, ni son depot, ni son modele de persistance. Les
+# echanges passent par les cas d'usage publics du module cible.
+#
+# Un contrat d'independance regarde les chaines d'imports DANS LES DEUX SENS et
+# meme INDIRECTEMENT : `organization -> app.shared.x -> identity` echoue tout
+# autant qu'un import direct. C'est ce qui le rend superieur au `grep` qu'il
+# remplace, lequel ne voyait qu'une ligne a la fois.
+#
+# Meme joker que le contrat 2, et pour la meme raison.
+[[tool.importlinter.contracts]]
+id = "module-independence"
+name = "3. Independance des modules"
+type = "independence"
+modules = ["app.modules.*"]
+
+# --- Contrat 4 : le sens des couches du noyau partage -----------------------
+# Hors portee litterale du ticket, et pourtant du meme bois : `app.shared` a un
+# domaine (racine des erreurs, ports techniques) et une infrastructure (socles
+# de persistance et d'API). Sans ce contrat, la seule couche du service dont
+# TOUS les modules dependent serait la seule que rien ne garde.
+#
+# Deux couches et non trois : le noyau partage n'orchestre aucun cas d'usage,
+# il n'a donc pas de couche `application`. Elles ne sont pas optionnelles --
+# les deux existent, et leur disparition doit se voir.
+[[tool.importlinter.contracts]]
+id = "shared-layers"
+name = "4. Sens des couches du noyau partage"
+type = "layers"
+layers = [
+    "infrastructure",
+    "domain",
+]
+containers = ["app.shared"]
+exhaustive = true
+
+# --- Contrat 5 : le sens des dependances entre les espaces du service -------
+# C'est ce contrat qui rend mecanique la phrase du ticket : « app.shared est
+# declare importable par tous les modules ; l'inverse est interdit ».
+#
+# La hierarchie reprend celle qu'annonce la docstring de src/app/__init__.py :
+#   main    -- seul fichier autorise a connaitre plusieurs modules a la fois ;
+#   modules -- les contextes metier ;
+#   shared  -- le noyau qu'ils partagent, qui ne les connait pas ;
+#   core    -- les reglages du PROCESSUS, qui ne connaissent personne.
+#
+# `exhaustive` fait de cette liste la definition meme du service : un nouveau
+# dossier a la racine d'`app` echoue tant qu'on n'a pas dit ou il se range.
+# BACK-11 (journalisation) sera le premier a s'y confronter, et c'est voulu --
+# la question « core ou shared ? » doit se poser au moment ou le dossier nait.
+[[tool.importlinter.contracts]]
+id = "service-spaces"
+name = "5. Sens des dependances entre les espaces du service"
+type = "layers"
+layers = [
+    "main",
+    "modules",
+    "shared",
+    "core",
+]
+containers = ["app"]
+exhaustive = true

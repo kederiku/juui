@@ -28,10 +28,12 @@ __pycache__/
 *.egg-info/
 
 # --- Caches d'outillage ---
-# Ruff, Mypy et Pytest les reconstruisent seuls ; ils ne servent qu'au poste.
+# Ruff, Mypy, Pytest et Import Linter les reconstruisent seuls ; ils ne servent
+# qu'au poste.
 .ruff_cache/
 .mypy_cache/
 .pytest_cache/
+.import_linter_cache/
 htmlcov/
 .coverage
 .coverage.*

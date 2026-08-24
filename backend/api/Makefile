@@ -12,17 +12,28 @@
 # `help` doit rester la premiere cible declaree : c'est ce que `make` nu lance.
 .DEFAULT_GOAL := help
 
-.PHONY: help lint lint-fix format format-check typecheck check
+.PHONY: help lint lint-fix imports format format-check typecheck check
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
 
-lint: ## Signale les infractions au jeu de regles Ruff
+# Les deux verifications sont ecrites a la suite plutot que declarees en
+# prerequis (`lint: imports`) : un prerequis s'executerait AVANT Ruff, alors
+# qu'on veut voir echouer la verification la moins chere en premier.
+lint: ## Signale les infractions aux regles Ruff et aux contrats d'architecture
 	uv run ruff check .
+	uv run lint-imports
 
 lint-fix: ## Corrige ce que Ruff sait corriger sans risque
 	uv run ruff check --fix .
+
+# Les contrats d'architecture de BACK-04b : purete du domaine, sens des
+# couches, independance des modules. Ils sont declares dans pyproject.toml, ou
+# chacun porte sa justification. Rien a corriger automatiquement ici -- une
+# violation se resout en deplacant du code, pas en reecrivant un import.
+imports: ## Verifie les contrats d'architecture (import-linter)
+	uv run lint-imports
 
 format: ## Reformate le code (et les blocs Python de la documentation)
 	uv run ruff format .
@@ -36,4 +47,7 @@ typecheck: ## Verifie le typage en mode strict
 # Memes verifications, et dans le meme ordre, que le futur pipeline QA-01 : un
 # echec local reproduit ainsi exactement un echec de CI. La difference est que
 # `make` s'arrete au premier echec, la ou QA-01 agregera les trois.
-check: lint format-check typecheck ## Enchaine les trois verifications de la CI
+#
+# Les contrats d'architecture entrent ici par `lint`, qui les enchaine. En CI
+# ils tournent des aujourd'hui, dans .github/workflows/ci-backend.yml.
+check: lint format-check typecheck ## Enchaine les verifications de la CI
