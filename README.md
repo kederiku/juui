@@ -156,6 +156,10 @@ sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.m
 Elle ne parle pas encore à PostgreSQL non plus : le branchement de SQLAlchemy
 est l'objet de BACK-05.
 
+Depuis BACK-03, elle **valide sa configuration au démarrage** et refuse de partir
+si une variable obligatoire manque — d'où la copie de `backend/api/.env` faite à
+l'installation. Le message d'erreur nomme alors chaque variable en défaut.
+
 Enfin les deux interfaces livrées, seuls workspaces pnpm à définir aujourd'hui
 un script `dev` :
 
