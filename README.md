@@ -513,9 +513,17 @@ Le preset `base` y branche aussi le **résolveur d'imports** — la variante
 TypeScript, seule à lire les `paths` des `tsconfig` et la carte `exports` des
 packages du dépôt. C'est ce qui donne leur objet à `import-x/no-unresolved` et
 `import-x/no-cycle` : sans résolveur, ces deux règles ne signalent jamais rien.
-Les motifs qu'il reçoit suivent [`pnpm-workspace.yaml`](pnpm-workspace.yaml) et
-sont ancrés sur la racine du dépôt, pour qu'un lint lancé depuis un sous-dossier
-trouve les mêmes `tsconfig`.
+
+La liste des `tsconfig` qu'il reçoit suit
+[`pnpm-workspace.yaml`](pnpm-workspace.yaml), mais elle est **développée par
+[`base.js`](packages/config-eslint/base.js) lui-même**, `fs.globSync` ancré sur
+la racine du dépôt. Lui passer les motifs tels quels — ce que faisait la première
+version — le laisse les développer depuis le **répertoire de travail**, et il
+écarte alors le `tsconfig` du dossier où l'on se trouve : un `eslint .` lancé
+dans `frontend/frontend-admin` recevait les trois autres `tsconfig` du dépôt et
+pas le sien, donc ne résolvait plus un seul `@/*`. La panne était invisible
+depuis la racine, qui n'est le dossier d'aucun workspace — c'est le genre de
+défaut qu'on ne voit qu'en changeant de répertoire.
 
 **Depuis SETUP-06, ce socle est _type-aware_.** `base.js` applique
 `tseslint.configs.recommendedTypeChecked` et branche le service de projet de
@@ -1073,7 +1081,7 @@ cookie par une vérification du jeton.
 | `no-misused-promises` laissée telle quelle                       | Le ticket la désignait comme première candidate à un assouplissement sur les gestionnaires d'événements React. Aucun gestionnaire `async` n'existe aujourd'hui, donc aucun motif à écrire. À reprendre en FRONT-05 et FRONT-07, quand les formulaires en introduiront.                                      |
 | Coût du lint reporté sur le hook de pre-commit                   | SETUP-04 s'était fixé dix secondes et avait refusé `tsc` pour cette raison. Mesuré ici : 1,3 s pour un `.ts`, 2,2 s pour un commit touchant trois workspaces. Le budget tient, et le hook garde le lint type-aware — sans CI, c'est le seul endroit où ces règles tournent avant une pull request.          |
 | `eslint.config.mjs` des workspaces inchangés                     | Le ticket ouvrait la possibilité d'un ajustement local. Aucun n'a été nécessaire : les quatre fichiers se contentent d'étaler un preset, et toute la bascule tient dans le preset.                                                                                                                          |
-| `import-x/no-unresolved` hors racine, laissé en l'état           | `npx eslint .` lancé depuis une application ne résout pas les alias `@/*`. Défaut du résolveur d'imports **antérieur** à ce ticket — vérifié par comparaison, identique avant et après la bascule — et étranger aux règles type-aware. Il relève de son propre correctif, pas de celui-ci.                  |
+| `import-x/no-unresolved` hors racine, traité à part              | `npx eslint .` lancé depuis une application ne résolvait pas les alias `@/*`. Défaut du résolveur d'imports **antérieur** à ce ticket — vérifié par comparaison, identique avant et après la bascule — et étranger aux règles type-aware. Corrigé depuis, dans son propre correctif.                        |
 
 ### Hooks de pre-commit
 
