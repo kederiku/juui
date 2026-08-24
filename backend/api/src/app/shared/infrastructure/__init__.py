@@ -2,9 +2,10 @@
 
 Ce qui vit ici DEPEND du domaine et jamais l'inverse. Deux sous-paquets :
 
-- `db/` -- socle de persistance : la `Base` declarative, puis le moteur, la
-  session, les mixins (BACK-05), le depot generique et l'unite de travail
-  (BACK-06a), le contexte de tenance (BACK-06b) ;
+- `db/` -- socle de persistance : la `Base` declarative et sa convention de
+  nommage, le moteur, la fabrique de sessions et les mixins (BACK-05) ; puis le
+  depot generique et l'unite de travail (BACK-06a), et le contexte de tenance
+  (BACK-06b) ;
 - `api/` -- socle HTTP : handlers d'erreur (BACK-09), intergiciels, CORS et
   identifiant de requete (BACK-11).
 

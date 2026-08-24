@@ -1,0 +1,105 @@
+"""Fabrique de sessions et acces aux ressources de persistance (BACK-05).
+
+Ce module livre la FABRIQUE, pas la session. La difference n'est pas de style :
+ouvrir une session, la refermer et decider quand la transaction se valide sont
+le travail de l'unite de travail (BACK-06a), dont le but declare est que la
+couche application ne voie jamais une `AsyncSession`. Une dependance
+`get_session()` publiee ici serait exactement l'affordance qui rend cette
+promesse intenable -- la premiere route pressee s'en servirait.
+
+Rien n'en a besoin avant BACK-06a, du reste : le depot recoit sa session en
+argument et n'en cree jamais, et la sonde de sante (BACK-08) interroge le moteur.
+"""
+
+from dataclasses import dataclass
+from typing import Final
+
+from fastapi import Request
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+# Cle unique sous laquelle le `lifespan` range les ressources de persistance
+# dans `app.state`. Une constante plutot qu'un litteral : celui qui ecrit et
+# celui qui lit doivent parler du meme nom.
+STATE_KEY: Final = "database"
+
+
+def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """Construit la fabrique de sessions du service.
+
+    `expire_on_commit=False` N'EST PAS FACULTATIF EN ASYNCHRONE
+    Avec le defaut, `commit()` perime toutes les instances suivies, et le
+    premier acces a un attribut declenche un SELECT paresseux. En asynchrone, ce
+    SELECT part hors du contexte greenlet et leve `MissingGreenlet` : le mapping
+    `_to_entity(model)` juste apres un commit casserait.
+
+    Ce que cela coute, honnetement : les objets gardent les valeurs de LEUR
+    transaction. Une ligne modifiee entre-temps par une autre requete ne se voit
+    pas. Avec une session par requete, la fenetre dure une requete, et le
+    passage par une entite du domaine fait que la peremption ne sort jamais de
+    l'infrastructure.
+
+    DEUX PIEGES A CONNAITRE AVANT BACK-06a
+    `rollback()` perime les instances QUOI QU'IL ARRIVE : journaliser
+    `account.email` apres l'annulation leve `MissingGreenlet` au lieu de rendre
+    une valeur perimee -- capturer ce qu'on veut tracer AVANT. Et une session
+    reutilisee d'un bloc `async with` a l'autre ressert son identity map sans
+    relire la base : une session par bloc, ou `expunge_all()` en sortie.
+
+    `autoflush=False` : avec le defaut, un `find_by_email()` appele apres un
+    `add()` provoque un flush implicite, et la violation d'unicite remonte alors
+    depuis la LECTURE -- au mauvais endroit, sous le mauvais nom. Le flush a lieu
+    au commit, la ou on l'attend.
+
+    Args:
+        engine: le moteur ouvert par le `lifespan`.
+
+    Returns:
+        La fabrique de sessions, a partager pour toute la duree du processus.
+    """
+    return async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+
+
+@dataclass(frozen=True, slots=True)
+class Database:
+    """Ressources de persistance vivant le temps du processus.
+
+    Un objet unique plutot que deux attributs poses cote a cote sur `app.state` :
+    ils naissent ensemble, ils meurent ensemble, et un seul point d'entree suffit
+    a savoir si le `lifespan` a bien tourne.
+    """
+
+    engine: AsyncEngine
+    sessionmaker: async_sessionmaker[AsyncSession]
+
+
+def get_database(request: Request) -> Database:
+    """Retourne les ressources de persistance ouvertes par le `lifespan`.
+
+    Forme de reference pour les ressources de longue duree : une cle, un type, un
+    accesseur. Le client Redis (BACK-14) et le broker TaskIQ (BACK-15) la
+    reprendront ; l'unite de travail (BACK-06a) en sera le premier consommateur
+    reel, en y prenant la fabrique de sessions.
+
+    L'`isinstance` n'est pas de la defense pour rien. `app.state` est type `Any`,
+    et Mypy en mode strict refuse d'en retourner la valeur telle quelle. Il
+    transforme au passage une application construite sans son `lifespan` -- ce
+    que produit un test mal cable -- en message lisible, plutot qu'en
+    `AttributeError` au milieu d'une requete.
+
+    Args:
+        request: la requete en cours, d'ou l'on remonte a l'application.
+
+    Returns:
+        Les ressources de persistance du processus.
+
+    Raises:
+        RuntimeError: si le `lifespan` n'a pas tourne.
+    """
+    database = getattr(request.app.state, STATE_KEY, None)
+    if not isinstance(database, Database):
+        message = (
+            "Les ressources de persistance ne sont pas ouvertes : "
+            "l'application a-t-elle ete construite sans son lifespan ?"
+        )
+        raise RuntimeError(message)
+    return database

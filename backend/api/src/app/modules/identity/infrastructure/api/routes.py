@@ -2,10 +2,10 @@
 
 Le routeur existe, il est assemble par `app.main`, et il ne porte ENCORE AUCUNE
 ROUTE. Ce n'est pas un oubli : une route de creation de compte a besoin d'une
-session de base de donnees (BACK-05) et d'une unite de travail (BACK-06a), qui
-n'existent pas. L'exposer aujourd'hui supposerait de brancher un depot factice
-dans le code de production, c'est-a-dire d'ecrire du code jetable et de le
-documenter comme s'il etait vrai.
+unite de travail (BACK-06a) pour ouvrir la session que BACK-05 sait desormais
+fabriquer, et decider du commit -- et celle-la n'existe pas. L'exposer
+aujourd'hui supposerait de brancher un depot factice dans le code de production,
+c'est-a-dire d'ecrire du code jetable et de le documenter comme s'il etait vrai.
 
 Le trajet complet -- schema, commande, entite, modele -- est en revanche
 EXECUTABLE des maintenant : la sonde du README le parcourt de bout en bout.

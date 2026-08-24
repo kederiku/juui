@@ -100,15 +100,16 @@ PY
 # ---------------------------------------------------------------------------
 # 2. Migrations
 # ---------------------------------------------------------------------------
-# alembic.ini N'EXISTE PAS ENCORE : il arrive avec BACK-05, et les premieres
-# migrations avec BACK-07. La garde de presence est ce qui permet d'ecrire
+# alembic.ini N'EXISTE PAS ENCORE : il arrive avec BACK-07, en meme temps que
+# les premieres migrations. INFRA-04 l'attribuait a BACK-05, qui n'a livre que le
+# socle SQLAlchemy -- moteur, session et mixins, sans outil de migration. La garde de presence est ce qui permet d'ecrire
 # l'etape des maintenant sans casser le demarrage d'aujourd'hui -- et l'etape
 # s'activera d'elle-meme, sans qu'on ait a revenir sur ce fichier.
 #
 # Le repertoire de travail est /app, ou le Dockerfile a copie le contenu de
 # backend/api : c'est la que se trouvera alembic.ini.
 #
-# A ARBITRER EN BACK-05 : le service `worker` d'INFRA-05b partage cet entrypoint
+# A ARBITRER EN BACK-07 : le service `worker` d'INFRA-05b partage cet entrypoint
 # et reste `--scale`-able. Plusieurs `alembic upgrade head` simultanes sur la
 # meme base sont une course. Sans objet tant qu'aucune migration n'existe ; la
 # reponse habituelle est un verrou consultatif PostgreSQL pris par env.py.
@@ -116,7 +117,7 @@ if [ -f alembic.ini ]; then
   echo "INFRA-04 : application des migrations (alembic upgrade head)..."
   alembic upgrade head
 else
-  echo "INFRA-04 : alembic.ini absent, migrations non configurees (BACK-05) -- etape sautee."
+  echo "INFRA-04 : alembic.ini absent, migrations non configurees (BACK-07) -- etape sautee."
 fi
 
 # ---------------------------------------------------------------------------

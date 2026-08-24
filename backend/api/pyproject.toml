@@ -190,14 +190,18 @@ mypy_path = "src"
 # l'y faire entrer.
 files = ["src"]
 
-# Aucune dependance n'a besoin d'ignore_missing_imports aujourd'hui : toutes
-# livrent un py.typed, et boto3 est couvert par boto3-stubs[s3]. Si une
-# librairie sans stubs entre un jour, la derogation se declare PAR MODULE sur
-# ce modele -- jamais globalement, ce qui aveuglerait Mypy sur tout le projet :
+# Une seule derogation, et elle est declaree PAR MODULE -- jamais globalement,
+# ce qui aveuglerait Mypy sur tout le projet. BACK-02 pariait qu'aucune ne
+# serait necessaire ; BACK-05 a trouve la premiere.
 #
-# [[tool.mypy.overrides]]
-# module = ["librairie_sans_stubs.*"]
-# ignore_missing_imports = true
+# asyncpg n'expose pas de py.typed et n'a pas de paquet de stubs maintenu. Il
+# n'est importe qu'a un seul endroit -- `shared/infrastructure/db/engine.py`,
+# pour nommer les exceptions du pilote que SQLAlchemy n'enveloppe PAS quand la
+# connexion echoue. Le reste du code ne le voit jamais : c'est SQLAlchemy qui
+# lui parle.
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 # Un champ non annote, un kwargs inconnu ou mal type dans un Model(...) devient
