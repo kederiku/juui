@@ -57,12 +57,18 @@ jobs:
       - name: Recuperer le depot
         uses: actions/checkout@v7
 
+      # VERSION EXACTE, la ou les autres actions du depot emploient un majeur
+      # nu (`actions/checkout@v7`). Ce n'est pas une inconsequence : setup-uv ne
+      # publie PLUS de tag flottant depuis la v8 -- le depot s'arrete a `v7`, et
+      # `@v10` echoue sur « unable to find version ». QA-07 epinglera de toute
+      # facon toutes les actions par SHA.
+      #
       # `python-version-file` est resolu depuis la racine du depot, pas depuis
       # le `working-directory` ci-dessus : celui-ci ne s'applique qu'aux etapes
       # `run`. Meme intention que le `node-version-file: .nvmrc` de
       # documentation.yml -- la version vient du depot, jamais du workflow.
       - name: Installer uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: backend/api/uv.lock
