@@ -23,11 +23,17 @@ import react from './react.js';
  * Ce preset se compose donc normalement a partir de `react` (et donc de `base`),
  * ce qui garantit un socle de regles strictement identique aux trois presets.
  *
- * Non repris de `eslint-config-next` : `eslint-plugin-jsx-a11y` (accessibilite)
- * et `eslint-plugin-react`. Tous deux plafonnent leur peer `eslint` a ^9 et
- * n'annoncent pas ESLint 10 — meme motif que le remplacement d'
- * eslint-plugin-import par import-x. A reconsiderer en FRONT-01, ou
- * l'accessibilite du parcours de prise de rendez-vous se jouera vraiment.
+ * L'ACCESSIBILITE N'EST PLUS ICI — elle est au preset `react` depuis SETUP-07,
+ * d'ou ce preset l'herite. Sous sa variante `eslint-plugin-jsx-a11y-x`, la
+ * seule a annoncer ESLint 10 ; le paquet d'origine, lui, plafonne toujours sa
+ * peer a ^9. Ce que SETUP-03 avait ecrit ici est donc leve, et le motif du
+ * retrait a bien ete verifie avant de l'etre.
+ *
+ * Reste non repris de `eslint-config-next` : `eslint-plugin-react`, dont la
+ * peer plafonne toujours a ^9.7. Il n'en existe pas de fork « -x » : le seul
+ * substitut maintenu, `@eslint-react/eslint-plugin`, n'est pas une reprise mais
+ * une reecriture, avec ses propres regles et ses propres noms. L'adopter est un
+ * arbitrage a part entiere, que ce ticket-ci ne portait pas.
  */
 export default defineConfig([
   ...react,

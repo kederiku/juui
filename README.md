@@ -487,8 +487,9 @@ Les trois presets ESLint forment une chaîne — `next` étend `react`, qui éte
 
 - **`base`** — TypeScript et Node, sans rien de spécifique à React. Pour
   `packages/*` et les scripts d'outillage.
-- **`react`** — `base` plus les règles des hooks. Pour `packages/ui` (SHARED-01),
-  qui est du React sans Next.
+- **`react`** — `base`, plus les règles des hooks, plus les 31 règles
+  d'accessibilité (SETUP-07). Pour `packages/ui` (SHARED-01), qui est du React
+  sans Next.
 - **`next`** — `react` plus les 22 règles de `@next/eslint-plugin-next`. Pour les
   trois applications (FRONT-01 et suivants).
 
@@ -558,6 +559,74 @@ JavaScript ne fait construire aucun programme, et son lint ne bouge pas d'un
 centième. La troisième est celle qui compte pour le [hook de
 pre-commit](#hooks-de-pre-commit) — deux secondes environ, contre un budget de
 dix.
+
+**Depuis SETUP-07, il porte aussi l'accessibilité.** Trente et une règles, sur
+le preset `react` — donc sur `packages/ui` **et**, par héritage, sur les trois
+applications. C'est `packages/ui` qui porte les composants : c'est là qu'un
+manquement se fabrique, et là qu'il doit se voir.
+
+Le paquet est [`eslint-plugin-jsx-a11y-x`](https://github.com/es-tooling/eslint-plugin-jsx-a11y-x),
+et non `eslint-plugin-jsx-a11y`. Ce dernier n'a rien publié depuis octobre 2024
+et plafonne toujours sa peer `eslint` à `^9` — c'est le motif exact de son
+retrait en SETUP-03, vérifié avant d'être contourné. La variante annonce
+`^9 || ^10`. **Même famille, et même raisonnement, que le remplacement
+d'`eslint-plugin-import` par `import-x`** : on ne force pas une peer, on prend le
+paquet qui dit la vérité sur ce qu'il supporte. D'où le préfixe `jsx-a11y-x/` sur
+les règles, et la clé `settings['jsx-a11y-x']` sur les réglages.
+
+La pièce qui fait tout le travail est la **carte de correspondance**,
+[`a11yComponents`](packages/config-eslint/rules.js) : vingt-trois composants de
+`@repo/ui` associés à la balise que chacun rend réellement — `Input` → `input`,
+`Label` → `label`, `TableHead` → `th`, `DialogTitle` → `h2`… Sans elle les règles
+ne sont pas fausses, elles sont **muettes** : le plugin raisonne sur des noms de
+balises, et le type d'un `<Input>` vaut « Input ». Comme les applications ne
+consomment presque que des composants de `@repo/ui`, cette carte est ce qui
+décide de leur couverture réelle. Elle joue ici le rôle que le résolveur
+d'imports joue pour `import-x`.
+
+**N'y figure que ce dont la racine est une balise fixe.** Les huit composants
+polymorphes — ceux qui rendent `Slot.Root` sous `asChild` : `Button`, `Badge`,
+`BreadcrumbLink`, `SidebarGroupLabel`, `SidebarGroupAction`,
+`SidebarMenuButton`, `SidebarMenuAction`, `SidebarMenuSubButton` — en sont
+volontairement absents. Leur racine dépend d'une prop que le plugin ne sait pas
+suivre : son réglage `polymorphicPropName` ne lit qu'une prop **portant** un nom
+de balise (`as="h3"`), là où `asChild` délègue à l'enfant. Les mapper
+fabriquerait des faux positifs de toutes pièces — `BreadcrumbLink: 'a'` ferait
+échouer `anchor-is-valid` sur le `<BreadcrumbLink asChild><Link href=… /></BreadcrumbLink>`
+d'[`admin-breadcrumb.tsx`](frontend/frontend-admin/components/admin-breadcrumb.tsx),
+dont le `href` est porté par l'enfant. Les primitives Radix (`Dialog*`,
+`Select*`, `DropdownMenu*`, `Tooltip*`) n'y sont pas davantage : ce sont des
+expressions membres, que le plugin ignore d'office, et elles portent déjà leurs
+rôles ARIA — c'est ce pour quoi Radix existe.
+
+Le jeu retenu est `recommended`, et **aucune règle n'a été écartée** :
+[`a11yRules`](packages/config-eslint/rules.js) est vide, ce qui est un résultat
+et non un oubli. La première passe n'a relevé qu'un seul manquement sur tout le
+dépôt, et c'était une limite d'analyse plutôt qu'un défaut :
+`label-has-associated-control` exige de tout label un `htmlFor` ou un contrôle
+descendant, or [`FieldLabel`](packages/ui/src/components/field.tsx) n'est qu'un
+emballage — les deux lui arrivent par `{...props}`, que le plugin ne sait pas
+lire. La règle a le même angle mort sur le **texte** du label, mais elle y
+présume l'inverse et se tait ; c'est cette asymétrie qu'on rencontre. D'où une
+dérogation **à la ligne**, motif écrit sur place, et une seule dans tout le
+dépôt. La règle reste pleinement active partout ailleurs — sur chaque `<Label>`
+et chaque `<FieldLabel>` réellement posés dans une page, le seul endroit où un
+champ peut vraiment se retrouver sans étiquette.
+
+Le coût est négligeable, et il a été mesuré comme le reste : `pnpm lint` passe de
+3,64 s à 3,74 s, un `.tsx` de 1,06 s à 1,11 s — un dixième de seconde, sans
+commune mesure avec la bascule type-aware du ticket précédent. Le budget de dix
+secondes du [hook de pre-commit](#hooks-de-pre-commit) n'en est pas entamé.
+
+Que les règles soient bien actives se vérifie d'une ligne, en introduisant le
+manquement le plus banal qui soit :
+
+```bash
+echo '<img src="/juui.png" />' # inséré dans une page, puis : pnpm lint
+```
+
+`jsx-a11y-x/alt-text` sort en `error`, `pnpm lint` rend 1, et le hook de
+pre-commit interrompt le commit — c'est vérifié à chaque fois que ce socle bouge.
 
 #### `@repo/typescript-config`
 
@@ -1082,6 +1151,20 @@ cookie par une vérification du jeton.
 | Coût du lint reporté sur le hook de pre-commit                   | SETUP-04 s'était fixé dix secondes et avait refusé `tsc` pour cette raison. Mesuré ici : 1,3 s pour un `.ts`, 2,2 s pour un commit touchant trois workspaces. Le budget tient, et le hook garde le lint type-aware — sans CI, c'est le seul endroit où ces règles tournent avant une pull request.          |
 | `eslint.config.mjs` des workspaces inchangés                     | Le ticket ouvrait la possibilité d'un ajustement local. Aucun n'a été nécessaire : les quatre fichiers se contentent d'étaler un preset, et toute la bascule tient dans le preset.                                                                                                                          |
 | `import-x/no-unresolved` hors racine, traité à part              | `npx eslint .` lancé depuis une application ne résolvait pas les alias `@/*`. Défaut du résolveur d'imports **antérieur** à ce ticket — vérifié par comparaison, identique avant et après la bascule — et étranger aux règles type-aware. Corrigé depuis, dans son propre correctif.                        |
+
+### Écarts assumés avec le ticket SETUP-07
+
+| Écart                                                       | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `eslint-plugin-jsx-a11y-x`, et non `eslint-plugin-jsx-a11y` | Le ticket demandait de vérifier d'abord le motif du retrait : il tient toujours. L'original en est resté à la 6.10.2 d'octobre 2024, peer `eslint` plafonnée à `^9`. La variante « -x » annonce `^9 \|\| ^10` et porte à son changelog un « Add support for ESLint 10 » explicite. Le fork concurrent `@htmlacademy/eslint-plugin-jsx-a11y` garde le nom d'origine mais n'a qu'une seule version publiée pour ~5 700 téléchargements mensuels, contre ~202 000 à la variante retenue. Forcer la peer de l'original était exclu par le ticket lui-même — c'est ce que SETUP-03 avait refusé de faire pour `eslint-plugin-import`. |
+| `settings['jsx-a11y-x']`, et préfixe `jsx-a11y-x/`          | Deux critères d'acceptation écrivent `settings['jsx-a11y'].components`. La clé est lue **en dur** par le plugin, elle ne se choisit pas ; et le nom d'enregistrement suit celui du paquet plutôt que l'ancien, faute de quoi le préfixe des règles se désaccorderait de la clé de réglages et tromperait sur ce qui est réellement installé. Écart littéral, pas fonctionnel — exactement celui qu'`import-x` a déjà fait accepter (`import-x/order`, et non `import/order`).                                                                                                                                                    |
+| Huit composants laissés hors de la carte                    | Le critère demande que la carte « mappe les composants `@repo/ui` vers leurs primitives ». Les composants polymorphes par `asChild` ne peuvent pas l'être : leur racine dépend d'une prop que le plugin ne suit pas. Les mapper **créerait** les faux positifs qu'on veut éviter — `BreadcrumbLink: 'a'` ferait échouer `anchor-is-valid` sur un usage correct d'`admin-breadcrumb.tsx`. Une carte plus courte et juste vaut mieux qu'une carte complète et fausse.                                                                                                                                                              |
+| `recommended` et non `strict`                               | Le ticket ne tranche pas. `strict` ajoute `prefer-tag-over-role`, qui dénoncerait d'emblée le `<span role="link">` de `BreadcrumbPage` — du code shadcn amont, non écrit ici. Commencer par où l'écosystème commence, et durcir sur une gêne constatée plutôt que par avance.                                                                                                                                                                                                                                                                                                                                                    |
+| Une dérogation à la ligne dans `field.tsx`                  | Le ticket demande de corriger plutôt que de désactiver. Il n'y avait rien à corriger : `FieldLabel` transmet correctement `htmlFor`, mais par `{...props}`, que `label-has-associated-control` ne sait pas lire. Une dérogation d'une ligne, motif écrit sur place, laisse la règle active partout ailleurs — la désactiver dans `a11yRules` l'aurait éteinte là où elle protège vraiment, dans les pages.                                                                                                                                                                                                                       |
+| `a11yRules` livré vide                                      | Le ticket attendait des arbitrages ; la première passe n'en a imposé aucun. L'objet est conservé et étalé quand même, pour que reste vraie la règle du dépôt — le socle se modifie en un seul endroit, `rules.js`. Même situation qu'en SETUP-06, où `recommendedTypeChecked` n'avait rien signalé non plus.                                                                                                                                                                                                                                                                                                                     |
+| `next/image` non ajouté à la carte                          | Aurait activé `img-redundant-alt` sur `<Image>`. Hors du périmètre que le ticket cadre sur le preset `react`, et le gain serait mince : les `ImageProps` de Next exigent déjà `alt` au niveau du type, donc un `<Image>` sans `alt` échoue à `pnpm typecheck` avant d'atteindre le lint.                                                                                                                                                                                                                                                                                                                                         |
+| `eslint-plugin-react` toujours hors du socle                | Il partageait le renvoi de SETUP-03 avec `jsx-a11y`, et sa peer plafonne encore à `^9.7`. Mais il n'en existe pas de fork « -x » : le seul substitut maintenu, `@eslint-react/eslint-plugin`, est une réécriture avec ses propres règles et ses propres noms. L'adopter est un arbitrage à part entière, que ce ticket ne portait pas.                                                                                                                                                                                                                                                                                           |
+| Tableau du coût du lint de SETUP-06 non retouché            | L'ajout coûte un dixième de seconde — `pnpm lint` de 3,64 s à 3,74 s, un `.tsx` de 1,06 s à 1,11 s. Le chiffre est reporté au fil du texte plutôt que dans ce tableau, qui décrit l'état du dépôt à la date de son ticket. Même règle que pour les tableaux de SHARED-01 et SHARED-02.                                                                                                                                                                                                                                                                                                                                           |
 
 ### Hooks de pre-commit
 
