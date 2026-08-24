@@ -1,0 +1,76 @@
+# Ce qui NE PART PAS dans le contexte de build de l'image d'API (INFRA-04).
+#
+# CE FICHIER EST BIEN A SA PLACE. Docker ne lit qu'un seul fichier d'exclusion,
+# `<contexte>/.dockerignore`, et le contexte de build de l'image d'API est
+# `backend/api` -- pas la racine du depot. Le Dockerfile, lui, vit dans
+# docker/api/ : le pourquoi de cette dissociation est ecrit en tete de
+# docker/api/Dockerfile.
+#
+# Deux effets, pas un seul : ce qui est exclu ici n'est ni envoye au demon
+# Docker (donc un build plus rapide), ni visible du `COPY . /app` du Dockerfile
+# (donc une image plus petite et sans secret).
+#
+# Les motifs sont relatifs a la racine du contexte, et un `!` REINTRODUIT ce
+# qu'une ligne precedente avait exclu -- c'est tout l'objet de l'exception sur
+# README.md plus bas.
+
+# --- Environnement virtuel local ---
+# Construit pour macOS ou pour l'hote, jamais utilisable dans l'image ; et de
+# loin le plus gros dossier du contexte. L'image fabrique le sien, dans
+# /opt/venv.
+.venv/
+
+# --- Artefacts Python ---
+# Compiles pour l'interpreteur du poste. Les recopier n'apporte rien et
+# risquerait de masquer des sources reellement modifiees.
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# --- Caches d'outillage ---
+# Ruff, Mypy et Pytest les reconstruisent seuls ; ils ne servent qu'au poste.
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# --- Tests ---
+# Le dossier n'existe pas encore (BACK-12). L'exclure d'avance evite que la
+# suite de tests, une fois ecrite, grossisse l'image de production sans que
+# personne ne s'en apercoive. QA-01 les lance hors conteneur.
+tests/
+
+# --- Metadonnees git ---
+# Sans objet ici -- le .git vit a la racine du depot, hors de ce contexte --
+# mais la ligne est demandee par le ticket et couvre le jour ou quelqu'un
+# construirait depuis un sous-depot.
+.git
+.gitignore
+
+# --- SECRETS ---
+# LA LIGNE LA PLUS IMPORTANTE DU FICHIER, et elle ne figure pas dans le ticket.
+# backend/api/.env existe sur tout poste de developpement et porte des
+# identifiants. Sans cette exclusion il entrerait dans l'image, et la cible
+# `dev` le LIRAIT : le _ENV_FILE de core/config.py est ancre sur le dossier du
+# projet, soit /app/.env dans le conteneur. La configuration du conteneur doit
+# venir de ses variables d'environnement, et d'elles seules.
+.env
+.env.*
+!.env.example
+
+# --- Documentation ---
+# Le ticket demande d'exclure *.md. README.md fait EXCEPTION, et ce n'est pas
+# negociable : pyproject.toml declare `readme = "README.md"`, que le backend de
+# build uv_build lit pour composer les metadonnees du paquet. Sans le fichier,
+# `uv sync` echoue sur un « readme file not found » au moment d'installer le
+# projet lui-meme.
+*.md
+!README.md
+
+# --- Editeurs et systeme ---
+.idea/
+.vscode/
+.DS_Store
