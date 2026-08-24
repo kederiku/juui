@@ -127,7 +127,8 @@ Deux morceaux démarrent : les services d'infrastructure, en conteneurs, et
 l'API, sur le poste.
 
 D'abord l'infrastructure — PostgreSQL avec sa base de test `app_test` et la
-console pgAdmin, Redis, et MinIO avec son bucket applicatif :
+console pgAdmin, Redis, MinIO avec son bucket applicatif, et Mailpit qui capte
+le courrier sortant :
 
 ```bash
 docker compose --project-directory . -f docker/docker-compose.yml up -d
@@ -143,7 +144,10 @@ pgAdmin répond sur <http://localhost:5050> ; s'y connecter avec
 `PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur
 « Juui - PostgreSQL local » y est déjà enregistré, mot de passe compris : il n'y
 a **rien à saisir** pour ouvrir la base. La console de MinIO, elle, répond sur
-<http://localhost:9001> — voir « Vérifier le stockage objet » plus bas.
+<http://localhost:9001> — voir « Vérifier le stockage objet » plus bas. La boîte
+de réception de Mailpit s'ouvre sur <http://localhost:8025>, sans identifiants :
+tout e-mail émis par la pile y atterrit, et aucun n'en sort — voir « Vérifier le
+SMTP de développement ».
 
 Puis l'API, hors conteneur tant qu'INFRA-04 n'a pas livré son image :
 
@@ -183,9 +187,10 @@ pnpm --filter frontend-individual run dev
 ### La pile complète, avec Docker
 
 > **Note.** Cette séquence n'est **pas encore complète**.
-> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte depuis INFRA-04
-> `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`, `minio-init` et
-> `api` : le service d'API démarre donc réellement en conteneur. Depuis
+> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte depuis INFRA-07
+> `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`, `minio-init`, `api` et
+> `mailpit` : le service d'API démarre réellement en conteneur, et le courrier
+> sortant est capté sur le poste au lieu de se perdre. Depuis
 > INFRA-05a, l'**image** des trois frontends se construit elle aussi — mais
 > aucun service ne la lance encore : leur déclaration dans le fichier compose,
 > avec celle du `worker`, revient à INFRA-05b. Manquent donc les quatre services
@@ -254,6 +259,8 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | RedisInsight (profil `tools`) | 5540      | 5540         | disponible  |
 | MinIO — API S3                | 9000      | 9000         | disponible  |
 | MinIO — console web           | 9001      | 9001         | disponible  |
+| Mailpit — SMTP                | 1025      | 1025         | disponible  |
+| Mailpit — boîte de réception  | 8025      | 8025         | disponible  |
 | Worker TaskIQ                 | aucun     | —            | BACK-15     |
 
 Quelques choix méritent leur explication :
@@ -271,11 +278,14 @@ Quelques choix méritent leur explication :
 - **RedisInsight sur 5540**, port d'écoute par défaut de l'image : le publier
   tel quel évite une correspondance de plus à retenir. Le service reste derrière
   le profil Compose `tools` et ne démarre donc pas avec `make up`.
-- **Redis et RedisInsight ne sont publiés que sur `127.0.0.1`.** Les autres
-  services le sont sur toutes les interfaces du poste ; ces deux-là non. Le
-  Redis de développement n'a pas de mot de passe et la console n'a pas de page
+- **Redis, RedisInsight et Mailpit ne sont publiés que sur `127.0.0.1`.** Les
+  autres services le sont sur toutes les interfaces du poste ; ces trois-là non.
+  Le Redis de développement n'a pas de mot de passe et la console n'a pas de page
   de connexion : les publier largement les offrirait en lecture et en écriture
-  à tout le réseau auquel le poste est raccordé — un wifi partagé suffit. Rien
+  à tout le réseau auquel le poste est raccordé — un wifi partagé suffit. Mailpit
+  ajoute à cela un relais SMTP qui accepte n'importe quel message de n'importe
+  qui, et une boîte où se lisent en clair les codes OTP déjà émis : la règle du
+  dépôt tient en une phrase — service sans authentification, boucle locale. Rien
   ne change à l'usage, les URLs et les commandes restent celles de ce tableau.
 - **Le worker n'écoute rien.** Il consomme la file Redis et n'ouvre aucun port
   entrant : rien à publier, rien à réserver.
@@ -297,6 +307,7 @@ Les adresses à ouvrir dans un navigateur :
 | Documentation                   | <http://localhost:3004>              | —                                                    |
 | pgAdmin                         | <http://localhost:5050>              | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
 | MinIO — console web             | <http://localhost:9001>              | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`            |
+| Mailpit — boîte de réception    | <http://localhost:8025>              | —                                                    |
 | RedisInsight                    | <http://localhost:5540>              | —                                                    |
 
 PostgreSQL et Redis ne parlent pas HTTP : ils s'atteignent par une chaîne de
@@ -567,6 +578,65 @@ délibéré — BACK-13 servira les fichiers par des URLs pré-signées, qui por
 leur propre autorisation et expirent, plutôt que par un bucket ouvert en
 lecture.
 
+### Vérifier le SMTP de développement
+
+Mailpit tient lieu de fournisseur d'envoi sur le poste : il **accepte** tout et
+n'**expédie** rien. Sans lui, le parcours d'inscription s'arrêtait définitivement
+à l'écran de saisie du code OTP — l'e-mail partait, personne ne le lisait, et le
+compte restait non vérifié.
+
+La boîte de réception s'ouvre sur <http://localhost:8025>, sans identifiants.
+Elle est **vide à chaque démarrage**, et c'est voulu : le service n'a aucun
+volume, donc le dernier message affiché est toujours celui qu'on vient de
+déclencher. `make mail` l'ouvrira directement, quand INFRA-06 aura livré le
+`Makefile` de la racine.
+
+Pour un aller-retour complet — envoi sur le port SMTP, relecture par l'API HTTP —
+depuis le conteneur `api`, c'est-à-dire par le chemin exact qu'empruntera
+l'adaptateur de BACK-22. `smtplib` et `urllib` sont dans la bibliothèque standard
+de Python : il n'y a rien à installer, et l'image `python:3.14-slim` n'a de toute
+façon ni `curl` ni `wget`.
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec api python -c "
+import json, smtplib, urllib.request
+from email.message import EmailMessage
+m = EmailMessage()
+m['From'], m['To'], m['Subject'] = 'no-reply@juui.test', 'essai@juui.test', 'INFRA-07'
+m.set_content('Code de verification : 123456')
+with smtplib.SMTP('mailpit', 1025) as s: s.send_message(m)
+r = json.load(urllib.request.urlopen('http://mailpit:8025/api/v1/messages'))
+print(r['messages'][0]['Subject'], '--', r['messages'][0]['Snippet'])
+"
+```
+
+La commande affiche `INFRA-07 -- Code de verification : 123456`, et le message
+apparaît dans la boîte web. Si le service `api` n'est pas démarré, la même
+vérification tient entièrement dans le conteneur Mailpit, qui embarque un
+`sendmail` et dont l'image Alpine fournit `wget` :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec mailpit sh -c 'printf "Subject: INFRA-07\n\nCode : 123456\n" | /mailpit sendmail -f no-reply@juui.test -S 127.0.0.1:1025 essai@juui.test && wget -qO- http://127.0.0.1:8025/api/v1/messages'
+```
+
+**L'API HTTP est la seule manière prévue de récupérer un code OTP dans un test.**
+`GET /api/v1/messages` liste la boîte, `GET /api/v1/message/{id}` rend le corps
+complet, `GET /api/v1/search` filtre par destinataire et `DELETE /api/v1/messages`
+la vide entre deux cas. La documentation interactive est servie par l'instance
+elle-même, sur <http://localhost:8025/api/v1/>.
+
+C'est ce que feront BACK-17 et l'helper de lecture d'e-mails de QA-04 : lire le
+code **réellement émis**, plutôt que d'aller le chercher dans Redis. Un test qui
+lit Redis vérifie ce que le code a écrit ; il passerait au vert avec un envoi
+cassé, une adresse erronée ou un gabarit vide.
+
+> **Note.** Ce ticket ne livre que l'infrastructure — le service, ses variables,
+> sa sonde et cette page. L'adaptateur SMTP qui consommera `SMTP_HOST`,
+> `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` et `MAIL_FROM`
+> appartient à BACK-22, et ces six variables ne sont pas encore passées au
+> service `api` : le fichier compose porte le bloc, en commentaires, à l'endroit
+> où BACK-22 le décommentera.
+
 ### Scripts racine
 
 | Commande            | Effet                                                        |
@@ -712,6 +782,20 @@ partagées](#configurations-partagées).
 > être tenu. Il corrige un défaut **antérieur** à ce ticket, qu'aucun poste
 > macOS ne pouvait révéler — et que la CI d'images de QA-03 aurait rencontré
 > de toute façon.
+
+### Écarts assumés avec le ticket INFRA-07
+
+| Écart                                                           | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `axllent/mailpit:v1.31`, ligne mineure                          | L'image ne publie **aucun** tag de majeure nue — `v1` n'existe pas. Même arbitrage que le `redis/redisinsight:3.8` d'INFRA-02 : on épingle le plus large des tags qui existe réellement.                                                                                                                                                                                                                                                                                                                                                                             |
+| Sonde `/mailpit readyz` plutôt qu'un `wget` sur l'interface web | C'est **bien** l'endpoint de l'interface web que demande le ticket — `/readyz` — appelé par la sous-commande que l'image embarque dans son propre `HEALTHCHECK`. Elle relit `MP_UI_BIND_ADDR`, donc suit un changement de `MAILPIT_WEB_PORT` toute seule, et évite le piège `localhost`/IPv6 qui a déjà coûté trois commentaires au fichier compose.                                                                                                                                                                                                                 |
+| Les deux ports publiés sur `127.0.0.1` seulement                | Le ticket ne le demande pas ; la règle du dépôt, si. Mailpit n'a ni authentification SMTP ni page de connexion web, et son relais accepte n'importe quel message. Une publication large offrirait au réseau du poste un relais ouvert en écriture et la lecture en clair des codes OTP déjà émis.                                                                                                                                                                                                                                                                    |
+| `MP_SMTP_BIND_ADDR` et `MP_UI_BIND_ADDR` déclarées              | Sans elles, `SMTP_PORT` et `MAILPIT_WEB_PORT` ne seraient qu'une décoration à droite des mappings : le serveur écouterait 1025 et 8025 quoi qu'il arrive. Même raisonnement que le `PGPORT` d'INFRA-01 et le `MINIO_SITE_REGION` d'INFRA-03 — une variable doit décrire ce qu'elle prétend décrire.                                                                                                                                                                                                                                                                  |
+| `SMTP_PORT` plutôt que `MAILPIT_SMTP_PORT`                      | Nom côté application, fixé par SETUP-08 : l'adaptateur de BACK-22 n'a pas à savoir quel conteneur lui répond. La variable sert **aussi** de port d'écoute, comme `POSTGRES_PORT`, d'où la seule entorse à la convention `<SERVICE>_PORT` du `.env.example`.                                                                                                                                                                                                                                                                                                          |
+| Variables SMTP non passées au service `api`                     | Hors de la portée du ticket, qui s'arrête au service `mailpit` et à `.env.example`. Surtout : ces six variables naissent **après** les `.env` déjà créés sur les postes, et les référencer produirait six avertissements `variable is not set` à chaque `up` pour des variables qu'aucune ligne de code ne lit. Le bloc attend, en commentaires, à sa place exacte.                                                                                                                                                                                                  |
+| Critère n°5 livré en commande documentée, pas en test pytest    | `backend/api/tests/` n'existe pas — `pyproject.toml` l'écrit noir sur blanc, il arrive avec BACK-12 — et il n'y a ni configuration pytest, ni adaptateur SMTP (BACK-22), ni parcours OTP (BACK-17). Amorcer un harnais de test ici empiéterait sur BACK-12 et contredirait la frontière que le ticket pose lui-même. Précédent exact d'INFRA-03, qui a documenté l'aller-retour MinIO au lieu de le tester. L'aller-retour livré passe bien par l'API HTTP, ce que le critère vise ; le test pytest revient à BACK-12 et BACK-22, l'helper de lecture d'OTP à QA-04. |
+| Cible `make mail` non livrée                                    | Le ticket la renvoie explicitement à INFRA-06, et le `Makefile` de la racine n'existe pas encore. La boîte est documentée en attendant.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `MP_MAX_MESSAGES` laissé à son défaut de 500                    | Le ticket n'en dit rien. Sans volume, la boîte repart vide à chaque redémarrage : le plafond ne se rencontre pas sur un poste de développement, et l'écrire n'ajouterait qu'une variable à maintenir.                                                                                                                                                                                                                                                                                                                                                                |
 
 ## Conventions
 
