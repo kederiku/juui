@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,21 +13,42 @@ import tseslint from 'typescript-eslint';
 import { sharedRules } from './rules.js';
 
 /*
- * Racine du monorepo, deduite de l'emplacement de CE fichier.
- *
- * Les motifs passes au resolveur TypeScript ci-dessous sont sinon resolus depuis
- * le repertoire de travail : `pnpm lint` part de la racine, mais un lint lance
- * depuis un workspace -- ou par un editeur -- ne trouverait plus aucun tsconfig,
- * et les imports aliases redeviendraient silencieusement irresolvables.
+ * Racine du monorepo, deduite de l'emplacement de CE fichier -- et non du
+ * repertoire de travail, qui vaut ce que vaut l'endroit d'ou l'on lance ESLint.
+ */
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/*
+ * Les tsconfig des workspaces, donnes au resolveur TypeScript ci-dessous.
  *
  * Les deux motifs suivent `pnpm-workspace.yaml`. Un workspace sans tsconfig
  * (les packages de configuration) n'est simplement pas apparie.
+ *
+ * ILS SONT DEVELOPPES ICI, et c'est tout l'objet de ces lignes. Les confier au
+ * resolveur -- ce que faisait la version precedente en lui passant des motifs
+ * absolus -- le laisse les developper avec tinyglobby depuis le REPERTOIRE DE
+ * TRAVAIL. Or tinyglobby, ainsi appele, ecarte le tsconfig du repertoire ou l'on
+ * se trouve : depuis frontend/frontend-admin, le resolveur recevait les trois
+ * autres tsconfig du depot et pas le sien. Ses alias `@/*` devenaient alors
+ * irresolvables -- les `paths` d'un tsconfig ne valant que pour les fichiers
+ * qu'il inclut, aucun des trois restants ne pouvait repondre pour lui.
+ *
+ * La panne etait invisible depuis la racine, qui n'est le repertoire d'aucun
+ * workspace : `pnpm lint` passait, `cd frontend/frontend-admin && eslint .`
+ * sortait sur dix imports introuvables. Un editeur qui lance ESLint depuis le
+ * dossier du fichier ouvert tombait dans le meme trou.
+ *
+ * `fs.globSync` prend un `cwd` explicite, ancre ici sur la racine du depot : la
+ * liste ne depend plus de l'endroit d'ou le lint est lance. Et parce que le
+ * resolveur ne recoit plus que des chemins de fichiers -- aucun motif dynamique
+ * -- il ne redeveloppe rien du tout.
  */
-const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-const workspaceTsconfigs = [
-  path.join(repoRoot, 'frontend/*/tsconfig.json'),
-  path.join(repoRoot, 'packages/*/tsconfig.json'),
-];
+const workspaceTsconfigs = fs
+  .globSync(['frontend/*/tsconfig.json', 'packages/*/tsconfig.json'], { cwd: repoRoot })
+  .map((workspacePath) => path.join(repoRoot, workspacePath))
+  // Trie pour que la liste -- donc l'empreinte des options du resolveur -- ne
+  // depende pas de l'ordre dans lequel le systeme de fichiers rend ses entrees.
+  .sort();
 
 /**
  * Preset `base` — socle TypeScript, sans rien de specifique a React.
