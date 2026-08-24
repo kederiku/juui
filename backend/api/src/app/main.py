@@ -6,17 +6,23 @@ l'application. Il expose deux choses, et rien d'autre :
 - `create_app()`, la factory qui construit une instance neuve de l'application ;
 - `app`, l'instance que sert uvicorn (et, a partir d'INFRA-04, le conteneur).
 
-L'application est volontairement vide : elle demarre, elle sert /docs, et c'est
-tout. Les routes arrivent avec BACK-08 (sonde de sante et metadonnees OpenAPI),
-puis avec les contextes metier batis sur la structure hexagonale de BACK-04.
+C'est aussi le POINT D'ASSEMBLAGE des modules metier (BACK-04) : le seul endroit
+du service qui ait le droit de connaitre plus d'un module a la fois. Chaque
+module publie son routeur, ce fichier les monte, et c'est tout -- les modules,
+eux, restent etanches les uns aux autres.
+
+L'application ne sert encore AUCUNE route : le routeur d'`identity` est monte
+mais vide, ses routes venant avec BACK-28 et BACK-29, et la sonde de sante avec
+BACK-08. `/docs` s'affiche donc vide, ce qui est attendu.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 
 from app.core import get_settings
+from app.modules.identity import router as identity_router
 
 
 @asynccontextmanager
@@ -47,6 +53,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+# Routeurs publies par les modules metier, dans leur ordre de montage.
+#
+# Un TUPLE plutot qu'une suite d'appels a `include_router` : ajouter un module
+# revient alors a ajouter une ligne ici, et la liste des contextes servis par
+# l'API se lit d'un coup d'oeil. Chaque routeur porte son propre prefixe et sa
+# propre etiquette -- c'est le module qui decide de sa surface publique, pas ce
+# fichier.
+#
+# `organization` (BACK-16) et les modules suivants viendront s'y ajouter.
+_MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
+
+
 def create_app() -> FastAPI:
     """Construit une instance neuve et independante de l'application.
 
@@ -54,12 +72,20 @@ def create_app() -> FastAPI:
     rendra les tests de BACK-12 possibles : chaque test construit son
     application, avec ses propres surcharges de dependances, sans heriter de
     l'etat laisse par le test precedent.
+
+    Returns:
+        L'application FastAPI, routeurs des modules deja montes.
     """
-    return FastAPI(
+    application = FastAPI(
         title="Juui API",
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    for module_router in _MODULE_ROUTERS:
+        application.include_router(module_router)
+
+    return application
 
 
 # Instance servie par uvicorn (`uvicorn app.main:app`), et plus tard par le

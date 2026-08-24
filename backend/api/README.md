@@ -48,8 +48,8 @@ La documentation interactive répond alors sur <http://localhost:8000/docs>, et
 le contrat OpenAPI sur <http://localhost:8000/openapi.json>.
 
 > L'API ne sert **aucune route** pour l'instant : `/docs` s'affiche donc vide.
-> C'est attendu — la sonde de santé et les métadonnées OpenAPI relèvent de
-> BACK-08.
+> C'est attendu — le routeur du module `identity` est bien monté (BACK-04), mais
+> ses routes relèvent de BACK-28 et BACK-29, et la sonde de santé de BACK-08.
 
 ## Structure
 
@@ -61,19 +61,30 @@ backend/api/
 ├── .env.example       gabarit d'environnement — miroir des champs de `Settings`
 ├── Makefile           raccourcis de lint, formatage et typage
 └── src/app/
-    ├── __init__.py
-    ├── main.py        assemblage de l'application FastAPI
-    └── core/          briques transverses, ni domaine ni infrastructure
-        ├── __init__.py
-        └── config.py  configuration typée (BACK-03)
+    ├── main.py             assemblage de l'application et des routeurs
+    ├── core/               réglages du processus, ni domaine ni infrastructure
+    │   └── config.py       configuration typée (BACK-03)
+    ├── shared/             noyau partagé — pas un module métier
+    │   ├── domain/
+    │   │   ├── exceptions.py   `DomainError`, racine des erreurs métier
+    │   │   └── ports/          ports techniques : cache, stockage, jetons
+    │   └── infrastructure/
+    │       ├── db/base.py      `Base` déclarative des modèles de persistance
+    │       └── api/            socle HTTP : handlers d'erreur, intergiciels
+    └── modules/            contextes métier, étanches les uns aux autres
+        ├── identity/       module pilote — le seul complet à ce stade
+        │   ├── domain/         entities, policies, ports, exceptions
+        │   ├── application/    use_cases/
+        │   ├── infrastructure/ db/ (modèle, dépôt), api/ (schémas, routeur)
+        │   └── unit_of_work.py
+        └── organization/   groupes et appartenances (BACK-16)
 ```
 
 Le paquet s'appelle `app` alors que le projet se nomme `juui-api` : la
 correspondance est déclarée par `[tool.uv.build-backend] module-name`.
 
-L'arborescence en couches — `domain/`, `application/`, `infrastructure/` — est
-posée par BACK-04. Ne rien anticiper ici : le sens des dépendances (l'extérieur
-dépend du domaine, jamais l'inverse) se décide là-bas.
+Le détail de ce découpage — ce que chaque espace a le droit d'importer, et
+pourquoi — est l'objet de la section [Architecture](#architecture).
 
 ### `main.py`
 
@@ -83,12 +94,276 @@ Le module d'assemblage, et rien d'autre : aucune logique métier n'y a sa place.
   (BACK-12) en dépendront pour repartir d'une application propre à chaque cas.
 - **`app = create_app()`** est le point d'entrée ASGI, celui que désigne
   `uvicorn app.main:app`. Un serveur ASGI attend un objet, pas une fonction.
+- **`_MODULE_ROUTERS`** est la liste des routeurs montés. Un tuple plutôt
+  qu'une suite d'appels : la liste des contextes servis par l'API se lit d'un
+  coup d'œil, et chaque module reste maître de son préfixe. C'est le seul
+  endroit du service autorisé à connaître plusieurs modules à la fois.
 - **`lifespan`** est le point d'accroche des ressources de longue durée : pool
   PostgreSQL (BACK-05), client Redis (BACK-14), broker TaskIQ (BACK-15). Il pose
   la règle que toutes devront suivre : rien ne s'ouvre à l'import du module, tout
   passe par lui. Son seul occupant à ce jour est la validation de la
   configuration (BACK-03), qui précède par construction toute ouverture de
   ressource.
+
+## Architecture
+
+Hexagonale — ports et adaptateurs — **à l'intérieur de modules métier**, et non un domaine plat.
+Le découpage par couche seule finit par produire un `domain/entities/` où quarante entités
+s'empilent sans qu'aucune frontière ne dise laquelle répond à quelle question. Ici, c'est le
+**module** qui porte la frontière ; la couche ne décrit que le sens des dépendances.
+
+Les règles ci-dessous deviendront **mécaniques** avec les contrats import-linter de BACK-04b :
+une violation échouera en CI plutôt que de se découvrir six mois plus tard en revue de code. En
+attendant, [quatre sondes](#vérifier-que-les-règles-tiennent) en tiennent lieu.
+
+### Les trois espaces
+
+| Espace     | Ce qu'il porte                                                                           | Ce qu'il importe   |
+| ---------- | ---------------------------------------------------------------------------------------- | ------------------ |
+| `core/`    | réglages du **processus** : configuration (BACK-03), journalisation (BACK-11)            | rien du métier     |
+| `shared/`  | noyau **partagé** : racine des erreurs, ports techniques, socles de persistance et d'API | `core/`            |
+| `modules/` | les **contextes métier**, étanches les uns aux autres                                    | `core/`, `shared/` |
+
+La relation entre les deux derniers est à sens unique : `modules/` → `shared/` est autorisé,
+`shared/` → `modules/` ne l'est jamais. Un noyau partagé qui connaîtrait un contexte métier en
+connaîtrait bientôt un deuxième, et deviendrait le fourre-tout dont plus personne ne peut rien
+retirer.
+
+`core/` **reste en place** et n'a pas été fondu dans `shared/` : ce qu'il contient règle le
+processus, pas l'architecture.
+
+### Un module, trois couches
+
+| Couche            | Contient                                                | Connaît                                   |
+| ----------------- | ------------------------------------------------------- | ----------------------------------------- |
+| `domain/`         | entités, politiques, ports métier, exceptions           | la bibliothèque standard, `shared.domain` |
+| `application/`    | cas d'usage, un fichier par intention                   | `domain/`                                 |
+| `infrastructure/` | modèle SQLAlchemy et dépôt, schémas Pydantic et routeur | `domain/` et `application/`               |
+
+**Les dépendances pointent vers l'intérieur** : l'infrastructure dépend du domaine, jamais
+l'inverse. C'est la seule direction que l'architecture interdit, et elle se vérifie d'une ligne —
+aucun import de `fastapi`, `sqlalchemy` ou `pydantic` dans un `domain/`.
+
+Trois anti-patrons sont proscrits, tous nommés par le guide de référence : l'entité **anémique**
+(une dataclass sans méthode, dont les règles vivent ailleurs), la **session** de base injectée
+dans un cas d'usage, et l'`HTTPException` levée depuis le domaine — qui rendrait le même code
+inutilisable depuis une tâche de fond, où personne n'attend de code HTTP.
+
+### La règle des 3 modèles
+
+Chaque couche a **son** modèle, et le passage de l'un à l'autre s'écrit à la main.
+
+| Modèle                | Fichier                         | Technologie    | Rôle                                                            |
+| --------------------- | ------------------------------- | -------------- | --------------------------------------------------------------- |
+| Schéma d'API          | `infrastructure/api/schemas.py` | Pydantic       | valider l'entrée, mettre en forme la sortie, documenter OpenAPI |
+| Entité du domaine     | `domain/entities.py`            | dataclass      | les règles et l'état ; zéro dépendance technique                |
+| Modèle de persistance | `infrastructure/db/models.py`   | SQLAlchemy 2.0 | colonnes, types et contraintes                                  |
+
+Un `Account(**model.__dict__)` fonctionnerait aujourd'hui et casserait **en silence** au premier
+champ que le domaine nomme autrement que la base, en remplissant l'entité de valeurs par défaut.
+Le mapping explicite, lui, échoue chez Mypy et non en production ; il rend aussi visibles les
+conversions qui comptent — `str` en base, `AccountType` dans le domaine.
+
+### Le trajet, sur le module pilote
+
+`identity` est le module de référence posé par BACK-04, et le seul complet à ce stade. Une
+création de compte le traverse ainsi :
+
+| #   | Étape                                                                        | Fichier                                   |
+| --- | ---------------------------------------------------------------------------- | ----------------------------------------- |
+| 1   | `AccountCreate` valide le JSON reçu                                          | `infrastructure/api/schemas.py`           |
+| 2   | `.to_command()` en fait une `CreateAccountCommand`, sans vocabulaire HTTP    | `infrastructure/api/schemas.py`           |
+| 3   | `CreateAccount.execute()` normalise, contrôle l'unicité, appelle la fabrique | `application/use_cases/create_account.py` |
+| 4   | `Account.create()` applique les règles et attribue l'identifiant             | `domain/entities.py`                      |
+| 5   | `AccountRepository.add()` reçoit **l'entité**, jamais un modèle              | `domain/ports.py`                         |
+| 6   | `_to_model()` traduit l'entité en ligne de la table `accounts`               | `infrastructure/db/repositories.py`       |
+| 7   | `AccountRead.from_entity()` remonte l'entité en réponse JSON                 | `infrastructure/api/schemas.py`           |
+
+La commande de l'étape 2 n'est **pas** un quatrième modèle du compte : elle décrit une
+_intention_, pas un état persistant. C'est ce qui permet d'appeler le cas d'usage depuis une
+route, une tâche de fond ou une commande en ligne sans changer sa signature.
+
+Le cas d'usage ne reçoit qu'un **port**, jamais une session : celui-ci lui sera fourni par
+l'unité de travail à partir de BACK-06a, et la règle qui compte est déjà tenue aujourd'hui.
+
+Deux détails du trajet valent d'être signalés, parce qu'ils illustrent où se rangent les règles :
+
+- la **normalisation** de l'adresse et du téléphone est une politique du domaine
+  (`domain/policies.py`), appelée par la fabrique de l'entité. Elle n'est pas dans la route : un
+  second point d'entrée l'oublierait, et deux comptes naîtraient pour une seule personne ;
+- le choix des champs **exposés** se fait dans `AccountRead`, à la sortie. La minimisation des
+  données (BACK-26) se décide là, pas dans l'entité, qui doit rester complète pour le métier.
+
+### L'indépendance des modules
+
+Un module n'importe **jamais** l'intérieur d'un autre : ni son entité, ni son dépôt, ni son
+modèle de persistance, ni une jointure sur ses tables. Les échanges passent par les cas d'usage
+publics du module cible — c'est-à-dire par la surface qu'il a choisi d'exposer, et qu'il peut
+donc tenir dans le temps.
+
+L'arbitrage est déjà pris ailleurs sur le board : la liste d'administration des comptes
+particuliers (BACK-26) affiche un nombre d'animaux, et ce compteur vient du cas d'usage public de
+`medical_records` (BACK-30), jamais d'un `JOIN` sur ses tables.
+
+Une seule chose est partagée entre modules côté persistance : la `Base` déclarative. Ce n'est pas
+une entorse — les modules ne s'importent pas, mais ils écrivent dans la **même base**, donc dans
+le même registre de métadonnées. Deux `Base` distinctes donneraient deux jeux de métadonnées, et
+Alembic (BACK-07) n'en verrait qu'un à la fois.
+
+**Le piège à éviter** : ne pas calquer les modules sur les trois frontends.
+`frontend-professional`, `frontend-individual` et `frontend-admin` sont des canaux de livraison,
+pas des contextes métier — le cœur d'authentification (hachage, OTP, 2FA, session, révocation) y
+est identique, et serait triplé à l'identique. Le type de compte est une _propriété_ portée par
+`identity` ; c'est l'audience du jeton (BACK-10a) qui sépare les trois applications.
+
+### Les modules prévus
+
+| Module            | Question à laquelle il répond                   | Ticket  |
+| ----------------- | ----------------------------------------------- | ------- |
+| `identity`        | peux-tu prouver qui tu es                       | BACK-04 |
+| `organization`    | dans quelle structure travailles-tu, affecté où | BACK-16 |
+| `medical_records` | de quels animaux s'agit-il                      | BACK-19 |
+| `scheduling`      | quand, avec qui, pour quel acte                 | BACK-21 |
+| `notifications`   | qui prévenir, par quel canal                    | BACK-22 |
+| `profile`         | où habite ce particulier                        | BACK-32 |
+
+### Ce que la structure attend encore
+
+Les dossiers vides ne le sont pas par oubli : chacun porte une docstring qui dit ce qui vient s'y
+ranger, et quel ticket l'apporte.
+
+| Emplacement                        | Ce qui manque                                                       | Ticket                               |
+| ---------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| `shared/domain/ports/`             | `Cache`, `FileStorage`, `TokenService`, l'unité de travail          | BACK-14, BACK-13, BACK-10a, BACK-06a |
+| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                              |
+| `shared/infrastructure/db/`        | moteur, session, mixins, convention de nommage des contraintes      | BACK-05                              |
+| `shared/infrastructure/db/`        | dépôt générique, unité de travail, contexte de tenance              | BACK-06a, BACK-06b                   |
+| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11                     |
+| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                             |
+| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31            |
+| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                              |
+
+### Vérifier que les règles tiennent
+
+Même esprit que la sonde de [Mypy](#mypy) et celles de la
+[configuration](#vérifier-que-le-filet-tient). Depuis `backend/api/`.
+
+**La pureté du domaine.** Attendu : aucune sortie.
+
+```bash
+grep -rnE "^(from|import) (fastapi|sqlalchemy|pydantic|redis|boto3)" src/app/modules/*/domain src/app/shared/domain
+```
+
+**L'indépendance des modules.** Attendu : aucune sortie.
+
+```bash
+grep -rn "app\.modules\." src/app/modules/identity | grep -v "app\.modules\.identity"
+```
+
+**Le trajet complet des trois modèles.** Le dépôt en mémoire est défini _dans la sonde_ et non
+dans `src/` : les doublures de production appartiennent à BACK-06c.
+
+```bash
+uv run python - <<'PY'
+import asyncio
+from uuid import UUID
+
+from app.modules.identity.application.use_cases.create_account import CreateAccount
+from app.modules.identity.domain.entities import Account
+from app.modules.identity.domain.ports import AccountRepository
+from app.modules.identity.infrastructure.api.schemas import AccountCreate, AccountRead
+
+# Le depot du module reclame une session (BACK-05) : on emprunte ici sa seule
+# fonction de mapping, et on branche un depot en memoire jetable.
+from app.modules.identity.infrastructure.db.repositories import _to_model
+
+
+class InMemoryAccountRepository(AccountRepository):
+    def __init__(self) -> None:
+        self.accounts: dict[UUID, Account] = {}
+
+    async def get(self, account_id: UUID) -> Account:
+        return self.accounts[account_id]
+
+    async def find_by_email(self, email: str) -> Account | None:
+        return next((a for a in self.accounts.values() if a.email == email), None)
+
+    async def add(self, account: Account) -> None:
+        self.accounts[account.id] = account
+
+    async def save(self, account: Account) -> None:
+        self.accounts[account.id] = account
+
+
+async def walk_through() -> None:
+    payload = AccountCreate(
+        first_name=" Jean ",
+        last_name="Dupont",
+        email="  Jean@Exemple.FR ",
+        phone="06 12 34 56 78",
+        account_type="individual",
+    )
+    print("1. schema API (Pydantic)  :", payload)
+
+    command = payload.to_command()
+    print("2. commande (application) :", command)
+
+    account = await CreateAccount(InMemoryAccountRepository()).execute(command)
+    print("3. entite (domaine)       :", account)
+
+    model = _to_model(account)
+    print("4. modele (SQLAlchemy)    :", {c.name: getattr(model, c.name) for c in model.__table__.columns})
+
+    print("5. schema API (reponse)   :", AccountRead.from_entity(account))
+
+    account.verify_email()
+    account.suspend()
+    print("6. comportements          :", account.status, account.email_verified)
+    try:
+        account.suspend()
+    except Exception as error:
+        print("7. invariant tenu         :", type(error).__name__, error)
+
+
+asyncio.run(walk_through())
+PY
+```
+
+Attendu : l'adresse arrive ` Jean@Exemple.FR` et ressort `jean@exemple.fr`, le téléphone perd
+ses séparateurs, l'identifiant est attribué par le domaine avant tout aller-retour SQL, et la
+seconde suspension est refusée par l'entité elle-même — la preuve qu'elle n'est pas anémique.
+
+**L'application démarre et monte le routeur.**
+
+```bash
+uv run uvicorn app.main:app
+```
+
+Puis, dans un autre terminal :
+
+```bash
+curl -s http://localhost:8000/openapi.json | python3 -m json.tool
+```
+
+Attendu : `"paths": {}`. Le routeur d'`identity` est bien monté — il ne porte simplement encore
+aucune route, et `/docs` reste donc vide.
+
+### Écarts assumés avec le ticket BACK-04
+
+| Écart                                                              | Raison                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Le routeur d'`identity` est monté mais ne porte aucune route       | Une route de création a besoin d'une session (BACK-05) et d'une unité de travail (BACK-06a). L'exposer aujourd'hui supposerait de brancher un dépôt factice dans le code de production. Les routes viennent en BACK-28 et BACK-29. |
+| `Base` déclarée ici, mais nue                                      | Le ticket la nomme dans sa portée, et le module pilote en a besoin pour déclarer sa table. La convention de nommage des contraintes, les mixins, le moteur et la session restent à BACK-05.                                        |
+| Le cas d'usage reçoit un dépôt et non une unité de travail         | L'unité de travail est livrée par BACK-06a. Le contrat qui compte est déjà tenu : ce qui entre dans un cas d'usage est un **port**, jamais une session.                                                                            |
+| `create_account` recouvre partiellement BACK-28                    | C'est le seul trajet d'**écriture** démontrable aujourd'hui, et le critère d'acceptation demande le sens schéma → entité → modèle. BACK-28 le reprendra en `register_individual`, avec mot de passe, OTP et non-divulgation.       |
+| `shared/domain/exceptions.py` réduit à `DomainError`               | La hiérarchie intermédiaire et les codes namespacés sont la portée de BACK-09. Les exceptions d'`identity` héritent donc de la racine en attendant d'être reparentées.                                                             |
+| `shared/domain/ports/` ne contient qu'une docstring                | `Cache`, `FileStorage` et `TokenService` appartiennent à BACK-14, BACK-13 et BACK-10a. Le paquet existe pour fixer leur place, pas pour les anticiper.                                                                             |
+| `identity/unit_of_work.py` réduit à une docstring                  | Le fichier est nommé par la portée du ticket, son contenu est celui de BACK-06a. Il fixe la place — à la racine du module, pas dans une couche.                                                                                    |
+| `domain/entities.py` plat, et non un dossier `domain/entities/`    | Le guide de référence montre un dossier ; c'est le ticket lui-même qui l'écarte, et pour une bonne raison — un dossier d'entités partagé est exactement le domaine plat qu'il s'agit d'éviter.                                     |
+| `str` et non `EmailStr` pour l'adresse                             | `EmailStr` dépend d'`email-validator`, qui n'est pas une dépendance déclarée du projet. La validation de forme relève de BACK-28, l'unicité insensible à la casse d'INFRA-09.                                                      |
+| Type et statut stockés en `String` et non en enum natif            | Ajouter une valeur à un enum PostgreSQL exige une migration, et le mapping explicite vers `AccountType` devient visible plutôt que magique — ce que la règle des 3 modèles demande précisément de montrer.                         |
+| Le contrôle automatique de la checklist historique n'est pas livré | Il est **extrait dans BACK-04b** (contrats import-linter, câblés en CI par QA-01). Les quatre sondes ci-dessus en tiennent lieu en attendant.                                                                                      |
+| Aucun test automatisé, mais des sondes documentées                 | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02 et BACK-03.                                                                                                                           |
 
 ## Configuration
 
@@ -385,13 +660,15 @@ barrières répondent.
 
 | Sujet                                   | Ticket   |
 | --------------------------------------- | -------- |
-| Structure hexagonale des dossiers       | BACK-04  |
 | Moteur SQLAlchemy et session asynchrone | BACK-05  |
+| Unité de travail et dépôt générique     | BACK-06a |
+| Traduction des erreurs métier en HTTP   | BACK-09  |
 | Sonde de santé et métadonnées OpenAPI   | BACK-08  |
 | Suite de tests                          | BACK-12  |
+| Contrats import-linter                  | BACK-04b |
 | `Dockerfile` et `.dockerignore`         | INFRA-04 |
 | Intégration continue                    | QA-01    |
 
-Ruff et Mypy sont désormais configurés (BACK-02). Les dépendances de test, elles,
-restent **déclarées sans être configurées** : c'est volontaire, chaque ticket
-porte son propre outil.
+La structure modulaire et hexagonale est posée (BACK-04), Ruff et Mypy sont
+configurés (BACK-02). Les dépendances de test, elles, restent **déclarées sans
+être configurées** : c'est volontaire, chaque ticket porte son propre outil.

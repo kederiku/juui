@@ -6,8 +6,13 @@ trouve ne doit connaitre le domaine, et le domaine ne doit rien y importer d'aut
 que des reglages.
 
 A ne pas confondre avec les trois couches de l'architecture hexagonale --
-`domain/`, `application/`, `infrastructure/` -- que posera BACK-04 : celles-ci
+`domain/`, `application/`, `infrastructure/`, posees par BACK-04 : celles-ci
 decrivent le sens des dependances, `core/` n'est qu'un socle technique.
+
+A ne pas confondre non plus avec `app.shared`, qui porte le noyau partage par
+les modules metier -- racine des erreurs, ports techniques, socles de
+persistance et d'API. BACK-04 laisse `core/` en place a dessein : ce qu'il
+contient regle le PROCESSUS, pas l'architecture.
 """
 
 from app.core.config import (
