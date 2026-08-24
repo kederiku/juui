@@ -182,14 +182,14 @@ pnpm --filter frontend-individual run dev
 
 ### La pile complète, avec Docker
 
-> **Note.** Cette séquence n'est **pas encore opérationnelle**.
-> [`docker/docker-compose.yml`](docker/docker-compose.yml) existe depuis
-> INFRA-01 et porte aujourd'hui `postgres`, `pgadmin`, `redis`, `redisinsight`,
-> `minio` et `minio-init` ; le `Makefile` de la racine, lui, n'existe pas —
-> `make up` répondrait `No rule to make target 'up'`. La séquence figure ici
-> parce qu'elle est le contrat que les tickets d'infrastructure doivent
-> honorer : INFRA-04 et INFRA-05 s'ajoutent au même fichier compose, INFRA-06
-> pose le Makefile qui l'enveloppe. À relire une fois INFRA-06 livré.
+> **Note.** Cette séquence n'est **pas encore complète**.
+> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte depuis INFRA-04
+> `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`, `minio-init` et
+> `api` : le service d'API démarre donc réellement en conteneur. Manquent les
+> trois frontends (INFRA-05a et INFRA-05b), le service `worker` (INFRA-05b) et
+> le `Makefile` de la racine (INFRA-06) — `make up` répondrait aujourd'hui
+> `No rule to make target 'up'`. La commande compose complète, elle, fonctionne :
+> elle est juste en dessous. À relire une fois INFRA-06 livré.
 
 Une fois la pile conteneurisée en place, l'installation se réduira à trois
 commandes :
@@ -307,6 +307,121 @@ Les identifiants ne sont pas recopiés ici, seulement nommés : leurs valeurs so
 celles du `.env`, dont [`.env.example`](.env.example) porte les exemples de
 développement. Une seule source de vérité — un mot de passe écrit à deux
 endroits finit toujours par diverger.
+
+### L'image du service d'API
+
+Le service `api` est le premier de la pile à se **construire depuis le dépôt** :
+les cinq autres tirent une image publique. Son Dockerfile vit dans
+[`docker/api/`](docker/api/Dockerfile) et expose trois cibles utiles :
+
+| Cible    | Ce qu'elle fait                                                                         | Qui l'utilise                        |
+| -------- | --------------------------------------------------------------------------------------- | ------------------------------------ |
+| `prod`   | uvicorn sans rechargement, `WEB_CONCURRENCY` processus, dépendances applicatives seules | le service `api` du compose          |
+| `dev`    | `uvicorn --reload`, groupe `dev` installé (Ruff, Mypy, Pytest), installation éditable   | INFRA-05b, via le fichier d'override |
+| `worker` | même image que `prod`, commande `taskiq worker`                                         | INFRA-05b, service `worker`          |
+
+`docker compose up` construit la cible `prod`. Pour construire une cible à la
+main, hors compose :
+
+```bash
+docker build --target dev --build-context scripts=docker/api -t juui-api:dev -f docker/api/Dockerfile backend/api
+```
+
+Le `--build-context` n'est pas décoratif. Le contexte de build est
+`backend/api` — c'est ce qui rend
+[`backend/api/.dockerignore`](backend/api/.dockerignore) effectif et ce qui évite
+d'envoyer `node_modules` au démon — mais `entrypoint.sh` vit dans `docker/api/`,
+donc **hors** de ce contexte. Ce drapeau l'y raccroche ; le fichier compose fait
+la même chose avec sa clé `additional_contexts`. Sans lui, le build échoue sur un
+`COPY --from=scripts` qui ne trouve rien.
+
+#### Ce que fait l'entrypoint
+
+[`docker/api/entrypoint.sh`](docker/api/entrypoint.sh) s'exécute avant la
+commande du conteneur, dans les trois cibles :
+
+1. **il attend PostgreSQL** — une vraie connexion `asyncpg`, pas un test de port
+   ouvert : pendant son initialisation, le serveur écoute déjà sans accepter
+   personne ;
+2. **il applique les migrations**, `alembic upgrade head` — sautées avec un
+   message tant qu'`alembic.ini` n'existe pas, ce qui reste le cas jusqu'à
+   BACK-05 ;
+3. **il `exec` la commande**, qui hérite du PID 1 et reçoit donc le `SIGTERM` de
+   `docker stop`.
+
+Ces trois étapes se lisent dans le journal du service :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml logs api
+```
+
+```
+INFRA-04 : PostgreSQL joignable sur postgres:5432 (tentative 1).
+INFRA-04 : alembic.ini absent, migrations non configurees (BACK-05) -- etape sautee.
+INFRA-04 : demarrage de -- uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
+```
+
+L'API répond alors sur <http://localhost:8000/docs>. La sonde du service vise
+`/openapi.json` et non `/health/live` : cette dernière relève de BACK-08 et
+n'existe pas encore.
+
+#### L'IP réelle du client
+
+Un conteneur ne voit **jamais** l'IP réelle de celui qui l'appelle : les requêtes
+publiées par Docker lui arrivent avec celle de la passerelle — `192.168.65.1`
+sous Docker Desktop. Se donner l'occasion de le constater :
+
+```bash
+curl -s -o /dev/null http://localhost:8000/openapi.json
+docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
+```
+
+`--proxy-headers` seul n'y change rien : uvicorn ne substitue l'adresse annoncée
+par l'en-tête `X-Forwarded-For` que si le pair qui l'envoie figure dans
+`FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement, et
+la valeur par défaut ne fait confiance qu'à `127.0.0.1` : la passerelle continue
+donc de s'afficher, et c'est le comportement attendu. Le mécanisme se vérifie en
+élargissant temporairement la confiance :
+
+```bash
+FORWARDED_ALLOW_IPS='*' docker compose --project-directory . -f docker/docker-compose.yml up -d api
+curl -s -o /dev/null -H 'X-Forwarded-For: 203.0.113.7' http://localhost:8000/openapi.json
+docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
+# INFO:     203.0.113.7:0 - "GET /openapi.json HTTP/1.1" 200 OK
+```
+
+Remettre ensuite la valeur du `.env` — `*` ferait confiance à n'importe quel
+client, qui n'aurait plus qu'à s'annoncer sous l'IP de son choix. C'est en
+production, derrière un proxy qui pose réellement l'en-tête, que la variable
+compte : sans l'adresse de ce proxy, toutes les requêtes semblent venir de lui et
+la limitation de renvoi d'OTP par IP (BACK-17) devient **globale**.
+
+#### Taille de l'image
+
+Le critère d'acceptation demande moins de 400 Mo. Trois chiffres différents
+circulent, et il vaut mieux savoir lequel on lit :
+
+```bash
+docker image ls --tree juui-api
+```
+
+| Mesure                           | Valeur       | Ce que c'est                                                                     |
+| -------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| `CONTENT SIZE`                   | **≈ 91 Mo**  | ce qui transite vers un registre, couches compressées                            |
+| somme des couches décompressées  | **≈ 310 Mo** | l'« image size » d'avant Docker 25, et la mesure usuelle                         |
+| `DISK USAGE` (`docker image ls`) | ≈ 402 Mo     | sous le magasin containerd : les blobs compressés **et** leur copie décompressée |
+
+Le service tient donc largement sous la barre ; c'est `DISK USAGE` qui compte
+deux fois la même chose. La taille réellement occupée dans le conteneur se
+mesure sans ambiguïté :
+
+```bash
+docker run --rm --entrypoint sh juui-api:prod -c 'du -sm /'   # -> 293
+```
+
+Le virtualenv en représente 144 Mo, dont 30 pour `botocore` et 32 pour les `.pyc`
+précompilés à l'installation (`UV_COMPILE_BYTECODE=1`, qui échange ces 32 Mo
+contre un démarrage plus rapide).
 
 ### Vérifier le stockage objet
 
@@ -434,6 +549,27 @@ partagées](#configurations-partagées).
 | Script versionné dans `docker/minio/` plutôt qu'`entrypoint` inline | Le ticket place l'amorçage dans `docker/minio/`, et c'est le raisonnement du `redis.conf` d'INFRA-02 : l'essentiel de ces trois commandes tient dans leurs raisons, qu'un fichier peut porter.                                                                                                                                                                                            |
 | Ports publiés sur toutes les interfaces                             | Contrairement à Redis et RedisInsight, MinIO réclame des identifiants et sa console a une page de connexion. La règle du dépôt tient en une phrase : service sans authentification → boucle locale.                                                                                                                                                                                       |
 | Correction de ce que SETUP-05 disait des identifiants racine        | Le README et `.env.example` affirmaient que MinIO, comme PostgreSQL, ne les lit qu'à la première création de son volume. Vérifié : ils sont relus à **chaque** démarrage, les anciens sont refusés aussitôt et les données restent. Le vrai piège est ailleurs — les clés d'accès créées sous l'ancien compte racine deviennent inaccessibles.                                            |
+
+### Écarts assumés avec le ticket INFRA-04
+
+| Écart                                                                                        | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Service `api` déclaré dans le fichier compose                                                | La PORTÉE du ticket ne cite que trois fichiers, mais **aucun ticket** ne revendique ce service : celle d'INFRA-05b ne liste que les trois frontends et le `worker`. Sans lui, `docker compose up` construirait une image que rien ne lance, et les critères d'acceptation ne se vérifieraient qu'à la main.                                                                                                                                                                     |
+| Contexte de build `backend/api`, entrypoint par contexte **additionnel**                     | Le ticket place le `.dockerignore` dans `backend/api/`, ce qui impose ce contexte — Docker ne lit que `<contexte>/.dockerignore`. `entrypoint.sh` est donc hors contexte, d'où la clé `additional_contexts` du compose et le `--build-context` d'un build à la main. Prendre la racine pour contexte enverrait `node_modules` au démon ; monter l'entrypoint en volume, comme le `redis.conf` d'INFRA-02, rendrait l'image non autonome, or QA-03 la publiera dans un registre. |
+| `!README.md` dans le `.dockerignore`                                                         | Le ticket demande d'exclure `*.md`. `pyproject.toml` déclare `readme = "README.md"`, que le backend de build `uv_build` lit pour composer les métadonnées : sans le fichier, `uv sync` échoue au moment d'installer le projet.                                                                                                                                                                                                                                                  |
+| `.env` exclu en plus de la liste du ticket                                                   | La ligne la plus importante du fichier, et elle n'y figurait pas. `backend/api/.env` existe sur tout poste ; embarqué dans l'image, il serait **lu** par la cible `dev`, dont le `_ENV_FILE` de BACK-03 pointe sur `/app/.env`.                                                                                                                                                                                                                                                 |
+| Virtualenv dans `/opt/venv`, pas dans `/app/.venv`                                           | La cible `dev` tourne avec le code monté sur `/app` (INFRA-05b) : un `.venv` resté là serait **masqué** par le montage, et le conteneur démarrerait sur un environnement vide — un `ModuleNotFoundError: fastapi` sans rapport visible avec sa cause.                                                                                                                                                                                                                           |
+| Un étage `runtime` de plus, et `prod` écrit en **dernier**                                   | Le ticket décrit `builder` + `runtime`. `prod` et `worker` ne différant que par leur `CMD`, l'étage commun leur évite d'être écrits deux fois. Et Docker construit le dernier étage quand aucun `--target` n'est passé : mettre `worker` là ferait produire l'image du worker à un `docker build` nu, en silence.                                                                                                                                                               |
+| `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` plutôt que `--workers` et `--forwarded-allow-ips` | Une forme `exec` de `CMD` n'interpole aucune variable ; passer par des arguments imposerait d'envelopper la commande dans un `sh -c`. uvicorn lit lui-même ces deux variables (`uvicorn/config.py`, lignes 352 et 357) : s'appuyer dessus évite ce détour et une seconde source de vérité à côté du `.env`.                                                                                                                                                                     |
+| Ce que `--proxy-headers` change réellement                                                   | Le ticket présente le drapeau comme le correctif du problème d'IP. Vérifié : il ne fait rien tout seul. Un conteneur voit toujours l'IP de la passerelle (`192.168.65.1` sous Docker Desktop) ; uvicorn ne la remplace que si un intermédiaire pose un `X-Forwarded-For` **et** que cet intermédiaire figure dans `FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement : le réglage ne compte qu'en production, et `*` y serait une faille.            |
+| Sonde sur `/openapi.json`, et dans le compose plutôt que dans l'image                        | `/health/live` relève de BACK-08 et n'existe pas : la viser laisserait le service indéfiniment `unhealthy` et bloquerait les `depends_on` d'INFRA-05b. Quant à l'emplacement, le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. À basculer sur `/health/live` à BACK-08.                                                                                                                                                                              |
+| Sonde écrite en `python -c`, pas en `curl` ni `wget`                                         | `python:3.14-slim` n'embarque ni l'un ni l'autre, et en installer un contredirait le « runtime minimal » du ticket. `urlopen` lève sur tout code hors 2xx, l'appel se suffit donc à lui-même. `127.0.0.1` et non `localhost`, même piège IPv6 qu'en INFRA-02 et INFRA-03.                                                                                                                                                                                                       |
+| Migrations **sautées** tant qu'`alembic.ini` est absent                                      | Le ticket veut `alembic upgrade head` dans l'entrypoint ; `alembic.ini` arrive avec BACK-05 et les premières migrations avec BACK-07. La garde de présence permet d'écrire l'étape maintenant sans casser le démarrage, et elle s'activera d'elle-même sans qu'on revienne sur le fichier.                                                                                                                                                                                      |
+| Attente de PostgreSQL en `asyncpg`, pas en `pg_isready`                                      | `pg_isready` demanderait `postgresql-client` dans une image que le ticket veut minimale, pour une commande utilisée une fois. Un simple test TCP ne suffit pas non plus : c'est la leçon déjà inscrite dans le healthcheck `postgres` d'INFRA-01. `asyncpg` est déjà dans le virtualenv.                                                                                                                                                                                        |
+| La cible `worker` se construit mais ne s'arrête pas si on la lance                           | Vérifié, et contre-intuitif : sans le module de broker de BACK-15, le gestionnaire de processus de taskiq relance ses workers morts **en boucle**. Le conteneur reste `running` et paraît sain, alors qu'il ne consomme aucune tâche. Seuls les journaux le disent. À savoir pour INFRA-05b.                                                                                                                                                                                    |
+| `python:3.14-slim-trixie`, distribution nommée                                               | Le `-slim` nu suivrait une bascule de Debian en amont : la libc et les paquets système de l'image changeraient d'un `docker build` à l'autre sans qu'une ligne du dépôt ait bougé. Même esprit que les tags épinglés d'INFRA-01 à INFRA-03.                                                                                                                                                                                                                                     |
+| Deux variables du compose avec une valeur de repli `${VAR:-…}`                               | `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` naissent avec ce ticket : tout `.env` créé avant lui les ignore. Sans repli, la première donnerait un `int('')` et un conteneur en boucle de redémarrage, la seconde ne ferait plus confiance à personne — en silence. Les cinq autres services s'en passent, leurs variables étant documentées depuis SETUP-05.                                                                                                                     |
+| « Moins de 400 Mo » : préciser la mesure                                                     | `docker image ls` affiche 402 Mo, mais c'est le `DISK USAGE` du magasin containerd, qui compte les blobs compressés **et** leur copie décompressée. Les mesures qui décrivent l'image valent 91 Mo compressés et ≈ 310 Mo décompressés, pour 293 Mo réellement occupés dans le conteneur. Le détail et les commandes sont plus haut.                                                                                                                                            |
 
 ## Conventions
 

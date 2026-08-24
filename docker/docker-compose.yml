@@ -425,6 +425,158 @@ services:
 
     networks: [app_network]
 
+  # ---------------------------------------------------------------------------
+  # api -- service d'API FastAPI (INFRA-04, consomme par INFRA-05b et QA-03)
+  # ---------------------------------------------------------------------------
+  # Premier service APPLICATIF de la pile : les cinq precedents sont des briques
+  # d'infrastructure tirees d'images publiques, celui-ci se construit depuis le
+  # depot.
+  #
+  # OU EST DECLAREE CETTE IMAGE
+  # docker/api/Dockerfile, dont l'en-tete explique pourquoi il ne vit pas dans
+  # backend/api/ et pourquoi son entrypoint arrive par un contexte additionnel.
+  api:
+    build:
+      # LE CONTEXTE EST backend/api, ET NON LA RACINE. C'est ce qui rend
+      # backend/api/.dockerignore effectif -- Docker ne lit qu'un seul fichier
+      # d'exclusion, celui de la racine du contexte -- et ce qui evite d'envoyer
+      # node_modules au demon.
+      #
+      # Chemin relatif a la RACINE et non a docker/ : meme mise en garde qu'en
+      # tete de fichier. `docker compose config` imprime le chemin absolu
+      # finalement retenu, c'est la verification a faire apres toute
+      # modification de ce bloc.
+      context: ./backend/api
+
+      # Resolu, lui, relativement au CONTEXTE ci-dessus et non au repertoire de
+      # projet : d'ou les deux `..` qui ramenent a la racine. Un Dockerfile hors
+      # contexte est parfaitement admis par BuildKit.
+      dockerfile: ../../docker/api/Dockerfile
+
+      # Image servie, sans rechargement a chaud. INFRA-05b basculera sur `dev`
+      # depuis docker-compose.override.yml.
+      target: prod
+
+      # CONTEXTE ADDITIONNEL. entrypoint.sh vit dans docker/api/, donc hors du
+      # contexte de build : sans cette ligne, le `COPY --from=scripts` du
+      # Dockerfile n'aurait rien a copier. Un build lance a la main doit passer
+      # l'equivalent, `--build-context scripts=docker/api`.
+      additional_contexts:
+        scripts: ./docker/api
+
+    environment:
+      # L'API lit sa configuration par ces variables et par elles seules
+      # (BACK-03) : le .env de backend/api n'est ni copie dans l'image ni monte
+      # ici, et le .dockerignore l'exclut explicitement.
+      #
+      # POURQUOI UNE LISTE EXPLICITE PLUTOT QU'UN `env_file`
+      # BACK-03 filtre les variables du PROCESSUS sur les champs declares : le
+      # conteneur supporterait donc sans broncher le .env complet de la racine.
+      # La liste est malgre tout ecrite a la main, pour trois raisons -- c'est le
+      # style des cinq services ci-dessus ; l'interpolation `${...}` suit
+      # `--project-directory` sans ambiguite, la ou un chemin `env_file`
+      # demanderait une verification de plus ; et PGADMIN_DEFAULT_PASSWORD n'a
+      # rien a faire dans l'environnement de l'API.
+
+      # --- Application (BACK-03, BACK-11) ---
+      ENVIRONMENT: ${ENVIRONMENT}
+      LOG_LEVEL: ${LOG_LEVEL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+
+      # --- PostgreSQL (BACK-05) ---
+      # POSTGRES_HOST vaut `postgres` et POSTGRES_PORT le port INTERNE : depuis
+      # app_network, on ne passe jamais par les ports publies sur le poste.
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+
+      # --- Redis (BACK-14, BACK-15) ---
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_CACHE_DB: ${REDIS_CACHE_DB}
+      REDIS_BROKER_DB: ${REDIS_BROKER_DB}
+
+      # --- Stockage objet (BACK-13) ---
+      # MINIO_ROOT_USER et MINIO_ROOT_PASSWORD sont passes en tant qu'ALIAS DE
+      # REPLI de S3_ACCESS_KEY et S3_SECRET_KEY : BACK-03 les declare en
+      # AliasChoices, ce qui evite d'ecrire deux fois la meme valeur dans le
+      # .env. Les activer explicitement cote .env les ferait passer devant.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+      # --- Jetons (BACK-10) ---
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      JWT_ALGORITHM: ${JWT_ALGORITHM}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+
+      # --- Serveur uvicorn (INFRA-04) ---
+      # Les deux SEULES variables du fichier a porter une valeur de repli, et
+      # c'est deliberé : elles naissent avec ce ticket, donc tout .env cree
+      # avant lui les ignore. Sans repli, `WEB_CONCURRENCY` vide donnerait un
+      # `int('')` et un conteneur en boucle de redemarrage, et
+      # `FORWARDED_ALLOW_IPS` vide ne ferait plus confiance a personne -- en
+      # silence. Les valeurs ci-dessous sont celles de .env.example.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+
+    ports:
+      # Le conteneur ecoute sur 8000 quoi qu'il arrive -- c'est ecrit dans le
+      # CMD de l'image, pas dans une variable. Seul le port publie se regle.
+      - '${API_HOST_PORT}:8000'
+
+    depends_on:
+      # Dependances VITALES, et non decoratives comme celle de pgadmin :
+      # l'entrypoint attend PostgreSQL avant de lancer quoi que ce soit, et le
+      # `service_healthy` evite qu'il commence a compter ses trente tentatives
+      # pendant l'initialisation du cluster.
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # A AJOUTER EN BACK-13, quand l'API touchera reellement au bucket :
+      #   minio-init:
+      #     condition: service_completed_successfully
+      # L'ajouter des maintenant retarderait le demarrage sans rien garantir de
+      # plus -- aucun code ne parle encore a MinIO.
+
+    healthcheck:
+      # SONDE PROVISOIRE. Le ticket vise `/health/live`, qui releve de BACK-08 et
+      # n'existe pas encore : la poser aujourd'hui laisserait le service
+      # indefiniment `unhealthy`, et bloquerait les `depends_on` d'INFRA-05b.
+      # `/openapi.json` repond 200 des a present et disparaitra rarement. A
+      # BASCULER SUR /health/live A BACK-08.
+      #
+      # En python plutot qu'en curl ou wget : l'image `python:3.14-slim` n'en
+      # embarque aucun des deux, et en ajouter un contredirait le « runtime
+      # minimal » du ticket. urlopen leve sur tout code hors 2xx, l'appel se
+      # suffit donc a lui-meme.
+      #
+      # `127.0.0.1` et non `localhost`, comme pour redisinsight et minio : le
+      # resolveur du conteneur tente l'IPv6 en premier, or uvicorn n'ecoute
+      # qu'en IPv4 (--host 0.0.0.0).
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      # Couvre l'attente de PostgreSQL et les migrations de l'entrypoint, qui
+      # precedent le premier octet servi.
+      start_period: 30s
+      retries: 5
+
+    networks: [app_network]
+    restart: unless-stopped
+
 # -----------------------------------------------------------------------------
 # Fichiers de configuration injectes dans les conteneurs
 # -----------------------------------------------------------------------------
