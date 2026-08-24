@@ -1,0 +1,19 @@
+"""Socle HTTP partage : ce que toute route recoit sans avoir a le demander.
+
+Paquet volontairement vide a ce stade. Il est cree par BACK-04 pour fixer la
+place de ces briques -- au NIVEAU DU NOYAU et non dans un module : un handler
+d'erreur ou un identifiant de requete qui vivraient dans `identity` obligeraient
+tous les autres modules a en dependre.
+
+CE QUE CHAQUE TICKET APPORTE ICI
+
+| Fichier                    | Contenu                                        | Ticket  |
+| -------------------------- | ---------------------------------------------- | ------- |
+| `error_handlers.py`        | traduction `DomainError` -> reponse HTTP       | BACK-09 |
+| `schemas/error.py`         | format unique { code, message, details, ... }  | BACK-09 |
+| `middlewares.py`           | CORS, journalisation, identifiant de requete   | BACK-11 |
+| `dependencies/audit.py`    | tracage des acces aux donnees personnelles     | BACK-27 |
+
+Le contexte de tenance, lui, est pose par la dependance d'authentification
+(BACK-10c) dans la contextvar de BACK-06b : il se lit cote persistance, pas ici.
+"""

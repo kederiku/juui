@@ -1,6 +1,14 @@
 """Paquet racine du service d'API Juui.
 
-A ce stade (BACK-01) il ne contient que `main`, le module d'assemblage de
-l'application. Les couches domain/, application/ et infrastructure/ de
-l'architecture hexagonale viendront s'y ajouter avec BACK-04.
+Trois espaces s'y partagent le code, et la distinction compte :
+
+- `core/`    -- reglages du PROCESSUS : configuration (BACK-03), puis
+               journalisation (BACK-11). Ni domaine, ni infrastructure.
+- `shared/`  -- noyau partage par les modules metier : racine des erreurs, ports
+               techniques, socles de persistance et d'API.
+- `modules/` -- les contextes metier, etanches les uns aux autres, chacun
+               portant ses trois couches hexagonales.
+
+Plus `main.py`, seul fichier autorise a connaitre plusieurs modules a la fois :
+c'est lui qui assemble leurs routeurs.
 """
