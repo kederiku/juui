@@ -16,6 +16,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.core import get_settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -27,12 +29,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     rangent ensuite dans `app.state`, d'ou les dependances FastAPI les
     recuperent via `request.app.state`.
 
-    Le point d'accroche est pose des maintenant, vide, parce qu'il fixe une
-    contrainte que le reste du code devra respecter : aucune connexion ne
-    s'ouvre a l'import du module, tout passe par ici. Ce qui precede le `yield`
-    s'execute au demarrage, ce qui le suit a l'arret -- et l'ordre de fermeture
-    est l'inverse exact de l'ordre d'ouverture.
+    Le point d'accroche fixe une contrainte que le reste du code doit respecter :
+    aucune connexion ne s'ouvre a l'import du module, tout passe par ici. Ce qui
+    precede le `yield` s'execute au demarrage, ce qui le suit a l'arret -- et
+    l'ordre de fermeture est l'inverse exact de l'ordre d'ouverture.
     """
+    # Premier occupant du point d'accroche : la configuration (BACK-03) se valide
+    # AVANT que la moindre ressource ne s'ouvre. Une variable obligatoire absente
+    # doit arreter le processus ici, avec le nom de la variable, et non produire
+    # une panne au premier appel HTTP.
+    #
+    # Ici et non dans `create_app()` : ce module doit rester importable sans
+    # effet de bord, et un `import app.main` -- ce que font Mypy et les futurs
+    # exports d'OpenAPI -- ne doit pas exiger un fichier .env.
+    get_settings()
+
     yield
 
 
