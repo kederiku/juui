@@ -1,0 +1,99 @@
+# Ce qui NE PART PAS dans le contexte de build des images de frontend (INFRA-05a).
+#
+# POURQUOI CE FICHIER EST A LA RACINE, ET POURQUOI IL EST NECESSAIRE
+# Docker ne lit qu'un seul fichier d'exclusion, `<contexte>/.dockerignore`. Le
+# contexte de build des trois frontends EST la racine du depot : un build Next.js
+# en monorepo pnpm a besoin du pnpm-lock.yaml, du pnpm-workspace.yaml, du
+# package.json racine, des trois frontend/* et de tout packages/*. Aucun
+# sous-dossier ne les contient tous.
+#
+# C'est ce qui distingue ce fichier de backend/api/.dockerignore, dont le
+# contexte est backend/api : les deux coexistent sans se marcher dessus, chacun
+# ne valant que pour les builds dont il est a la racine du contexte.
+#
+# Deux effets, pas un seul : ce qui est exclu ici n'est ni envoye au demon Docker
+# (donc un build plus rapide), ni visible du `COPY . .` de l'etage `deps` (donc
+# une image plus petite et sans secret).
+#
+# Les motifs sont relatifs a la racine du contexte. `**/` prefixe un motif qui
+# doit valoir a n'importe quelle profondeur -- un `node_modules/` nu ne
+# designerait que celui de la racine, et le depot en a un par workspace.
+
+# --- Dependances installees ---
+# Construites pour macOS ou pour l'hote, jamais utilisables dans l'image, et de
+# tres loin le plus gros poste du contexte. L'image fabrique les siennes, a
+# l'etage `deps`.
+node_modules/
+**/node_modules/
+
+# --- Artefacts de build Node ---
+# `.next/` existe sur tout poste qui a lance `pnpm dev` ou `pnpm build`. Le
+# laisser entrer ferait pire que grossir le contexte : `next build` reprendrait
+# un cache fabrique sur un autre systeme de fichiers, avec des chemins absolus
+# de l'hote.
+.next/
+**/.next/
+out/
+**/out/
+dist/
+**/dist/
+.turbo/
+**/.turbo/
+coverage/
+**/coverage/
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# --- Volet Python (backend/api) ---
+# L'API a sa propre image et son propre contexte (INFRA-04). Rien de ce dossier
+# n'entre dans le build d'un frontend.
+backend/
+
+# --- Documentation ---
+# Le site Docusaurus (DOC-01) est un workspace pnpm, donc son package.json et ses
+# sources restent necessaires a `pnpm install --frozen-lockfile` : seuls son
+# cache et son site genere sont exclus.
+documentation/.docusaurus/
+documentation/build/
+
+# --- Metadonnees git et hooks ---
+# Le `prepare: husky` du package.json racine tourne a chaque `pnpm install`.
+# Sans .git il n'a rien a faire -- c'est aussi ce que garantit le HUSKY=0 du
+# Dockerfile -- et les hooks du poste n'ont aucun sens dans une image.
+.git/
+.gitignore
+.gitattributes
+.husky/
+
+# --- SECRETS ---
+# LA SECTION LA PLUS IMPORTANTE DU FICHIER.
+#
+# `.env` de la racine : il porte les identifiants de toute la pile de
+# developpement. Il n'a rien a faire dans une image de frontend.
+#
+# `frontend/*/.env.local` : plus insidieux. Next.js CHARGE ce fichier au build
+# comme a l'execution, et il est PRIORITAIRE sur l'environnement du processus.
+# Embarque dans l'image, il ecraserait en silence les `build.args` que INFRA-05b
+# passe au service -- l'application se construirait en pointant sur le
+# localhost du poste qui a lance le build.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# --- Caches d'outillage ---
+.ruff_cache/
+.mypy_cache/
+.eslintcache
+
+# --- Editeurs et systeme ---
+.idea/
+.vscode/
+.DS_Store
+**/.DS_Store
+
+# --- Documentation Markdown ---
+# Aucun `readme = ...` ne la reclame cote Node -- contrairement au pyproject.toml
+# de l'API, qui obligeait son .dockerignore a reintroduire README.md.
+*.md
+**/*.md
