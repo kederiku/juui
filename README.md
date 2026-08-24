@@ -37,11 +37,11 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 Une partie seulement de la pile démarre aujourd'hui : le service d'API, depuis
 les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis et le
-stockage objet MinIO, et depuis FRONT-01 et FRONT-02 les interfaces
-professionnelle et grand public. Le back-office arrive avec FRONT-03.
-Cette section décrit donc **deux parcours** — celui qui fonctionne maintenant,
-puis la cible conteneurisée — et l'allocation de ports que cette cible devra
-respecter.
+stockage objet MinIO, et depuis FRONT-01 à FRONT-03 les trois interfaces —
+professionnelle, grand public et back-office. La documentation arrive avec
+DOC-01. Cette section décrit donc **deux parcours** — celui qui fonctionne
+maintenant, puis la cible conteneurisée — et l'allocation de ports que cette
+cible devra respecter.
 
 ### Prérequis
 
@@ -164,10 +164,11 @@ pnpm dev
 ```
 
 La commande démarre en parallèle les serveurs de développement de tout le
-dépôt : l'interface professionnelle répond sur <http://localhost:3001> et celle
-des particuliers sur <http://localhost:3002>. Le back-office et la documentation
-s'y ajouteront avec FRONT-03 et DOC-01, chacun sur le port du tableau
-ci-dessous.
+dépôt : l'interface professionnelle répond sur <http://localhost:3001>, celle
+des particuliers sur <http://localhost:3002> et le back-office sur
+<http://localhost:3003> — ce dernier redirigeant aussitôt vers sa page de
+connexion, voir [Le back-office de `frontend-admin`](#le-back-office-de-frontend-admin).
+La documentation s'y ajoutera avec DOC-01, sur le port du tableau ci-dessous.
 
 Pour n'en démarrer qu'une, la filtrer par le nom de son workspace :
 
@@ -239,7 +240,7 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | API FastAPI                   | 8000      | 8000         | disponible  |
 | `frontend-professional`       | 3001      | 3000         | disponible  |
 | `frontend-individual`         | 3002      | 3000         | disponible  |
-| `frontend-admin`              | 3003      | 3000         | FRONT-03    |
+| `frontend-admin`              | 3003      | 3000         | disponible  |
 | Documentation (Docusaurus)    | 3004      | —            | DOC-01      |
 | PostgreSQL                    | 5432      | 5432         | disponible  |
 | pgAdmin                       | 5050      | 80           | disponible  |
@@ -567,12 +568,13 @@ retomberait sur la valeur de repli, sans rien casser.
 partagés par les trois frontends. Le package n'est **jamais compilé** : il
 s'exporte en source TypeScript, et chaque application le transpile.
 
-| Chemin                   | Contenu                                                               |
-| ------------------------ | --------------------------------------------------------------------- |
-| `src/components/`        | Composants shadcn/ui, `theme-provider.tsx` et `theme-toggle.tsx`.     |
-| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.     |
-| `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application. |
-| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                      |
+| Chemin                   | Contenu                                                                           |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `src/components/`        | Composants shadcn/ui, `theme-provider.tsx`, `theme-toggle.tsx`, `data-table.tsx`. |
+| `src/hooks/`             | Hooks partagés — `use-mobile.ts`, dont dépend la barre latérale.                  |
+| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.                 |
+| `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application.             |
+| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                                  |
 
 Les imports passent par la carte `exports` du package, jamais par un chemin
 relatif :
@@ -632,14 +634,63 @@ diverger le socle.
 
 Le socle installé couvre Button, Input, Label, Card, Dialog, DropdownMenu,
 Select, Sonner (notifications), Field (primitives de formulaire), Table, Badge,
-Skeleton — plus Separator, tiré par Field.
+Skeleton — plus Separator, tiré par Field. FRONT-03 y a ajouté Sidebar et
+Breadcrumb, les deux primitives d'un back-office, avec ce que Sidebar réclame :
+Sheet (son volet mobile), Tooltip (ses info-bulles une fois repliée) et le hook
+`use-mobile`.
 
-S'y ajoutent deux composants maison, absents du registre shadcn :
-`theme-provider.tsx`, qui pose la classe `.dark`, et `theme-toggle.tsx`, le
-bouton qui la commande. Le second a d'abord vécu dans `frontend-professional`
-(FRONT-01) ; FRONT-02 l'a remonté ici plutôt que de le recopier dans une
-deuxième application — c'est la règle que pose le ticket, et la raison d'être du
-package.
+S'y ajoutent trois composants maison, absents du registre shadcn :
+`theme-provider.tsx`, qui pose la classe `.dark`, `theme-toggle.tsx`, le bouton
+qui la commande, et `data-table.tsx`, décrit juste après. Le deuxième a d'abord
+vécu dans `frontend-professional` (FRONT-01) ; FRONT-02 l'a remonté ici plutôt
+que de le recopier dans une deuxième application — c'est la règle que pose le
+ticket, et la raison d'être du package.
+
+##### `DataTable` — la table de données
+
+FRONT-03 demandait de **vérifier** que le composant `Table` couvrait le tri, le
+filtrage et la pagination, et de créer une extension dans le package partagé
+dans le cas contraire. Il ne les couvre pas : `table.tsx` est purement
+présentationnel — huit composants qui habillent `<table>`, `<thead>`, `<tr>`,
+sans le moindre état. Le registre shadcn n'a rien à proposer non plus, sa page
+`data-table` étant un **guide** qui assemble ce même `table.tsx` avec TanStack
+Table, et non un composant téléchargeable.
+
+D'où [`data-table.tsx`](packages/ui/src/components/data-table.tsx) : `Table`
+plus [TanStack Table](https://tanstack.com/table), avec tri par colonne
+(`aria-sort` sur la cellule d'en-tête), filtre texte sur une colonne désignée et
+pagination. L'appelant décrit ses colonnes, rien d'autre — l'état reste dans la
+table :
+
+```tsx
+const column = createDataTableColumnHelper<Clinique>();
+const columns = column.columns([column.accessor('nom', { header: 'Clinique' })]);
+
+<DataTable columns={columns} data={CLINIQUES} filterColumnId="nom" pageSize={5} />;
+```
+
+**TanStack Table est en version 9, une réécriture** : les exemples que l'on
+trouve en ligne, guide shadcn compris, sont écrits pour la 8 et ne fonctionnent
+pas ici. Le hook s'appelle `useTable` et non `useReactTable`, les capacités
+s'enregistrent dans un `tableFeatures` au lieu des options `getSortedRowModel()`,
+et une cellule se rend avec `<table.FlexRender cell={…} />`. Le paquet embarque
+ses propres consignes à jour, à lire plutôt que le web :
+
+```bash
+npx @tanstack/intent@latest list
+```
+
+Deux pièges tiennent au même mécanisme, l'enregistrement explicite. **Une
+capacité non enregistrée n'existe pas** : sans `rowPaginationFeature`, il n'y a
+ni état `pagination` ni méthode `setPageIndex`. Et **les fonctions de tri et de
+filtrage ne sont pas globales** : une colonne en mode `auto` — le défaut —
+résout un nom (`text`, `includesString`) dans les registres `sortFns` et
+`filterFns`, qu'il faut déclarer. L'oubli ne casse pas de la même façon des deux
+côtés, ce qui le rend pénible à diagnostiquer : le tri se rabat sur une
+comparaison générique et **paraît** fonctionner, tandis que le filtre ne trouve
+aucune fonction et laisse passer toutes les lignes — un champ de recherche qui
+ne filtre rien, sans la moindre erreur. Les deux cas se signalent en console, en
+développement seulement.
 
 #### Vérifier le thème sans lancer d'application
 
@@ -666,12 +717,13 @@ pnpm typecheck
 
 #### Ce que fait une application (FRONT-01 à FRONT-03)
 
-FRONT-01 a livré la première, [`frontend/frontend-professional`](frontend/frontend-professional),
-et FRONT-02 la deuxième, [`frontend/frontend-individual`](frontend/frontend-individual).
-La première sert de **patron**, et la deuxième a repris ces sept points à
-l'identique sans en amender aucun ; FRONT-03 fera de même. Seuls les distinguent
-leur port, leurs métadonnées, et — pour la seule application publique — le volet
-SEO décrit juste après.
+Les trois existent : [`frontend-professional`](frontend/frontend-professional)
+(FRONT-01), [`frontend-individual`](frontend/frontend-individual) (FRONT-02) et
+[`frontend-admin`](frontend/frontend-admin) (FRONT-03). La première sert de
+**patron**, et les deux suivantes ont repris ces sept points à l'identique sans
+en amender aucun. Seuls les distinguent leur port, leurs métadonnées, et ce que
+décrivent les deux sections suivantes — le volet SEO de la seule application
+publique, et le back-office de la seule qui soit entièrement privée.
 
 1. Quatre dépendances de workspace — `@repo/ui`, `@repo/tailwind-config`,
    `@repo/typescript-config` et `@repo/eslint-config`, toutes en `"workspace:*"`
@@ -768,6 +820,107 @@ disponible aujourd'hui serait celle du build, qui changerait à chaque
 déploiement sans que la page ait bougé. Annoncer une modification qui n'a pas eu
 lieu est un signal que les moteurs finissent par ignorer.
 
+#### Le back-office de `frontend-admin`
+
+À l'exact opposé de la précédente, `frontend-admin` est la seule des trois à être
+**entièrement privée**. Elle applique le patron sans y toucher, et y ajoute
+quatre choses.
+
+**Rien n'est accessible sans session.** La règle est inversée par rapport à un
+site ordinaire : ce n'est pas le contenu protégé qui se déclare, c'est le
+contenu public, et il se réduit à la page de connexion.
+[`proxy.ts`](frontend/frontend-admin/proxy.ts) redirige toute autre adresse vers
+`/login`, en conservant celle qui était demandée dans un paramètre `next`.
+
+> **`proxy.ts`, et non `middleware.ts`.** Next 16 a renommé la convention.
+> L'ancien nom fonctionne encore mais fait avertir **chaque build** — le genre de
+> bruit permanent que FRONT-01 a refusé en désactivant `agentRules`. La fonction
+> exportée s'appelle donc `proxy` : c'est `mod.proxy` que Next cherche dans ce
+> fichier, et un export nommé `middleware` échouerait.
+
+Son `matcher` exclut quatre chemins. `login` d'abord, sans quoi la redirection se
+redirigerait elle-même. **`robots.txt` ensuite, et c'est moins évident** : ce
+fichier doit être servi, car un robot redirigé vers une page de connexion n'y
+lit aucune directive — l'interdiction ci-dessous aurait été écrite pour
+personne. Les fichiers statiques et les images optimisées ferment la liste : les
+faire transiter coûterait une exécution par requête, pour rien.
+
+**Aucune indexation.** Le bloc `robots` de
+[`app/layout.tsx`](frontend/frontend-admin/app/layout.tsx) est l'inverse de celui
+de `frontend-individual`, au même endroit et dans le même ordre : comparer les
+deux fichiers doit suffire à voir laquelle des applications est publique. S'y
+ajoutent `nocache` et `noarchive`, qui interdisent de **conserver** une copie —
+une page de back-office en cache public survivrait à sa dépublication. Et
+[`app/robots.ts`](frontend/frontend-admin/app/robots.ts) sert un `Disallow: /`
+complet, sans sitemap. Ces balises ne protègent rien : elles s'adressent aux
+robots qui les respectent. Ce qui protège, c'est le proxy et, en dernier
+ressort, l'API. Elles évitent l'accident, pas l'attaque.
+
+**Aucun rendu statique.** `export const dynamic = 'force-dynamic'` dans
+[`app/(protected)/layout.tsx`](<frontend/frontend-admin/app/(protected)/layout.tsx>),
+et là seulement — c'est la **seule** directive de ce genre du dépôt, et la
+section précédente explique pourquoi sa valeur tient à sa rareté. Elle est
+presque redondante, la lecture d'un cookie suffisant déjà à rendre le segment
+dynamique ; elle est écrite quand même, pour qu'aucune page de back-office ne
+finisse en HTML prérendu le jour où l'une d'elles n'aura besoin d'aucune donnée
+de session. La page de connexion, hors de ce groupe, ne la porte pas : elle
+n'affiche rien de confidentiel.
+
+**Un shell de back-office.** Les groupes de routes découpent l'application en
+deux : `(auth)` pour la connexion, nue, et `(protected)` pour tout le reste,
+sous une barre latérale repliable, un fil d'Ariane et une zone de contenu.
+
+| Fichier                           | Rôle                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `lib/session.ts`                  | Nom du cookie, type `Role`, lecture de la session. **Sans `next/headers`** : le proxy tourne en runtime Edge. |
+| `lib/require-role.ts`             | `getSession()` et la garde `requireRole('admin')` qu'appelle le layout protégé.                               |
+| `components/navigation.ts`        | Les sections du back-office, déclarées **une seule fois**.                                                    |
+| `components/admin-sidebar.tsx`    | La navigation latérale, ses entrées filtrées par rôle.                                                        |
+| `components/admin-breadcrumb.tsx` | Le fil d'Ariane, dérivé du chemin.                                                                            |
+
+Le fil d'Ariane n'est jamais renseigné page par page : il se déduit de
+`usePathname()` et tire ses libellés de la même liste que la barre latérale.
+Une page qui déclarerait elle-même sa position finirait par mentir après un
+déplacement de route, et deux listes de libellés divergeraient au premier
+renommage.
+
+**Le contrôle d'accès par rôle est un confort d'affichage**, et le code le dit à
+l'endroit où l'on serait tenté de croire l'inverse. Il évite d'afficher un écran
+à qui n'a rien à y faire ; il ne protège aucune donnée. La vérification qui fait
+foi est celle du backend — la fabrique `require_role(...)` de BACK-10, du côté où
+la réponse est produite.
+
+**Ce qui reste à FRONT-07.** Rien ici ne vérifie un jeton : `sessionFromToken`
+constate la présence du cookie, sans lire sa signature ni son expiration. Le
+service JWT est l'objet de BACK-10, son pendant navigateur celui de FRONT-07 —
+qui déclare posséder `middleware.ts` et `app/(auth)/login/page.tsx`. Les chemins
+posés ici sont donc les siens au caractère près, à la nuance de nom près
+expliquée plus haut : il aura une fonction à compléter, pas une application à
+re-router. La page de connexion n'a d'ailleurs pas de formulaire — en écrire un
+sans API derrière aurait produit du code à jeter et un écran qui ment sur ce
+qu'il sait faire.
+
+##### Voir le back-office aujourd'hui
+
+Puisque rien n'émet encore de session, toute adresse redirige vers `/login`.
+Pour traverser, poser le cookie à la main — sa **présence** suffit, sa valeur
+n'est pas lue :
+
+1. ouvrir <http://localhost:3003> et attendre la page de connexion ;
+2. dans les outils de développement, onglet **Application** (ou **Stockage**),
+   section **Cookies**, ajouter sur `http://localhost:3003` un cookie nommé
+   `juui_session`, valeur quelconque, chemin `/` ;
+3. recharger.
+
+Ou, plus court, depuis la console du navigateur :
+
+```js
+document.cookie = 'juui_session=demo; path=/';
+```
+
+Cette porte se referme d'elle-même avec FRONT-07, qui remplacera la lecture du
+cookie par une vérification du jeton.
+
 ### Écarts assumés avec le ticket SHARED-01
 
 | Écart                                                             | Raison                                                                                                                                                                                                                                                                |
@@ -841,6 +994,20 @@ lieu est un signal que les moteurs finissent par ignorer.
 > pourquoi ce ticket touche `frontend-professional` et `@repo/ui` en plus de son
 > propre dossier — les deux applications ont été relancées et comparées après le
 > déplacement, celle de FRONT-01 est inchangée à l'écran.
+
+### Écarts assumés avec le ticket FRONT-03
+
+| Écart                                                        | Raison                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `proxy.ts` et `app/(auth)/login/`, du périmètre de FRONT-07  | « Redirection vers la page de connexion par défaut » ne s'implémente pas sans eux. Les chemins sont ceux que FRONT-07 annonce, pour qu'il remplace une fonction au lieu de re-router l'application ; rien n'y vérifie de jeton.                                            |
+| `proxy.ts` et non `middleware.ts`                            | Next 16 a renommé la convention. L'ancien nom fonctionne encore mais fait avertir **chaque build**, exactement ce que FRONT-01 a refusé en désactivant `agentRules`. FRONT-07 écrit `middleware.ts` dans son périmètre : c'est le même fichier sous son ancien nom.        |
+| `@tanstack/react-table` ajouté à `@repo/ui`                  | Conséquence directe du « sinon créer une extension dans le package partagé » du ticket, la vérification ayant conclu par la négative — `table.tsx` est purement présentationnel, et le registre shadcn n'a pas de `data-table` à livrer.                                   |
+| `Pagination` du registre écarté au profit de boutons         | Envisagé, puis rejeté après lecture : ce composant est fait de **liens**, donc destiné à une pagination portée par l'URL. La page d'une `DataTable` est un état de la table, sans adresse propre — et un `<a>` sans `href` n'est ni focalisable ni actionnable au clavier. |
+| `lucide-react` déclarée par l'application                    | `@repo/ui` la porte déjà, mais le `node_modules` strict de pnpm interdit d'importer ce qu'on ne déclare pas : les icônes de la navigation sont une donnée de l'application, pas du package. Même version que lui, pour que pnpm n'en installe qu'une.                      |
+| `force-dynamic` sur `(protected)` seulement                  | Le ticket demande qu'il n'y ait pas de rendu statique public. Le contenu privé est dans ce groupe ; la page de connexion n'a rien à cacher, et l'y soumettre l'aurait ralentie sans rien protéger.                                                                         |
+| `TooltipProvider` monté dans l'application                   | Les info-bulles de la barre repliée en dépendent, et ce fournisseur n'a de sens que là où des info-bulles existent. Le placer dans le `ThemeProvider` partagé l'aurait imposé aux deux autres applications sans raison.                                                    |
+| Deux sections de démonstration (`cliniques`, `utilisateurs`) | Un fil d'Ariane qui n'affiche jamais qu'un seul niveau ne prouve rien, et le rôle lu par la garde resterait une intention sans écran pour l'afficher.                                                                                                                      |
+| Données de la table écrites en dur                           | Ni API ni cache avant SHARED-03 et FRONT-04. Ce que ces lignes servent à montrer, c'est que l'extension du package trie, filtre et pagine — la même logique que les pages de démonstration de FRONT-01 et FRONT-02.                                                        |
 
 ### Hooks de pre-commit
 
