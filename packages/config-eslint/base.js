@@ -21,7 +21,7 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 /*
  * Les tsconfig des workspaces, donnes au resolveur TypeScript ci-dessous.
  *
- * Les deux motifs suivent `pnpm-workspace.yaml`. Un workspace sans tsconfig
+ * Les trois motifs suivent `pnpm-workspace.yaml`. Un workspace sans tsconfig
  * (les packages de configuration) n'est simplement pas apparie.
  *
  * ILS SONT DEVELOPPES ICI, et c'est tout l'objet de ces lignes. Les confier au
@@ -44,7 +44,10 @@ const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
  * -- il ne redeveloppe rien du tout.
  */
 const workspaceTsconfigs = fs
-  .globSync(['frontend/*/tsconfig.json', 'packages/*/tsconfig.json'], { cwd: repoRoot })
+  .globSync(
+    ['frontend/*/tsconfig.json', 'packages/*/tsconfig.json', 'documentation/tsconfig.json'],
+    { cwd: repoRoot },
+  )
   .map((workspacePath) => path.join(repoRoot, workspacePath))
   // Trie pour que la liste -- donc l'empreinte des options du resolveur -- ne
   // depende pas de l'ordre dans lequel le systeme de fichiers rend ses entrees.

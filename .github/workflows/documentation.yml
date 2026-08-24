@@ -1,0 +1,138 @@
+# Construction et publication du site de documentation (DOC-01).
+#
+# PREMIER WORKFLOW DU DEPOT. Sa portee s'arrete a `documentation/` : les
+# pipelines de l'API, des frontends et des images reviennent aux tickets QA, et
+# les regles de protection de branche a QA-08.
+#
+# DEUX DECLENCHEURS, DEUX ROLES :
+#   - sur une pull request, le job `build` sert de garde-fou. Le site est
+#     construit avec `onBrokenLinks: 'throw'` : un renvoi mort ou un diagramme
+#     invalide fait echouer la CI AVANT le merge, pas apres.
+#   - sur un push vers `main`, le meme job produit l'artefact que `deploy`
+#     publie sur GitHub Pages.
+name: Documentation
+
+# LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, ET IL N'Y A PAS MIEUX A
+# FAIRE : GitHub Actions n'interprete pas les ancres YAML, une ancre `&`/`*`
+# echouerait au chargement du workflow. Les tenir alignees.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'documentation/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/documentation.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'documentation/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/documentation.yml'
+  # Pour republier sans commit -- apres un changement de reglage GitHub Pages,
+  # par exemple.
+  workflow_dispatch:
+
+# Lecture seule par defaut. Les deux jobs qui ont besoin de plus le declarent
+# eux-memes, au plus juste.
+permissions:
+  contents: read
+
+# Une execution a la fois par branche. `cancel-in-progress` est vrai POUR LES
+# SEULES PULL REQUESTS : un nouveau commit rend la construction precedente sans
+# objet. Sur `main`, jamais -- on n'interrompt pas un deploiement en cours, sous
+# peine de laisser le site dans un etat intermediaire.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Construire le site
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # Les deux permissions que reclame `configure-pages` avec `enablement`,
+      # plus bas. Elles ne servent qu'a l'etape d'activation.
+      pages: write
+      id-token: write
+
+    env:
+      # Le `prepare: husky` du package.json racine tourne a chaque installation.
+      # Des hooks Git n'ont aucun sens sur un agent de CI -- meme raison que le
+      # HUSKY=0 de docker/frontend/Dockerfile.
+      HUSKY: 0
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v7
+
+      # AVANT setup-node, et pas apres : c'est ce qui rend le cache `pnpm` de
+      # l'etape suivante possible. L'action lit la version du champ
+      # `packageManager` du package.json racine -- aucune version a redire ici,
+      # donc aucune occasion de diverger.
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          # La version de reference du depot, celle du poste et des images.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # `--filter documentation...` : le site et ce dont il depend, rien de plus.
+      # Installer les trois applications Next pour construire un site statique
+      # allongerait le job de plusieurs minutes sans rien y ajouter.
+      #
+      # `--frozen-lockfile` interdit toute re-resolution : un lockfile desaccorde
+      # des manifestes fait echouer le job au lieu de construire le site avec
+      # d'autres versions que celles du depot.
+      - name: Installer les dependances
+        run: pnpm install --frozen-lockfile --filter documentation...
+
+      # ACTIVE GITHUB PAGES PAR L'API, au premier passage. Le depot n'a pas de
+      # site Pages tant que personne ne l'a demande, et un clic dans les
+      # reglages ne se versionne pas : l'activation est ecrite ici, avec le
+      # reste de la chaine. L'etape est idempotente -- les fois suivantes, elle
+      # ne fait que lire la configuration existante.
+      #
+      # Jamais sur une pull request : elle n'a pas a modifier les reglages du
+      # depot, et le job n'y sert que de garde-fou.
+      - name: Activer GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v6
+        with:
+          enablement: true
+
+      - name: Construire le site
+        run: pnpm --filter documentation build
+
+      - name: Deposer le site en artefact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: documentation/build
+
+  deploy:
+    name: Publier sur GitHub Pages
+    # Le garde-fou des pull requests s'arrete au job precedent : une PR construit
+    # le site, elle ne le publie pas. Restent le push sur `main` et le
+    # declenchement manuel, qui republie la branche depuis laquelle on le lance.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Publier l'artefact
+        id: deployment
+        uses: actions/deploy-pages@v5

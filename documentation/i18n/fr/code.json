@@ -1,0 +1,37 @@
+{
+  "theme.SearchBar.label": {
+    "message": "Rechercher",
+    "description": "The ARIA label and placeholder for search button"
+  },
+  "theme.SearchBar.noResultsText": {
+    "message": "Aucun résultat"
+  },
+  "theme.SearchBar.seeAll": {
+    "message": "Voir tous les résultats"
+  },
+  "theme.SearchBar.searchInContext": {
+    "message": "Voir tous les résultats dans « {context} »"
+  },
+  "theme.SearchBar.seeAllOutsideContext": {
+    "message": "Voir tous les résultats hors de « {context} »"
+  },
+  "theme.SearchPage.emptyResultsTitle": {
+    "message": "Rechercher dans la documentation",
+    "description": "The search page title for empty query"
+  },
+  "theme.SearchPage.existingResultsTitle": {
+    "message": "Résultats de recherche pour « {query} »",
+    "description": "The search page title for non-empty query"
+  },
+  "theme.SearchPage.documentsFound.plurals": {
+    "message": "1 document trouvé|{count} documents trouvés",
+    "description": "Pluralized label for \"{count} documents found\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
+  },
+  "theme.SearchPage.noResultsText": {
+    "message": "Aucun document trouvé",
+    "description": "The paragraph for empty search result"
+  },
+  "theme.SearchPage.searchContext.everywhere": {
+    "message": "Partout"
+  }
+}

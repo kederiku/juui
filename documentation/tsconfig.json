@@ -1,0 +1,39 @@
+{
+  // Configuration TypeScript du site de documentation (DOC-01).
+  //
+  // ELLE N'EST PAS LUE PAR `docusaurus start` NI PAR `docusaurus build`, qui
+  // compilent avec leur propre chaine. Elle sert a l'editeur et au script
+  // `typecheck`, agrege par le `pnpm typecheck` de la racine.
+  //
+  // LE SOCLE EST CELUI DU DEPOT, PAS `@docusaurus/tsconfig`. Le tsconfig livre
+  // par Docusaurus pose `baseUrl`, que TypeScript 6 declare deprecie (TS5101) :
+  // son gabarit officiel s'en tire avec `"ignoreDeprecations": "6.0"`, ce que
+  // packages/ui/tsconfig.json a deja refuse de faire pour le meme motif. Les
+  // quatre reglages qu'il porte vraiment sont donc recopies ci-dessous -- la
+  // liste est courte et stable sur toute la ligne 3.x. A revoir a Docusaurus 4.
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@repo/typescript-config/base.json",
+  "compilerOptions": {
+    // Le JSX est laisse au compilateur de Docusaurus, comme il l'est a celui de
+    // Next dans les trois applications : `tsc` ne fait que verifier les types.
+    "jsx": "preserve",
+
+    // Le DOM s'ajoute ici pour la meme raison que dans `react-library.json` : le
+    // socle sert aussi a du code Node, qui n'a pas a voir `document`.
+    "lib": ["ES2023", "DOM"],
+
+    // Docusaurus accepte des sources JavaScript a cote des sources TypeScript
+    // (composants swizzles, modules clients). Reglage repris de son tsconfig.
+    "allowJs": true,
+
+    // L'alias que Docusaurus expose vers la racine du site. Pas de `baseUrl` :
+    // TypeScript 6 resout les `paths` relativement a CE fichier.
+    "paths": {
+      "@site/*": ["./*"]
+    }
+  },
+  "include": ["docusaurus.config.ts", "sidebars.ts", "src/**/*"],
+  // `.docusaurus/` est regenere a chaque demarrage et `build/` est le site
+  // produit : ni l'un ni l'autre n'a a etre type ici.
+  "exclude": ["node_modules", ".docusaurus", "build"]
+}

@@ -4,9 +4,8 @@
 packages:
   - 'frontend/*'
   - 'packages/*'
-  # Site Docusaurus : workspace a part entiere des DOC-01. Un motif qui ne
-  # correspond a aucun package.json est simplement ignore par pnpm, donc le
-  # declarer des maintenant ne coute rien.
+  # Site Docusaurus, livre par DOC-01. Un seul workspace, d'ou le motif nu
+  # plutot qu'un glob.
   - 'documentation'
 
 # Reglages pnpm. Depuis pnpm 11, seuls `auth` et `registry` sont encore lus dans
@@ -38,3 +37,9 @@ allowBuilds:
   # dependance optionnelle selon la plateforme ; ce script n'est que le repli
   # qui le recompile depuis les sources. Rien a y gagner ici, donc refuse.
   '@parcel/watcher': false
+  # Dependance transitive de Docusaurus (DOC-01), par Babel. Son `postinstall`
+  # ne COMPILE RIEN : il affiche une banniere Open Collective, et rien d'autre
+  # -- verifie dans son postinstall.js, qui ecrit un message et sort. Le
+  # refuser n'enleve donc aucune fonctionnalite ; l'autoriser n'ajouterait que
+  # du bruit a chaque installation, sur le poste comme en CI.
+  core-js: false
