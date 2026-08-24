@@ -456,6 +456,19 @@ Prettier ne remet jamais la prose à la ligne (`proseWrap: 'preserve'`) : les
 paragraphes du Markdown restent découpés à la main. Il réaligne en revanche les
 tableaux, ce qui allonge leurs lignes source.
 
+### Langue du code
+
+Les **identifiants sont en anglais** — classes, fonctions, variables, arguments,
+noms de fichiers — et les **commentaires et docstrings en français**. Un port
+s'appelle `AccountRepository`, une fonction de mapping `_to_entity` ; ce qui les
+entoure explique en français pourquoi ils existent. Le code se lit comme celui de
+ses dépendances, l'intention se lit dans la langue de l'équipe.
+
+Les **accents s'arrêtent au Markdown**. Commentaires et docstrings Python,
+commentaires YAML et shell, messages `echo` et messages de commit s'écrivent sans
+accents ; seuls les fichiers `.md` sont pleinement accentués. Les tirets longs
+s'écrivent `--` dans le code et `—` en Markdown.
+
 ### Configurations partagées
 
 | Package                                                 | Rôle                                                                                  |

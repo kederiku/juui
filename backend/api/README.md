@@ -159,7 +159,7 @@ filtrées sur les champs déclarés : le conteneur d'INFRA-04 pourra recevoir to
 la racine, `POSTGRES_HOST_PORT` et `MINIO_API_HOST_PORT` compris, sans que rien ne bronche.
 
 pydantic-settings ne sait pas tenir cette promesse seul : chaque sous-modèle ne voit que son
-préfixe, et personne ne surveille le reste du fichier. La source `_SourceEnvRacine` de
+préfixe, et personne ne surveille le reste du fichier. La source `_OrphanKeyDotEnvSource` de
 [`config.py`](src/app/core/config.py) comble ce trou en une douzaine de lignes, et le jeu des
 clés admises se calcule par introspection des sous-modèles — il n'y a aucune liste à tenir à
 jour à la main.
