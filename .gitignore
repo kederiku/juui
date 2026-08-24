@@ -6,6 +6,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# Graphe d'imports mis en cache par import-linter (BACK-04b).
+.import_linter_cache/
 htmlcov/
 .coverage
 # Mesures partielles : une par suite de tests, fusionnees par `coverage combine`.

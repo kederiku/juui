@@ -15,8 +15,11 @@ Exemple deja arbitre : la liste d'administration des comptes particuliers
 (BACK-26) affiche un nombre d'animaux. Ce compteur vient du cas d'usage public
 de `medical_records` (BACK-30), jamais d'un `JOIN` sur ses tables.
 
-Les contrats import-linter de BACK-04b rendent cette regle mecanique : une
-violation echoue en CI, elle ne se decouvre pas six mois plus tard en revue.
+Le contrat `module-independence` de BACK-04b rend cette regle mecanique : une
+violation echoue en CI, elle ne se decouvre pas six mois plus tard en revue. Il
+suit les CHAINES d'imports, dans les deux sens -- passer par `app.shared` pour
+atteindre un autre module ne le contourne pas. Sa declaration, et celle des
+quatre autres contrats, est dans pyproject.toml, section [tool.importlinter].
 
 LE PIEGE A EVITER
 Ne PAS calquer les modules sur les trois frontends (professional, individual,

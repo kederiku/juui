@@ -28,10 +28,13 @@ La commande crée `.venv/`, y installe les dépendances applicatives **et** cell
 du groupe `dev`, puis le projet lui-même en mode éditable — c'est ce qui rend le
 paquet `app` importable depuis `src/`.
 
-Ajouter `--frozen` pour interdire toute re-résolution : l'installation échoue
-alors si [`uv.lock`](uv.lock) ne correspond plus au `pyproject.toml`, au lieu de
-mettre le verrou à jour en silence. C'est le mode qu'utiliseront la CI (QA-01) et
-le build Docker (INFRA-04).
+Deux drapeaux interdisent la re-résolution, et ils ne disent pas la même chose.
+`--frozen` installe ce que contient [`uv.lock`](uv.lock) **sans le regarder** :
+un `pyproject.toml` modifié sans `uv lock` passe en silence. `--locked` refuse de
+partir dans ce cas — « the lockfile at `uv.lock` needs to be updated ». C'est
+`--locked` qu'emploie la [CI backend](../../.github/workflows/ci-backend.yml),
+pour que l'environnement vérifié soit exactement celui du dépôt ; le build Docker
+(INFRA-04) et QA-01 s'en tiennent à `--frozen`.
 
 ## Démarrage
 
@@ -220,6 +223,10 @@ L'arbitrage est déjà pris ailleurs sur le board : la liste d'administration de
 particuliers (BACK-26) affiche un nombre d'animaux, et ce compteur vient du cas d'usage public de
 `medical_records` (BACK-30), jamais d'un `JOIN` sur ses tables.
 
+Depuis BACK-04b, la règle n'est plus seulement écrite : le contrat
+[`module-independence`](#import-linter) la fait respecter, dans les deux sens et **même
+indirectement**.
+
 Une seule chose est partagée entre modules côté persistance : la `Base` déclarative. Ce n'est pas
 une entorse — les modules ne s'importent pas, mais ils écrivent dans la **même base**, donc dans
 le même registre de métadonnées. Deux `Base` distinctes donneraient deux jeux de métadonnées, et
@@ -262,16 +269,27 @@ ranger, et quel ticket l'apporte.
 Même esprit que la sonde de [Mypy](#mypy) et celles de la
 [configuration](#vérifier-que-le-filet-tient). Depuis `backend/api/`.
 
-**La pureté du domaine.** Attendu : aucune sortie.
+**Les règles d'architecture** (BACK-04b). Attendu : `Contracts: 5 kept, 0 broken.`
 
 ```bash
-grep -rnE "^(from|import) (fastapi|sqlalchemy|pydantic|redis|boto3)" src/app/modules/*/domain src/app/shared/domain
+make imports
 ```
 
-**L'indépendance des modules.** Attendu : aucune sortie.
+Ce n'est plus une sonde qu'il faut penser à lancer : `make lint` l'enchaîne après
+Ruff, et la [CI backend](../../.github/workflows/ci-backend.yml) la rejoue sur
+chaque pull request. Les cinq contrats et la preuve qu'ils mordent : [Import
+Linter](#import-linter).
 
-```bash
-grep -rn "app\.modules\." src/app/modules/identity | grep -v "app\.modules\.identity"
+Deux sondes `grep` tenaient ce rôle jusqu'ici. Elles ne manquent pas : une
+recherche textuelle lit une ligne à la fois, quand un contrat suit les **chaînes**
+d'imports. Un `import sqlalchemy` glissé dans `shared/domain/` ne salit pas que
+ce fichier — il salit tout domaine qui en dépend, et le contrat 1 le dit en
+affichant la chaîne complète :
+
+```text
+app.modules.identity.domain.exceptions -> app.shared.domain.exceptions
+app.shared.domain.exceptions -> app.shared.infrastructure.db.base
+app.shared.infrastructure.db.base -> sqlalchemy
 ```
 
 **Le trajet complet des trois modèles.** Le dépôt en mémoire est défini _dans la sonde_ et non
@@ -364,21 +382,21 @@ aucune route, et `/docs` reste donc vide.
 
 ### Écarts assumés avec le ticket BACK-04
 
-| Écart                                                              | Raison                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Le routeur d'`identity` est monté mais ne porte aucune route       | Une route de création a besoin d'une session (BACK-05) et d'une unité de travail (BACK-06a). L'exposer aujourd'hui supposerait de brancher un dépôt factice dans le code de production. Les routes viennent en BACK-28 et BACK-29.                                                                                                               |
-| `Base` déclarée ici, mais nue                                      | Le ticket la nomme dans sa portée, et le module pilote en a besoin pour déclarer sa table. La convention de nommage des contraintes, les mixins, le moteur et la session restent à BACK-05.                                                                                                                                                      |
-| Le cas d'usage reçoit un dépôt et non une unité de travail         | L'unité de travail est livrée par BACK-06a. Le contrat qui compte est déjà tenu : ce qui entre dans un cas d'usage est un **port**, jamais une session.                                                                                                                                                                                          |
-| `create_account` recouvre partiellement BACK-28                    | C'est le seul trajet d'**écriture** démontrable aujourd'hui, et le critère d'acceptation demande le sens schéma → entité → modèle. BACK-28 le reprendra en `register_individual`, avec mot de passe, OTP et non-divulgation.                                                                                                                     |
-| `shared/domain/exceptions.py` réduit à `DomainError`               | La hiérarchie intermédiaire et les codes namespacés sont la portée de BACK-09. Les exceptions d'`identity` héritent donc de la racine en attendant d'être reparentées.                                                                                                                                                                           |
-| `shared/domain/ports/` ne contient qu'une docstring                | `Cache`, `FileStorage` et `TokenService` appartiennent à BACK-14, BACK-13 et BACK-10a. Le paquet existe pour fixer leur place, pas pour les anticiper.                                                                                                                                                                                           |
-| `identity/unit_of_work.py` réduit à une docstring                  | Le fichier est nommé par la portée du ticket, son contenu est celui de BACK-06a. Il fixe la place — à la racine du module, pas dans une couche.                                                                                                                                                                                                  |
-| `domain/entities.py` plat, et non un dossier `domain/entities/`    | Le guide de référence montre un dossier ; c'est le ticket lui-même qui l'écarte, et pour une bonne raison — un dossier d'entités partagé est exactement le domaine plat qu'il s'agit d'éviter.                                                                                                                                                   |
-| `str` et non `EmailStr` pour l'adresse                             | `EmailStr` dépend d'`email-validator`, qui n'est pas une dépendance déclarée du projet. La validation de forme relève de BACK-28, l'unicité insensible à la casse d'INFRA-09.                                                                                                                                                                    |
-| Type et statut stockés en `String` et non en enum natif            | Ajouter une valeur à un enum PostgreSQL exige une migration, et le mapping explicite vers `AccountType` devient visible plutôt que magique — ce que la règle des 3 modèles demande précisément de montrer.                                                                                                                                       |
-| Le contrôle automatique de la checklist historique n'est pas livré | Il est **extrait dans BACK-04b** (contrats import-linter, câblés en CI par QA-01). Les quatre sondes ci-dessus en tiennent lieu en attendant.                                                                                                                                                                                                    |
-| `alembic.ini` réattribué à BACK-07, et l'entrypoint corrigé        | INFRA-04 écrivait que le fichier arriverait avec BACK-05 ; la carte BACK-07 le porte dans sa propre portée. Trois endroits l'affirmaient à tort — [`entrypoint.sh`](../../docker/api/entrypoint.sh), son message de journal et le [README de la racine](../../README.md#ce-que-fait-lentrypoint) — et rien ne les aurait démentis avant BACK-07. |
-| Aucun test automatisé, mais des sondes documentées                 | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02 et BACK-03.                                                                                                                                                                                                                                         |
+| Écart                                                                  | Raison                                                                                                                                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Le routeur d'`identity` est monté mais ne porte aucune route           | Une route de création a besoin d'une session (BACK-05) et d'une unité de travail (BACK-06a). L'exposer aujourd'hui supposerait de brancher un dépôt factice dans le code de production. Les routes viennent en BACK-28 et BACK-29.                                                                                                               |
+| `Base` déclarée ici, mais nue                                          | Le ticket la nomme dans sa portée, et le module pilote en a besoin pour déclarer sa table. La convention de nommage des contraintes, les mixins, le moteur et la session restent à BACK-05.                                                                                                                                                      |
+| Le cas d'usage reçoit un dépôt et non une unité de travail             | L'unité de travail est livrée par BACK-06a. Le contrat qui compte est déjà tenu : ce qui entre dans un cas d'usage est un **port**, jamais une session.                                                                                                                                                                                          |
+| `create_account` recouvre partiellement BACK-28                        | C'est le seul trajet d'**écriture** démontrable aujourd'hui, et le critère d'acceptation demande le sens schéma → entité → modèle. BACK-28 le reprendra en `register_individual`, avec mot de passe, OTP et non-divulgation.                                                                                                                     |
+| `shared/domain/exceptions.py` réduit à `DomainError`                   | La hiérarchie intermédiaire et les codes namespacés sont la portée de BACK-09. Les exceptions d'`identity` héritent donc de la racine en attendant d'être reparentées.                                                                                                                                                                           |
+| `shared/domain/ports/` ne contient qu'une docstring                    | `Cache`, `FileStorage` et `TokenService` appartiennent à BACK-14, BACK-13 et BACK-10a. Le paquet existe pour fixer leur place, pas pour les anticiper.                                                                                                                                                                                           |
+| `identity/unit_of_work.py` réduit à une docstring                      | Le fichier est nommé par la portée du ticket, son contenu est celui de BACK-06a. Il fixe la place — à la racine du module, pas dans une couche.                                                                                                                                                                                                  |
+| `domain/entities.py` plat, et non un dossier `domain/entities/`        | Le guide de référence montre un dossier ; c'est le ticket lui-même qui l'écarte, et pour une bonne raison — un dossier d'entités partagé est exactement le domaine plat qu'il s'agit d'éviter.                                                                                                                                                   |
+| `str` et non `EmailStr` pour l'adresse                                 | `EmailStr` dépend d'`email-validator`, qui n'est pas une dépendance déclarée du projet. La validation de forme relève de BACK-28, l'unicité insensible à la casse d'INFRA-09.                                                                                                                                                                    |
+| Type et statut stockés en `String` et non en enum natif                | Ajouter une valeur à un enum PostgreSQL exige une migration, et le mapping explicite vers `AccountType` devient visible plutôt que magique — ce que la règle des 3 modèles demande précisément de montrer.                                                                                                                                       |
+| Le contrôle automatique de la checklist historique n'est pas livré ici | Il est **extrait dans BACK-04b**, et livré depuis : cinq contrats [import-linter](#import-linter) déclarés dans [`pyproject.toml`](pyproject.toml), câblés à `make lint` et à la [CI backend](../../.github/workflows/ci-backend.yml). Les deux sondes `grep` qui en tenaient lieu ont été retirées.                                             |
+| `alembic.ini` réattribué à BACK-07, et l'entrypoint corrigé            | INFRA-04 écrivait que le fichier arriverait avec BACK-05 ; la carte BACK-07 le porte dans sa propre portée. Trois endroits l'affirmaient à tort — [`entrypoint.sh`](../../docker/api/entrypoint.sh), son message de journal et le [README de la racine](../../README.md#ce-que-fait-lentrypoint) — et rien ne les aurait démentis avant BACK-07. |
+| Aucun test automatisé, mais des sondes documentées                     | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02 et BACK-03.                                                                                                                                                                                                                                         |
 
 ## Configuration
 
@@ -929,6 +947,7 @@ premier seulement (`uv sync --frozen --no-dev`).
 | ----------------- | ----------------------------------------------------- |
 | `ruff`            | Lint et formatage. Épinglé à l'exact — voir plus bas. |
 | `mypy`            | Vérification de types en mode strict.                 |
+| `import-linter`   | Contrats d'architecture. Épinglé à l'exact lui aussi. |
 | `pytest`          | Cadre de test.                                        |
 | `pytest-asyncio`  | Support des tests asynchrones.                        |
 | `pytest-cov`      | Mesure de couverture.                                 |
@@ -939,25 +958,28 @@ premier seulement (`uv sync --frozen --no-dev`).
 annotations : tous les autres livrent un `py.typed`, et leurs paquets `types-*`
 d'antan ont été retirés de PyPI.
 
-**Ruff est épinglé à la version exacte**, contrairement à tout le reste. Un
-linter qui change d'avis tout seul entre deux `uv sync` ferait échouer la CI sans
-qu'une ligne de code ait bougé : sa montée de version doit rester un commit
-délibéré.
+**Ruff et Import Linter sont épinglés à la version exacte**, contrairement à
+tout le reste. Un outil qui change d'avis tout seul entre deux `uv sync` ferait
+échouer la CI sans qu'une ligne de code ait bougé : leur montée de version doit
+rester un commit délibéré.
 
 ## Qualité et typage
 
-Ruff et Mypy sont configurés dans [`pyproject.toml`](pyproject.toml), chaque
-réglage accompagné de sa justification. Trois vérifications, toutes lançables
-depuis ce dossier :
+Ruff, Mypy et Import Linter sont configurés dans
+[`pyproject.toml`](pyproject.toml), chaque réglage accompagné de sa
+justification. Quatre vérifications, toutes lançables depuis ce dossier :
 
 | Commande                       | Raccourci           | Rôle                      |
 | ------------------------------ | ------------------- | ------------------------- |
 | `uv run ruff check .`          | `make lint`         | Lint                      |
+| `uv run lint-imports`          | `make imports`      | Contrats d'architecture   |
 | `uv run ruff format --check .` | `make format-check` | Formatage (lecture seule) |
 | `uv run mypy src`              | `make typecheck`    | Typage strict             |
 
-`make check` enchaîne les trois **dans l'ordre qu'aura la CI** (QA-01) : un échec
-local reproduit donc un échec de CI. `make` seul liste toutes les cibles.
+`make lint` enchaîne les deux premières — Ruff d'abord, la vérification la moins
+chère. `make check` enchaîne les quatre **dans l'ordre qu'aura la CI** (QA-01) :
+un échec local reproduit donc un échec de CI. `make` seul liste toutes les
+cibles.
 
 Deux cibles réécrivent le code : `make format` (`ruff format .`) et `make lint-fix`
 (`ruff check --fix .`, corrections sûres uniquement).
@@ -965,8 +987,10 @@ Deux cibles réécrivent le code : `make format` (`ruff format .`) et `make lint
 Ces deux-là s'appliquent aussi **toutes seules au moment du commit** : le hook de
 pre-commit du monorepo (SETUP-04) passe chaque fichier `.py` indexé par
 `ruff check --fix` puis `ruff format`, et interrompt le commit sur ce qui reste.
-Voir [Hooks de pre-commit](../../README.md#hooks-de-pre-commit). Le typage, lui,
-n'entre pas dans le hook — il reste à lancer à la main, et la CI le vérifiera.
+Voir [Hooks de pre-commit](../../README.md#hooks-de-pre-commit). Le typage et
+les contrats d'architecture, eux, n'entrent pas dans le hook : lint-staged passe
+des **fichiers**, quand Mypy et Import Linter raisonnent sur le **projet
+entier**. Ils restent à lancer à la main, et la CI les vérifie.
 
 ### Ruff
 
@@ -1021,6 +1045,89 @@ barrières répondent.
 | Les trois drapeaux Mypy nommés ne sont pas réécrits | `strict = true` les active déjà tous les trois.                                                                                    |
 | Aucun `[[tool.mypy.overrides]]` vivant              | Vrai jusqu'à BACK-05, qui en a ajouté un pour `asyncpg` — la seule dépendance sans `py.typed`. Le motif reste documenté sur place. |
 
+### Import Linter
+
+BACK-04 a posé les règles d'architecture ; BACK-04b les rend **mécaniques**.
+[Import Linter](https://import-linter.readthedocs.io/) lit le graphe d'imports
+réel du paquet `app` et refuse ce qui ne respecte pas les contrats déclarés en
+`[tool.importlinter]`. Une violation échoue donc en CI, elle ne se découvre plus
+six mois plus tard en revue de code.
+
+| #   | Contrat               | Type           | Ce qu'il tient                                                                                        |
+| --- | --------------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
+| 1   | `domain-purity`       | `forbidden`    | `modules/*/domain/` et `shared/domain/` n'importent aucun paquet technique — douze sont nommés        |
+| 2   | `module-layers`       | `layers`       | dans chaque module : `infrastructure` → `application` → `domain`, jamais l'inverse                    |
+| 3   | `module-independence` | `independence` | les modules ne s'importent pas mutuellement, **même indirectement**                                   |
+| 4   | `shared-layers`       | `layers`       | dans `shared/` : `infrastructure` → `domain`                                                          |
+| 5   | `service-spaces`      | `layers`       | `main` > `modules` > `shared` > `core` — « `shared` est importable par tous, l'inverse est interdit » |
+
+Trois choix de configuration méritent d'être connus avant d'y toucher :
+
+- **Les contrats 2 et 3 visent `app.modules.*`, pas une liste de modules.** Ils
+  couvriront `organization` (BACK-16), `medical_records` (BACK-19) et les
+  suivants le jour où ceux-ci naîtront — c'est la différence entre un garde-fou
+  et une liste qu'on oublie de tenir à jour.
+- **Les couches du contrat 2 sont optionnelles** (elles s'écrivent entre
+  parenthèses) parce que `modules/organization/` ne porte encore qu'un
+  `__init__.py`. Ce que cela relâche, `exhaustive = true` le rattrape : tout
+  fichier ou dossier ajouté dans un module, dans `shared/` ou à la racine d'`app`
+  fait échouer le contrat tant qu'il n'est pas déclaré comme une couche. Seul
+  `unit_of_work` est exempté — BACK-04 le range volontairement à la racine du
+  module, parce qu'il compose les trois couches.
+- **Le contrat 1 nomme douze paquets, pas les cinq du ticket.**
+  `pydantic_settings` est un paquet distinct de `pydantic`, et `jwt` est le nom
+  d'import réel de `pyjwt`. Règle à tenir : **toute dépendance applicative
+  ajoutée au projet s'ajoute à cette liste, dans la même pull request**.
+
+**Les exceptions.** Aucune n'est nécessaire aujourd'hui. Le jour où l'une le
+devient, elle s'écrit dans le `ignore_imports` du contrat concerné — jamais en
+désactivant le contrat — et porte son motif et sa date de revue :
+
+```toml
+ignore_imports = [
+    # MOTIF : <pourquoi cette entorse est tolerable>
+    # REVUE : AAAA-MM-JJ  <date a laquelle elle doit etre reexaminee>
+    "app.modules.x.domain -> paquet.y",
+]
+```
+
+Rien n'oblige à tenir la date, mais rien ne laisse non plus l'exception dormir :
+`unmatched_ignore_imports_alerting` vaut `"error"` par défaut, si bien qu'une
+exception devenue sans objet fait échouer le lint — `No matches for ignored
+import …` — au lieu de survivre à l'import qu'elle couvrait.
+
+**Le garde-fou est lui-même vérifié.** Un contrat qu'on n'a jamais vu échouer est
+un contrat dont on ne sait rien. Chacun a été cassé volontairement, puis remis en
+état ; le tableau se rejoue en quelques minutes le jour où l'on touche à la
+configuration.
+
+| Violation introduite                                                     | Contrat qui tombe                               |
+| ------------------------------------------------------------------------ | ----------------------------------------------- |
+| `import sqlalchemy` dans `modules/identity/domain/policies.py`           | 1                                               |
+| `domain/entities.py` importe `application/use_cases/create_account.py`   | 2                                               |
+| `modules/organization/__init__.py` importe une entité d'`identity`       | 3                                               |
+| `shared/domain/exceptions.py` importe `shared/infrastructure/db/base.py` | 4, **et 1** par la chaîne qui mène à SQLAlchemy |
+| `core/config.py` importe `shared/domain/exceptions.py`                   | 5                                               |
+| un fichier `modules/identity/services.py`                                | 2, sur l'exhaustivité                           |
+| `organization` importe un module de `shared/` qui importe `identity`     | 3, **par un chemin indirect**                   |
+
+Les deux dernières lignes sont celles qui comptent : ni un `grep`, ni une revue
+de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts.
+
+### Écarts assumés avec le ticket BACK-04b
+
+| Écart                                                             | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/workflows/ci-backend.yml` est **créé ici**, pas en QA-01 | Le ticket met le fichier dans sa portée, et l'objectif — « une violation doit échouer en CI » — ne se tient pas autrement. Le workflow ne porte qu'un job, et son en-tête énumère ce que QA-01 viendra y ajouter : Ruff, Mypy, pytest, les services PostgreSQL et Redis, la couverture et le contrôle des migrations.                                                                                                                                                            |
+| Cinq contrats au lieu de trois                                    | Les contrats 4 et 5 sortent de la portée littérale. Sans le 4, `shared/` — la seule couche dont **tous** les modules dépendent — serait la seule que rien ne garde. Sans le 5, la phrase du ticket « `app.shared` est importable par tous, l'inverse est interdit » resterait déclarative, ce qui est précisément ce que le ticket reproche à BACK-04.                                                                                                                           |
+| Douze paquets interdits au lieu de cinq                           | `pydantic_settings` et `jwt` ne sont pas couverts par `pydantic` et `pyjwt` : ce sont d'autres noms d'import. S'en tenir à cinq aurait laissé passer les sept autres dépendances déclarées du projet.                                                                                                                                                                                                                                                                            |
+| `app.core` **absent** de la liste interdite                       | Un domaine pur ne devrait rien lire de sa configuration, mais l'arbitrage inverse appartient à BACK-04, qui l'a rendu par écrit dans [`core/__init__.py`](src/app/core/__init__.py) — « le domaine ne doit rien y importer d'autre que des réglages ». Le contrat 5 garde le **sens** de cette dépendance ; y revenir serait rouvrir BACK-04.                                                                                                                                    |
+| `source_modules` couvre aussi `app.shared.domain`                 | Le ticket ne nomme que `app.modules.*.domain`. La racine des erreurs métier est un domaine comme un autre, et la sonde `grep` de BACK-04 la couvrait déjà : la restreindre aurait été une régression.                                                                                                                                                                                                                                                                            |
+| Configuration dans `pyproject.toml`, pas dans un `.importlinter`  | Le ticket offrait les deux. Ruff et Mypy y sont déjà : un seul fichier d'outillage Python, un seul format, et les justifications écrites au même endroit que les leurs.                                                                                                                                                                                                                                                                                                          |
+| Rien dans le hook de pre-commit                                   | lint-staged passe des **fichiers**, Import Linter analyse le **projet entier** et construit un graphe incluant les paquets externes. C'est un coût fixe à chaque commit touchant un `.py`, pour un hook dont SETUP-04 a fixé le budget à 10 s. Même arbitrage que Mypy, qui n'y entre pas non plus.                                                                                                                                                                              |
+| `uv sync --locked` en CI, là où QA-01 écrit `--frozen`            | Les deux installent les versions du verrou, mais `--frozen` ne le **regarde pas** : un `pyproject.toml` modifié sans `uv lock` passerait en silence, et la CI vérifierait un environnement qui n'est pas celui du dépôt. `--locked` est le pendant exact du `--frozen-lockfile` de pnpm employé par [`documentation.yml`](../../.github/workflows/documentation.yml). La description de `--frozen` en tête de ce README, qui lui prêtait ce contrôle, a été corrigée au passage. |
+| Aucun test automatisé, mais un tableau de violations documenté    | `tests/` appartient à BACK-12. Même arbitrage qu'en BACK-02, BACK-03 et BACK-04. Les sept violations ci-dessus ont toutes été jouées avant livraison.                                                                                                                                                                                                                                                                                                                            |
+
 ## Ce qui n'est pas encore là
 
 | Sujet                                 | Ticket   |
@@ -1030,9 +1137,10 @@ barrières répondent.
 | Sonde de santé et métadonnées OpenAPI | BACK-08  |
 | Migrations Alembic                    | BACK-07  |
 | Suite de tests                        | BACK-12  |
-| Contrats import-linter                | BACK-04b |
-| Intégration continue                  | QA-01    |
+| Pipeline CI complet du backend        | QA-01    |
 
-La structure modulaire et hexagonale est posée (BACK-04), le socle de persistance
-aussi (BACK-05), Ruff et Mypy sont configurés (BACK-02). Les dépendances de test, elles, restent **déclarées sans
-être configurées** : c'est volontaire, chaque ticket porte son propre outil.
+La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
+désormais tenues par [Import Linter](#import-linter) (BACK-04b), le socle de
+persistance est en place (BACK-05), Ruff et Mypy sont configurés (BACK-02). Les
+dépendances de test, elles, restent **déclarées sans être configurées** : c'est
+volontaire, chaque ticket porte son propre outil.
