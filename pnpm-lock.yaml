@@ -60,6 +60,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/config-typescript
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -100,6 +103,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/config-typescript
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
@@ -140,6 +146,9 @@ importers:
       '@repo/typescript-config':
         specifier: workspace:*
         version: link:../../packages/config-typescript
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3

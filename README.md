@@ -185,9 +185,11 @@ pnpm --filter frontend-individual run dev
 > **Note.** Cette séquence n'est **pas encore complète**.
 > [`docker/docker-compose.yml`](docker/docker-compose.yml) porte depuis INFRA-04
 > `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`, `minio-init` et
-> `api` : le service d'API démarre donc réellement en conteneur. Manquent les
-> trois frontends (INFRA-05a et INFRA-05b), le service `worker` (INFRA-05b) et
-> le `Makefile` de la racine (INFRA-06) — `make up` répondrait aujourd'hui
+> `api` : le service d'API démarre donc réellement en conteneur. Depuis
+> INFRA-05a, l'**image** des trois frontends se construit elle aussi — mais
+> aucun service ne la lance encore : leur déclaration dans le fichier compose,
+> avec celle du `worker`, revient à INFRA-05b. Manquent donc les quatre services
+> et le `Makefile` de la racine (INFRA-06) — `make up` répondrait aujourd'hui
 > `No rule to make target 'up'`. La commande compose complète, elle, fonctionne :
 > elle est juste en dessous. À relire une fois INFRA-06 livré.
 
@@ -423,6 +425,116 @@ Le virtualenv en représente 144 Mo, dont 30 pour `botocore` et 32 pour les `.py
 précompilés à l'installation (`UV_COMPILE_BYTECODE=1`, qui échange ces 32 Mo
 contre un démarrage plus rapide).
 
+### L'image des trois frontends
+
+Les trois applications Next.js se construisent depuis **un seul** Dockerfile,
+[`docker/frontend/Dockerfile`](docker/frontend/Dockerfile), paramétré par un
+`ARG APP_NAME`. Rien ne les distingue à la construction — mêmes scripts, même
+`next.config.ts` à leurs commentaires près : trois fichiers auraient triplé
+chaque correction à venir.
+
+| Cible    | Ce qu'elle fait                                                                           | Qui l'utilise                                    |
+| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `runner` | Sortie `standalone` servie par `node server.js`, sans pnpm ni `node_modules` complet      | les services `frontend-*` du compose (INFRA-05b) |
+| `dev`    | `next dev` sur le port 3000, pnpm et les `node_modules` du monorepo, code monté en volume | INFRA-05b, via le fichier d'override             |
+
+Un `docker build` sans `--target` construit `runner` : c'est le dernier étage du
+fichier, et sa position est délibérée.
+
+**Le contexte de build est la racine du dépôt** — ni `docker/`, ni
+`frontend/<app>/`. Un build pnpm en monorepo a besoin du `pnpm-lock.yaml`, du
+`pnpm-workspace.yaml`, du `package.json` racine et de tout `packages/` : aucun
+sous-dossier ne les contient tous. C'est ce qui a rendu nécessaire le
+[`.dockerignore`](.dockerignore) de la racine, créé par ce ticket — Docker ne lit
+que celui de la racine du contexte, et sans lui les 618 Mo de `node_modules`
+partiraient au démon à chaque build.
+
+```bash
+docker build --build-arg APP_NAME=frontend-professional -t juui-frontend-professional:local -f docker/frontend/Dockerfile .
+```
+
+#### Les trois valeurs figées au build
+
+Ce sont celles que [`.env.example`](.env.example) annonce déjà comme passées « en
+`build.args` » — INFRA-05b les câblera au fichier compose :
+
+| Argument              | Applications          | Ce qu'il devient                                                    |
+| --------------------- | --------------------- | ------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | les trois             | remplacé littéralement dans le bundle envoyé au navigateur          |
+| `API_INTERNAL_URL`    | les trois             | lu par le serveur Next — `http://api:8000` en conteneur             |
+| `SITE_URL`            | `frontend-individual` | `metadataBase`, `robots.txt` et `sitemap.xml`, tous trois prérendus |
+
+> **Piège.** Ces valeurs sont **figées au moment du build**, pas lues au
+> démarrage. Les changer impose de **reconstruire** l'image : un
+> `docker compose restart` ne changera rien.
+
+Un argument non passé reste **absent** de l'environnement du build — et non vide.
+La nuance compte : le repli que chaque application prévoit s'applique alors
+normalement, là où une chaîne vide le contournerait. Construite sans `SITE_URL`,
+`frontend-individual` publie donc un sitemap en `http://localhost:3002` au lieu
+d'échouer sur un `Invalid URL`.
+
+#### L'anatomie de la sortie standalone
+
+`next build` ne recopie dans `.next/standalone` que les modules que son traçage a
+vu importer — c'est tout l'intérêt de l'image. Deux choses lui échappent
+toujours, `.next/static` et `public/`, qu'il suppose servis par un CDN : l'étage
+`builder` les remet en place, faute de quoi la page s'afficherait **sans aucune
+feuille de style**, et sans la moindre erreur.
+
+L'arborescence obtenue est celle du dépôt vue depuis `outputFileTracingRoot`,
+que les trois `next.config.ts` fixent à la racine (FRONT-01) :
+
+```
+/app
+├── node_modules/                        les modules tracés, 38 Mo
+└── frontend/frontend-professional/
+    ├── server.js                        le serveur minimal, lancé par le CMD
+    ├── .next/                           pages compilées, plus static/ et cache/
+    └── package.json
+```
+
+Elle est recopiée **telle quelle** : les `node_modules` qu'elle contient sont un
+arbre de liens symboliques pnpm, que déplacer ou aplatir casserait. C'est aussi
+pourquoi l'image fixe son `WORKDIR` sur le dossier de l'application plutôt que
+d'interpoler `APP_NAME` dans son `CMD` — une forme `exec` de `CMD` n'interpole
+aucune variable, un `WORKDIR`, si.
+
+#### Ce que pèsent les images
+
+| Mesure                                        | frontend (chacune des trois) |
+| --------------------------------------------- | ---------------------------- |
+| Blobs compressés (`docker image inspect`)     | 95 Mo                        |
+| Couches décompressées (`docker history`)      | ≈ 309 Mo                     |
+| Occupation réelle dans le conteneur (`du -s`) | 292 Mo                       |
+| dont image `node:24.19.0-trixie-slim` nue     | 253 Mo                       |
+| dont l'application et ses modules tracés      | 39 Mo                        |
+
+`docker image ls` en annonce 405 Mo, et c'est la même mise en garde qu'à la
+section précédente : ce chiffre est le `DISK USAGE` du magasin containerd, qui
+compte les blobs compressés **et** leur copie décompressée. Les 39 Mo de la
+dernière ligne sont la mesure qui décrit le travail de ce ticket — à comparer aux
+618 Mo du `node_modules` du monorepo, que l'image ne contient pas.
+
+```bash
+docker run --rm juui-frontend-professional:local sh -c 'du -sh /app /app/node_modules'
+```
+
+#### Vérifier une image à la main
+
+```bash
+docker run --rm -p 3001:3000 juui-frontend-professional:local
+```
+
+L'accueil répond alors **200** sur <http://localhost:3001>, servi par l'utilisateur
+non-root `juui` (uid 1001, le même que l'image d'API). Même chose pour
+`frontend-individual` sur 3002.
+
+`frontend-admin`, lui, répond **307 vers `/login`** : son accueil vit dans le
+groupe `(protected)` et `proxy.ts` redirige toute requête sans session
+(FRONT-03). C'est `/login` qui rend 200 — la redirection est le comportement
+attendu, pas une panne.
+
 ### Vérifier le stockage objet
 
 MinIO tient lieu d'Amazon S3 sur le poste, et le bucket applicatif — `S3_BUCKET`,
@@ -570,6 +682,36 @@ partagées](#configurations-partagées).
 | `python:3.14-slim-trixie`, distribution nommée                                               | Le `-slim` nu suivrait une bascule de Debian en amont : la libc et les paquets système de l'image changeraient d'un `docker build` à l'autre sans qu'une ligne du dépôt ait bougé. Même esprit que les tags épinglés d'INFRA-01 à INFRA-03.                                                                                                                                                                                                                                     |
 | Deux variables du compose avec une valeur de repli `${VAR:-…}`                               | `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` naissent avec ce ticket : tout `.env` créé avant lui les ignore. Sans repli, la première donnerait un `int('')` et un conteneur en boucle de redémarrage, la seconde ne ferait plus confiance à personne — en silence. Les cinq autres services s'en passent, leurs variables étant documentées depuis SETUP-05.                                                                                                                     |
 | « Moins de 400 Mo » : préciser la mesure                                                     | `docker image ls` affiche 402 Mo, mais c'est le `DISK USAGE` du magasin containerd, qui compte les blobs compressés **et** leur copie décompressée. Les mesures qui décrivent l'image valent 91 Mo compressés et ≈ 310 Mo décompressés, pour 293 Mo réellement occupés dans le conteneur. Le détail et les commandes sont plus haut.                                                                                                                                            |
+
+### Écarts assumés avec le ticket INFRA-05a
+
+| Écart                                                     | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `frontend/*/next.config.*` inchangés                      | La PORTÉE du ticket cite ces trois fichiers, mais le travail y est **déjà fait** : FRONT-01 à FRONT-03 y ont posé `output: 'standalone'` et `outputFileTracingRoot`, en citant nommément INFRA-05. Il n'y avait pas une ligne à écrire.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `.dockerignore` créé à la **racine**, hors PORTÉE         | Le contexte de build **est** la racine du dépôt — un build pnpm en monorepo a besoin du lockfile, du `pnpm-workspace.yaml` et de tout `packages/`. Docker ne lit que `<contexte>/.dockerignore` : sans lui, 618 Mo de `node_modules` partent au démon à chaque build. Sa ligne la plus importante n'est pas celle-là : `frontend/*/.env.local` existe sur tout poste, Next le charge **au build**, et il est prioritaire sur l'environnement — embarqué dans l'image, il écraserait en silence les `build.args` d'INFRA-05b.                                                                                                                                                                                                                                                                                                                           |
+| `@tailwindcss/postcss` déclaré par les trois applications | **L'écart le plus lourd, et il sort du périmètre du ticket : trois `package.json` et le `pnpm-lock.yaml`.** Sans lui, le build en conteneur échoue sur un `Cannot find module '@tailwindcss/postcss'`. Le paquet n'est déclaré que par `@repo/tailwind-config`, alors que la chaîne PostCSS le nomme depuis l'application : c'est exactement la dépendance fantôme que le `node_modules` strict de pnpm interdit. Vérifié, et c'est ce qui rendait le diagnostic pénible : le même `pnpm --filter … build` **réussit** sur macOS depuis une copie vierge du dépôt et **échoue** dans le conteneur Linux, à `node_modules` identiques. Même arbitrage que `lucide-react` en FRONT-01 et FRONT-03, et même version que le package partagé pour que pnpm n'en installe qu'une — le verrou ne gagne que trois entrées d'`importers`, aucun paquet nouveau. |
+| Cible `dev` ajoutée, non demandée                         | Le ticket ne cite que `deps`, `builder` et `runner`. Précédent d'INFRA-04, dont le Dockerfile porte déjà `dev` et `worker` : le fichier compose ne fait que sélectionner une cible. INFRA-05b n'a ainsi que du compose à écrire, et n'aura pas à rouvrir ce fichier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Six étages pour deux cibles utiles                        | `base` et `toolchain` sont des paliers partagés : pnpm n'est installé qu'une fois, et surtout `runner` descend de `base` et non de `deps` — l'image servie n'hérite donc ni de pnpm, ni des sources, ni des `node_modules` du monorepo.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `npm install -g pnpm@…` plutôt que corepack               | Vérifié dans le Dockerfile amont de `nodejs/docker-node` : l'image officielle **n'embarque pas** corepack. La version vient donc d'un `ARG`, et l'étage `deps` fait échouer le build si elle diverge du champ `packageManager` du `package.json` racine — deux sources de vérité, une garde.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--offline` ajouté à `pnpm install --frozen-lockfile`     | Le ticket demande `pnpm fetch` puis `pnpm install --frozen-lockfile`. Sans `--offline`, un paquet absent du store serait rattrapé en silence par le registre : le découpage en deux couches ne prouverait plus rien. Vérifié sur un build `--no-cache` complet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Store pnpm dans la couche, pas en `--mount=type=cache`    | Contrairement aux montages de cache d'INFRA-04. `pnpm fetch` et `pnpm install` sont deux `RUN` distincts : un cache mount vit sur un autre système de fichiers que la couche en écriture, pnpm y perd le lien physique et recopie tout. Garder le store dans la couche préserve les liens et rend l'étage cachable par Docker sur le seul lockfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `HUSKY=0` dans l'image                                    | Le `prepare: husky` de la racine s'exécute à chaque `pnpm install`, celui de l'image compris. Vérifié : husky 9.1.7 se contente d'écrire « .git can't be found » et sort en 0 — la variable dit l'intention, et couvre le jour où `.git` entrerait dans le contexte.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Trois `ARG` de build non cités par le ticket              | `NEXT_PUBLIC_API_URL`, `API_INTERNAL_URL` et `SITE_URL`. Le `.env.example` de la racine et les trois `.env.local.example` **promettent déjà** qu'INFRA-05 les passe en `build.args` ; Next les fige au build. Sans ces `ARG`, INFRA-05b ne pourrait pas tenir cette promesse sans rouvrir ce fichier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Ces trois `ARG` ne sont **pas** recopiés en `ENV`         | Contre-intuitif, et vérifié : un `ARG` est déjà visible dans l'environnement du `RUN` qui suit, et un `ARG` non passé y est **absent** — là où `ENV SITE_URL=${SITE_URL}` en ferait une chaîne **vide**. La nuance n'est pas théorique : le repli de `app/site-url.ts` (FRONT-02) est un `??`, qui ne rattrape pas la chaîne vide. Avec l'`ENV`, un build sans `SITE_URL` mourait sur un `Invalid URL` dans `new URL(SITE_URL)` ; sans lui, il se replie sur `http://localhost:3002` comme l'application le prévoit.                                                                                                                                                                                                                                                                                                                                   |
+| `.next/static` et `public/` assemblés dans `builder`      | Next ne les recopie **jamais** dans la sortie standalone, les supposant servis par un CDN. Sans ce rattrapage, l'image se construit, le serveur démarre et la page s'affiche sans aucune feuille de style — une panne muette. `public/` est sous garde de présence : aucune des trois applications n'en a un aujourd'hui, et un `cp` de chemin absent ferait échouer le build.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Deux `chown`, et deux seulement                           | Dans `runner`, `.next/cache` est le seul dossier qui appartienne à `juui` : l'optimiseur d'images de Next y écrit, tout le reste est exécuté sans pouvoir être réécrit — choix d'INFRA-04. Dans `dev`, le dossier de l'application entier, parce qu'un serveur de développement Next écrit **dans le code qu'il sert** : `.next/`, puis `next-env.d.ts` qu'il regénère à chaque démarrage. Les deux `EACCES` ont été constatés l'un après l'autre, et ils laissent le conteneur vivant mais muet — seuls les journaux les nomment.                                                                                                                                                                                                                                                                                                                     |
+| `WORKDIR` interpolé plutôt qu'un `CMD` en `sh -c`         | Les `node_modules` de la sortie standalone sont un arbre de liens symboliques pnpm : le dossier de l'application ne peut être ni déplacé ni aplati. Une forme `exec` de `CMD` n'interpole aucune variable, un `WORKDIR`, si — le `sh -c` qu'INFRA-04 s'était refusé n'est donc pas nécessaire ici non plus.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `next dev --port 3000` plutôt que `pnpm dev`              | Le script `dev` du `package.json` fixe le port du **poste** — 3001, 3002 ou 3003. En conteneur les trois applications écoutent sur 3000, comme le pose le tableau des ports : la règle doit valoir dans les deux modes, et le port publié reste seul à les distinguer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Aucun `HEALTHCHECK`                                       | Le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. Celles des trois frontends reviennent donc à INFRA-05b, avec les services.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Deux critères de la checklist non traités                 | « `docker compose up` démarre toute la stack » et « le rechargement à chaud fonctionne » appartiennent à INFRA-05b : la carte porte encore la checklist d'avant la scission d'INFRA-05. Les quatre critères de la checklist **✅ Critères d'acceptation**, elle, sont tous vérifiés.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--filter "$APP_NAME"` sans les trois points              | `--filter "$APP_NAME..."` construirait aussi les dépendances du workspace. Aucune n'a de script `build` : SHARED-01 publie `@repo/ui` en source TypeScript, que Next transpile lui-même.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+
+> **Note.** Le troisième écart est le seul à toucher des fichiers hors du
+> périmètre du ticket, et il n'était pas évitable : sans lui, le critère
+> « l'image se construit pour les trois valeurs d'`APP_NAME` » ne pouvait pas
+> être tenu. Il corrige un défaut **antérieur** à ce ticket, qu'aucun poste
+> macOS ne pouvait révéler — et que la CI d'images de QA-03 aurait rencontré
+> de toute façon.
 
 ## Conventions
 
