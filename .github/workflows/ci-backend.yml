@@ -63,16 +63,15 @@ jobs:
       # `@v10` echoue sur « unable to find version ». QA-07 epinglera de toute
       # facon toutes les actions par SHA.
       #
-      # `python-version-file` est resolu depuis la racine du depot, pas depuis
-      # le `working-directory` ci-dessus : celui-ci ne s'applique qu'aux etapes
-      # `run`. Meme intention que le `node-version-file: .nvmrc` de
-      # documentation.yml -- la version vient du depot, jamais du workflow.
+      # AUCUNE VERSION DE PYTHON N'EST DEMANDEE ICI, et c'est voulu : l'etape
+      # suivante lit backend/api/.python-version et telecharge l'interpreteur
+      # s'il manque -- exactement ce que fait `uv sync` sur le poste. La nommer
+      # une seconde fois dans le workflow n'ajouterait qu'un endroit ou diverger.
       - name: Installer uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: backend/api/uv.lock
-          python-version-file: backend/api/.python-version
 
       # `--locked` et non `--frozen` : les deux installent les versions du
       # lock, mais `--locked` echoue en plus si uv.lock est desaccorde de
