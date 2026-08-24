@@ -14,7 +14,7 @@ conteneur recevoir sans broncher les `POSTGRES_HOST_PORT` et autres
 `MINIO_API_HOST_PORT` qui ne le concernent pas. Le fichier, lui, est STRICT :
 toute cle qu'aucun champ ne reclame empeche le demarrage. C'est ce que promet
 `.env.example`, et c'est ce qui fait de ce gabarit le miroir exact des champs
-declares ici. Voir `_SourceEnvRacine` pour le detail du mecanisme.
+declares ici. Voir `_OrphanKeyDotEnvSource` pour le detail du mecanisme.
 
 NOMMAGE DES VARIABLES
 Chaque sous-modele porte son propre `env_prefix` (`POSTGRES_`, `REDIS_`, `S3_`,
@@ -55,12 +55,12 @@ from pydantic_settings import (
 # que son gabarit interdit. Dans l'image d'INFRA-04 le chemin n'existera pas, et
 # pydantic-settings ignore silencieusement un env_file absent : le conteneur
 # n'est configure que par ses variables d'environnement.
-_FICHIER_ENV = Path(__file__).resolve().parents[3] / ".env"
+_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 
 # Valeur que .env.example livre pour JWT_SECRET_KEY. Ce n'est pas une cle mais un
 # marqueur, deliberement non hexadecimal ; le laisser en place en production est
 # une faille, pas une negligence de style.
-_MARQUEUR_JWT_A_REMPLACER = "changer-cette-valeur-voir-openssl-rand-hex-32"
+_JWT_PLACEHOLDER = "changer-cette-valeur-voir-openssl-rand-hex-32"
 
 
 class ConfigurationError(RuntimeError):
@@ -72,7 +72,7 @@ class ConfigurationError(RuntimeError):
     """
 
 
-class _SousModele(BaseSettings):
+class _SettingsSection(BaseSettings):
     """Socle commun aux cinq sous-modeles thematiques.
 
     Les trois reglages qui comptent :
@@ -90,7 +90,7 @@ class _SousModele(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=_FICHIER_ENV,
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         dotenv_filtering="only_existing",
@@ -98,7 +98,7 @@ class _SousModele(BaseSettings):
     )
 
 
-class AppSettings(_SousModele):
+class AppSettings(_SettingsSection):
     """Reglages generaux de l'application. Sans prefixe (BACK-03, BACK-11)."""
 
     # Prefixe vide EXPLICITE, alors que c'est deja le defaut : les cinq
@@ -122,11 +122,11 @@ class AppSettings(_SousModele):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def _decouper_les_origines(cls, valeur: object) -> object:
+    def _split_cors_origins(cls, value: object) -> object:
         """Accepte la liste separee par des virgules que documente .env.example."""
-        if isinstance(valeur, str):
-            return [origine.strip() for origine in valeur.split(",") if origine.strip()]
-        return valeur
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
     @property
     def is_production(self) -> bool:
@@ -134,7 +134,7 @@ class AppSettings(_SousModele):
         return self.environment == "production"
 
 
-class DatabaseSettings(_SousModele):
+class DatabaseSettings(_SettingsSection):
     """Connexion PostgreSQL. Prefixe `POSTGRES_` (BACK-03, BACK-05)."""
 
     model_config = SettingsConfigDict(env_prefix="POSTGRES_")
@@ -177,7 +177,7 @@ class DatabaseSettings(_SousModele):
         )
 
 
-class RedisSettings(_SousModele):
+class RedisSettings(_SettingsSection):
     """Connexion Redis. Prefixe `REDIS_` (BACK-03, BACK-14, BACK-15).
 
     Les deux bases sont separees a dessein depuis INFRA-02 : purger le cache ne
@@ -205,23 +205,23 @@ class RedisSettings(_SousModele):
         """URL du broker TaskIQ, base `REDIS_BROKER_DB` (BACK-15)."""
         return self._url(self.broker_db)
 
-    def _url(self, base: int) -> str:
+    def _url(self, database: int) -> str:
         """Compose l'URL d'une base Redis. Contient le mot de passe : ne pas journaliser."""
-        mot_de_passe = (
+        quoted_password = (
             None if self.password is None else quote(self.password.get_secret_value(), safe="")
         )
         return str(
             RedisDsn.build(
                 scheme="redis",
-                password=mot_de_passe,
+                password=quoted_password,
                 host=self.host,
                 port=self.port,
-                path=str(base),
+                path=str(database),
             )
         )
 
 
-class S3Settings(_SousModele):
+class S3Settings(_SettingsSection):
     """Stockage objet compatible S3. Prefixe `S3_` (BACK-03, BACK-13)."""
 
     # `validate_by_name` autorise a construire la classe par les NOMS de champs
@@ -253,7 +253,7 @@ class S3Settings(_SousModele):
     region: str = "us-east-1"
 
 
-class JWTSettings(_SousModele):
+class JWTSettings(_SettingsSection):
     """Signature des jetons d'authentification. Prefixe `JWT_` (BACK-03, BACK-10)."""
 
     model_config = SettingsConfigDict(env_prefix="JWT_")
@@ -268,7 +268,7 @@ class JWTSettings(_SousModele):
 
 # Ordre d'affichage dans les messages d'erreur, et source unique du jeu de cles
 # admises dans le fichier .env.
-_SOUS_MODELES: tuple[type[BaseSettings], ...] = (
+_SETTINGS_SECTIONS: tuple[type[BaseSettings], ...] = (
     AppSettings,
     DatabaseSettings,
     RedisSettings,
@@ -277,46 +277,46 @@ _SOUS_MODELES: tuple[type[BaseSettings], ...] = (
 )
 
 
-def _cles_env_du_champ(modele: type[BaseSettings], champ: str) -> list[str]:
+def _env_keys_for_field(model: type[BaseSettings], field: str) -> list[str]:
     """Noms de variables d'environnement reconnus pour un champ donne.
 
     Args:
-        modele: la classe de reglages qui declare le champ.
-        champ: le nom du champ.
+        model: la classe de reglages qui declare le champ.
+        field: le nom du champ.
 
     Returns:
         Les noms en majuscules, par ordre de priorite de lecture.
     """
-    alias = modele.model_fields[champ].validation_alias
+    alias = model.model_fields[field].validation_alias
     if isinstance(alias, AliasChoices):
         # Un champ a alias porte deja son nom complet : le prefixe ne s'y ajoute
         # pas, `env_prefix_target` valant « variable » par defaut.
-        return [choix.upper() for choix in alias.choices if isinstance(choix, str)]
+        return [choice.upper() for choice in alias.choices if isinstance(choice, str)]
     if isinstance(alias, str):
         return [alias.upper()]
-    prefixe = str(modele.model_config.get("env_prefix", ""))
-    return [f"{prefixe}{champ}".upper()]
+    prefix = str(model.model_config.get("env_prefix", ""))
+    return [f"{prefix}{field}".upper()]
 
 
-def _cles_env(modele: type[BaseSettings]) -> set[str]:
+def _env_keys(model: type[BaseSettings]) -> set[str]:
     """Toutes les variables d'environnement qu'un sous-modele reconnait.
 
     Args:
-        modele: la classe de reglages a inspecter.
+        model: la classe de reglages a inspecter.
 
     Returns:
         Les noms en majuscules, prefixes appliques, alias compris.
     """
-    return {cle for champ in modele.model_fields for cle in _cles_env_du_champ(modele, champ)}
+    return {key for field in model.model_fields for key in _env_keys_for_field(model, field)}
 
 
 # Jeu des cles admises dans le fichier .env, calcule par introspection : ajouter
 # un champ a un sous-modele l'etend tout seul, il n'y a aucune liste a tenir a
 # jour a la main.
-_CLES_DES_SOUS_MODELES = frozenset[str]().union(*(_cles_env(m) for m in _SOUS_MODELES))
+_SECTION_ENV_KEYS = frozenset[str]().union(*(_env_keys(m) for m in _SETTINGS_SECTIONS))
 
 
-class _SourceEnvRacine(DotEnvSettingsSource):
+class _OrphanKeyDotEnvSource(DotEnvSettingsSource):
     """Source du fichier .env qui ne laisse remonter que les cles orphelines.
 
     C'est la piece qui rend le fichier STRICT, et elle merite son explication.
@@ -340,9 +340,9 @@ class _SourceEnvRacine(DotEnvSettingsSource):
     def __call__(self) -> dict[str, Any]:
         """Retire du fichier les cles deja prises en charge par un sous-modele."""
         return {
-            cle: valeur
-            for cle, valeur in super().__call__().items()
-            if cle.upper() not in _CLES_DES_SOUS_MODELES
+            key: value
+            for key, value in super().__call__().items()
+            if key.upper() not in _SECTION_ENV_KEYS
         }
 
 
@@ -353,11 +353,11 @@ class Settings(BaseSettings):
     tests, sous peine de relire l'environnement a chaque appel.
     """
 
-    # `env_file` est indispensable ici : c'est ce fichier que `_SourceEnvRacine`
+    # `env_file` est indispensable ici : c'est ce fichier que `_OrphanKeyDotEnvSource`
     # relit pour y traquer les cles orphelines. `extra` reste a « forbid », le
     # defaut, et c'est lui qui refuse ces cles.
     model_config = SettingsConfigDict(
-        env_file=_FICHIER_ENV,
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="forbid",
@@ -386,7 +386,7 @@ class Settings(BaseSettings):
         return (
             init_settings,
             env_settings,
-            _SourceEnvRacine(settings_cls),
+            _OrphanKeyDotEnvSource(settings_cls),
             file_secret_settings,
         )
 
@@ -396,17 +396,14 @@ class Settings(BaseSettings):
     # modele deja construit, donc `self` -- le renommer en `cls` casserait
     # l'acces aux sous-modeles.
     @model_validator(mode="after")
-    def _refuser_le_marqueur_jwt_en_production(self) -> Self:  # noqa: N804
+    def _reject_jwt_placeholder_in_production(self) -> Self:  # noqa: N804
         """Interdit de partir en production avec la cle de signature du gabarit.
 
         Seule regle qui traverse deux sous-modeles, d'ou sa place ici. Elle
         transforme un gabarit recopie sans etre relu -- l'oubli le plus banal
         d'une premiere mise en production -- en refus de demarrage.
         """
-        if (
-            self.app.is_production
-            and self.jwt.secret_key.get_secret_value() == _MARQUEUR_JWT_A_REMPLACER
-        ):
+        if self.app.is_production and self.jwt.secret_key.get_secret_value() == _JWT_PLACEHOLDER:
             message = (
                 "JWT_SECRET_KEY porte encore la valeur du gabarit, qui est un marqueur et "
                 "non une cle. En generer une propre : openssl rand -hex 32"
@@ -415,43 +412,43 @@ class Settings(BaseSettings):
         return self
 
 
-_TOUS_LES_MODELES: tuple[type[BaseSettings], ...] = (*_SOUS_MODELES, Settings)
-_MODELES_PAR_NOM: dict[str, type[BaseSettings]] = {
-    modele.__name__: modele for modele in _TOUS_LES_MODELES
+_ALL_SETTINGS_MODELS: tuple[type[BaseSettings], ...] = (*_SETTINGS_SECTIONS, Settings)
+_MODELS_BY_NAME: dict[str, type[BaseSettings]] = {
+    model.__name__: model for model in _ALL_SETTINGS_MODELS
 }
 
 # Traduction des codes d'erreur pydantic les plus frequents. Les autres passent
 # avec leur message d'origine, qui reste plus precis qu'une reformulation vague.
-_MOTIFS = {
+_REASONS = {
     "missing": "variable absente",
     "extra_forbidden": "cle inconnue -- aucun champ de Settings ne la reclame",
 }
 
 
-def _nom_de_variable(titre: str, emplacement: Iterable[int | str]) -> str:
+def _variable_name(title: str, location: Iterable[int | str]) -> str:
     """Reconstitue le nom de la variable d'environnement derriere un champ en erreur.
 
     Args:
-        titre: le nom de la classe en defaut, tel que pydantic le rapporte.
-        emplacement: le `loc` de l'erreur.
+        title: le nom de la classe en defaut, tel que pydantic le rapporte.
+        location: le `loc` de l'erreur.
 
     Returns:
         Le nom de la variable en majuscules, prefixe applique. A defaut de champ
         connu -- le cas d'une cle orpheline du fichier .env -- l'emplacement tel
         quel, qui EST deja le nom de la variable.
     """
-    champ = ".".join(str(partie) for partie in emplacement)
-    modele = _MODELES_PAR_NOM.get(titre)
-    if modele is None or champ not in modele.model_fields:
-        return champ.upper()
-    return _cles_env_du_champ(modele, champ)[0]
+    field = ".".join(str(part) for part in location)
+    model = _MODELS_BY_NAME.get(title)
+    if model is None or field not in model.model_fields:
+        return field.upper()
+    return _env_keys_for_field(model, field)[0]
 
 
-def _fautes(erreur: ValidationError) -> dict[str, str]:
+def _faults(error: ValidationError) -> dict[str, str]:
     """Traduit une erreur de validation en couples « variable : motif ».
 
     Args:
-        erreur: l'erreur levee par pydantic.
+        error: l'erreur levee par pydantic.
 
     Returns:
         Un dictionnaire ordonne, indexe par nom de variable -- ce qui dedoublonne
@@ -460,18 +457,18 @@ def _fautes(erreur: ValidationError) -> dict[str, str]:
     return {
         # `removeprefix` retire le « Value error, » dont pydantic prefixe les
         # erreurs de validateur : le message qu'on y a ecrit se suffit a lui-meme.
-        _nom_de_variable(erreur.title, detail["loc"]): _MOTIFS.get(
+        _variable_name(error.title, detail["loc"]): _REASONS.get(
             detail["type"], detail["msg"].removeprefix("Value error, ")
         )
-        for detail in erreur.errors()
+        for detail in error.errors()
     }
 
 
-def _message_explicite(erreur: ValidationError) -> str:
+def _explicit_message(error: ValidationError) -> str:
     """Reformule une erreur de validation en termes de variables d'environnement.
 
     Args:
-        erreur: l'erreur levee au moment de construire `Settings`.
+        error: l'erreur levee au moment de construire `Settings`.
 
     Returns:
         Un message multiligne nommant chaque variable fautive et le fichier a corriger.
@@ -481,12 +478,12 @@ def _message_explicite(erreur: ValidationError) -> str:
     # suivant, et ainsi de suite. On reinterroge donc les cinq sous-modeles pour
     # tout dire d'un coup. S'ils sont tous sains, la faute est a la racine -- une
     # cle orpheline dans le fichier .env -- et l'erreur d'origine fait foi.
-    fautes: dict[str, str] = {}
-    for modele in _SOUS_MODELES:
+    faults: dict[str, str] = {}
+    for model in _SETTINGS_SECTIONS:
         try:
-            modele()
-        except ValidationError as defaut:
-            fautes.update(_fautes(defaut))
+            model()
+        except ValidationError as failure:
+            faults.update(_faults(failure))
 
     return "\n".join(
         [
@@ -495,11 +492,11 @@ def _message_explicite(erreur: ValidationError) -> str:
             # Une regle qui porte sur le modele entier -- et non sur un champ --
             # n'a pas de variable a nommer : sa seule phrase tient lieu de ligne.
             *(
-                f"  - {variable} : {motif}" if variable else f"  - {motif}"
-                for variable, motif in (fautes or _fautes(erreur)).items()
+                f"  - {variable} : {reason}" if variable else f"  - {reason}"
+                for variable, reason in (faults or _faults(error)).items()
             ),
             "",
-            f"Corriger les variables d'environnement ou {_FICHIER_ENV}.",
+            f"Corriger les variables d'environnement ou {_ENV_FILE}.",
             "Le gabarit .env.example, a cote, documente chaque variable.",
         ]
     )
@@ -524,8 +521,8 @@ def get_settings() -> Settings:
     """
     try:
         return Settings()
-    except ValidationError as erreur:
-        raise ConfigurationError(_message_explicite(erreur)) from erreur
+    except ValidationError as error:
+        raise ConfigurationError(_explicit_message(error)) from error
 
 
 # Alias a annoter les parametres de route : `settings: SettingsDep`. Il evite de
