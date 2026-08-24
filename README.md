@@ -57,11 +57,11 @@ Pour le parcours qui fonctionne aujourd'hui :
 
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
   [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).
-  Requis depuis INFRA-01 : c'est lui qui fait tourner PostgreSQL et pgAdmin. Qui
-  veut seulement lancer `uvicorn` peut encore s'en passer — l'API n'ouvre aucune
-  connexion à la base avant BACK-05. C'est bien `docker compose`, sous-commande
-  du client, qui est attendue — pas l'ancien binaire `docker-compose`, qui n'est
-  plus maintenu.
+  Requis depuis INFRA-01 : c'est lui qui fait tourner PostgreSQL et pgAdmin.
+  Depuis BACK-05, même un `uvicorn` lancé sur le poste en dépend : l'API ouvre
+  son pool de connexions au démarrage et refuse de partir si la base ne répond
+  pas. C'est bien `docker compose`, sous-commande du client, qui est attendue —
+  pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
 
 Un outil de plus pour le parcours conteneurisé complet. **Rien ne le réclame
 encore** ; l'installer maintenant évite seulement d'avoir à revenir ici :
@@ -158,12 +158,15 @@ cd backend/api && uv run uvicorn app.main:app --reload
 
 La documentation interactive répond sur <http://localhost:8000/docs>. L'API ne
 sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.md).
-Elle ne parle pas encore à PostgreSQL non plus : le branchement de SQLAlchemy
-est l'objet de BACK-05.
 
 Depuis BACK-03, elle **valide sa configuration au démarrage** et refuse de partir
 si une variable obligatoire manque — d'où la copie de `backend/api/.env` faite à
 l'installation. Le message d'erreur nomme alors chaque variable en défaut.
+
+Depuis BACK-05, elle **ouvre son pool PostgreSQL au démarrage** et l'éprouve par
+un `SELECT 1`. Le service `postgres` doit donc tourner, sans quoi le processus
+s'arrête en nommant l'hôte injoignable, avec un code de sortie 3 — plutôt que de
+paraître sain et d'échouer au premier appel.
 
 Enfin les deux interfaces livrées, seuls workspaces pnpm à définir aujourd'hui
 un script `dev` :
@@ -359,7 +362,7 @@ commande du conteneur, dans les trois cibles :
    personne ;
 2. **il applique les migrations**, `alembic upgrade head` — sautées avec un
    message tant qu'`alembic.ini` n'existe pas, ce qui reste le cas jusqu'à
-   BACK-05 ;
+   BACK-07 ;
 3. **il `exec` la commande**, qui hérite du PID 1 et reçoit donc le `SIGTERM` de
    `docker stop`.
 
@@ -371,7 +374,7 @@ docker compose --project-directory . -f docker/docker-compose.yml logs api
 
 ```
 INFRA-04 : PostgreSQL joignable sur postgres:5432 (tentative 1).
-INFRA-04 : alembic.ini absent, migrations non configurees (BACK-05) -- etape sautee.
+INFRA-04 : alembic.ini absent, migrations non configurees (BACK-07) -- etape sautee.
 INFRA-04 : demarrage de -- uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
 ```
 
@@ -801,7 +804,7 @@ partagées](#configurations-partagées).
 | Ce que `--proxy-headers` change réellement                                                   | Le ticket présente le drapeau comme le correctif du problème d'IP. Vérifié : il ne fait rien tout seul. Un conteneur voit toujours l'IP de la passerelle (`192.168.65.1` sous Docker Desktop) ; uvicorn ne la remplace que si un intermédiaire pose un `X-Forwarded-For` **et** que cet intermédiaire figure dans `FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement : le réglage ne compte qu'en production, et `*` y serait une faille.            |
 | Sonde sur `/openapi.json`, et dans le compose plutôt que dans l'image                        | `/health/live` relève de BACK-08 et n'existe pas : la viser laisserait le service indéfiniment `unhealthy` et bloquerait les `depends_on` d'INFRA-05b. Quant à l'emplacement, le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. À basculer sur `/health/live` à BACK-08.                                                                                                                                                                              |
 | Sonde écrite en `python -c`, pas en `curl` ni `wget`                                         | `python:3.14-slim` n'embarque ni l'un ni l'autre, et en installer un contredirait le « runtime minimal » du ticket. `urlopen` lève sur tout code hors 2xx, l'appel se suffit donc à lui-même. `127.0.0.1` et non `localhost`, même piège IPv6 qu'en INFRA-02 et INFRA-03.                                                                                                                                                                                                       |
-| Migrations **sautées** tant qu'`alembic.ini` est absent                                      | Le ticket veut `alembic upgrade head` dans l'entrypoint ; `alembic.ini` arrive avec BACK-05 et les premières migrations avec BACK-07. La garde de présence permet d'écrire l'étape maintenant sans casser le démarrage, et elle s'activera d'elle-même sans qu'on revienne sur le fichier.                                                                                                                                                                                      |
+| Migrations **sautées** tant qu'`alembic.ini` est absent                                      | Le ticket veut `alembic upgrade head` dans l'entrypoint ; `alembic.ini` et les premières migrations arrivent tous deux avec BACK-07 — INFRA-04 les attribuait à BACK-05, qui n'a livré que le socle SQLAlchemy. La garde de présence permet d'écrire l'étape maintenant sans casser le démarrage, et elle s'activera d'elle-même sans qu'on revienne sur le fichier.                                                                                                            |
 | Attente de PostgreSQL en `asyncpg`, pas en `pg_isready`                                      | `pg_isready` demanderait `postgresql-client` dans une image que le ticket veut minimale, pour une commande utilisée une fois. Un simple test TCP ne suffit pas non plus : c'est la leçon déjà inscrite dans le healthcheck `postgres` d'INFRA-01. `asyncpg` est déjà dans le virtualenv.                                                                                                                                                                                        |
 | La cible `worker` se construit mais ne s'arrête pas si on la lance                           | Vérifié, et contre-intuitif : sans le module de broker de BACK-15, le gestionnaire de processus de taskiq relance ses workers morts **en boucle**. Le conteneur reste `running` et paraît sain, alors qu'il ne consomme aucune tâche. Seuls les journaux le disent. À savoir pour INFRA-05b.                                                                                                                                                                                    |
 | `python:3.14-slim-trixie`, distribution nommée                                               | Le `-slim` nu suivrait une bascule de Debian en amont : la libc et les paquets système de l'image changeraient d'un `docker build` à l'autre sans qu'une ligne du dépôt ait bougé. Même esprit que les tags épinglés d'INFRA-01 à INFRA-03.                                                                                                                                                                                                                                     |

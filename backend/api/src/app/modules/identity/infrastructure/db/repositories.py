@@ -110,8 +110,9 @@ class SqlAlchemyAccountRepository(AccountRepository):
         d'ecrire deux agregats dans une seule transaction.
 
         Args:
-            session: la session asynchrone de la requete. Sa fabrique arrive
-                avec BACK-05 ; seul le TYPE est necessaire ici.
+            session: la session asynchrone de la requete. Sa fabrique est
+                livree par BACK-05 ; c'est l'unite de travail (BACK-06a) qui la
+                fera tourner et l'injectera ici.
         """
         self._session = session
 

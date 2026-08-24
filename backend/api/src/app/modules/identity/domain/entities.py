@@ -26,7 +26,7 @@ le fera evoluer par OTP.
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Self
-from uuid import UUID, uuid4
+from uuid import UUID, uuid7
 
 from app.modules.identity.domain.exceptions import (
     EmailAlreadyVerifiedError,
@@ -119,7 +119,14 @@ class Account:
             Un compte ACTIF, dont l'adresse n'est pas encore verifiee.
         """
         return cls(
-            id=uuid4(),
+            # Version 7 et non 4 : l'identifiant est ORDONNE DANS LE TEMPS,
+            # ce qui range les insertions en fin d'index B-tree au lieu de les
+            # disperser au hasard de ses feuilles. Le domaine bat la monnaie --
+            # une entite est identifiee avant d'etre persistee -- donc c'est
+            # ici, et nulle part ailleurs, que ce choix se fait. Sa contrepartie
+            # est inscrite dans `UUIDPrimaryKey` : l'horodatage de creation y
+            # figure en clair.
+            id=uuid7(),
             email=normalize_email(email),
             first_name=first_name.strip(),
             last_name=last_name.strip(),

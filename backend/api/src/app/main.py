@@ -23,6 +23,9 @@ from fastapi import APIRouter, FastAPI
 
 from app.core import get_settings
 from app.modules.identity import router as identity_router
+from app.shared.infrastructure.db.base import Base, check_schema
+from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
+from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
 
 
 @asynccontextmanager
@@ -48,9 +51,36 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Ici et non dans `create_app()` : ce module doit rester importable sans
     # effet de bord, et un `import app.main` -- ce que font Mypy et les futurs
     # exports d'OpenAPI -- ne doit pas exiger un fichier .env.
-    get_settings()
+    settings = get_settings()
 
-    yield
+    # Seconde ressource : le moteur PostgreSQL (BACK-05). Le construire n'ouvre
+    # aucune connexion ; `verify_connectivity` en ouvre une et la referme.
+    engine = build_engine(settings)
+    try:
+        await verify_connectivity(engine, settings)
+
+        # Controle du schema declare, une fois les modeles importes. Surtout
+        # PAS de `Base.metadata.create_all()` : le schema existerait alors avant
+        # la premiere migration, et `alembic upgrade head` (BACK-07) echouerait
+        # sur une table deja creee.
+        check_schema(Base.metadata)
+
+        setattr(
+            app.state,
+            STATE_KEY,
+            Database(engine=engine, sessionmaker=build_sessionmaker(engine)),
+        )
+
+        yield
+    finally:
+        # `finally` et non simplement apres le `yield` : un moteur construit
+        # avant un `SELECT 1` en echec doit etre libere lui aussi, sans quoi une
+        # boucle de redemarrage de conteneur fuit un pool a chaque tour.
+        #
+        # `dispose()` sans argument : `close=True` est deja le defaut, et ne se
+        # discute que dans un processus qui aurait forke apres la creation du
+        # moteur -- ce que ni uvicorn ni TaskIQ ne font ici.
+        await engine.dispose()
 
 
 # Routeurs publies par les modules metier, dans leur ordre de montage.

@@ -148,6 +148,32 @@ class DatabaseSettings(_SettingsSection):
     host: str = "localhost"
     port: int = Field(default=5432, ge=1, le=65535)
 
+    # Reglages du POOL DE CONNEXIONS, cote client. Rien a voir avec un reglage
+    # du serveur PostgreSQL, malgre le prefixe : c'est le nombre de connexions
+    # que CE processus garde ouvertes.
+    #
+    # Le calcul qui compte : connexions totales = workers x (pool_size +
+    # max_overflow). Avec les valeurs ci-dessous et quatre workers, l'API seule
+    # peut en reclamer 60, avant le worker TaskIQ (BACK-15) et pgAdmin -- contre
+    # un `max_connections` de 100 par defaut cote serveur.
+    pool_size: int = Field(default=5, ge=1)
+    max_overflow: int = Field(default=10, ge=0)
+
+    # Age au-dela duquel une connexion est retiree du pool plutot que reprise.
+    # `pool_pre_ping` verifie les connexions a l'emprunt, mais il attendrait le
+    # delai TCP sur une socket coupee en silence par un intermediaire ; ce
+    # recyclage les retire avant d'en arriver la. -1 desactive le mecanisme.
+    pool_recycle_seconds: int = Field(default=1800, ge=-1)
+
+    # Journalisation de chaque requete SQL emise, PARAMETRES LIES COMPRIS.
+    #
+    # Un champ a soi, et non une deduction de `LOG_LEVEL` : ces parametres
+    # portent les adresses e-mail aujourd'hui, les empreintes de mot de passe a
+    # partir de BACK-10b et le secret TOTP a partir de BACK-18. Passer
+    # `LOG_LEVEL=DEBUG` pour suivre un probleme de routage ne doit pas les
+    # deverser dans la chaine de journalisation par effet de bord.
+    echo: bool = False
+
     @property
     def sqlalchemy_url(self) -> str:
         """URL asynchrone attendue par `create_async_engine` (BACK-05).

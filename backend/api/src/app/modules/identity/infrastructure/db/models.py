@@ -1,4 +1,4 @@
-"""Modele de persistance du compte (BACK-04).
+"""Modele de persistance du compte (BACK-04, mixins adoptes en BACK-05).
 
 TROISIEME des trois modeles du guide DDD, et le seul qui parle SQL. Il decrit
 des colonnes, des types et des contraintes -- pas des regles metier : un modele
@@ -8,10 +8,16 @@ l'infrastructure, et le rendrait indissociable de la base.
 Syntaxe moderne obligatoire : `Mapped[...]` et `mapped_column(...)`, jamais
 l'ancienne API `Column`.
 
+DEUX MIXINS SUR TROIS
+`UUIDPrimaryKey` remplace la declaration d'`id` que BACK-04 portait a la main, et
+`TimestampMixin` ajoute `created_at` et `updated_at`, tenus par PostgreSQL.
+Aucun des deux n'apparait dans l'entite du domaine : le compte n'a pas de regle
+metier qui depende de sa date de creation, et le depot n'a donc rien a en
+reporter. Le jour ou une regle en aurait besoin, c'est l'entite qui gagnerait le
+champ, pas l'inverse.
+
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-Les mixins de BACK-05 -- horodatage et cle primaire UUID -- remplaceront les
-declarations equivalentes ci-dessous. Le mot de passe hache arrive en BACK-10b,
-le secret TOTP en BACK-18.
+Le mot de passe hache arrive en BACK-10b, le secret TOTP en BACK-18.
 
 PAS DE `group_id` ICI, ET C'EST DELIBERE
 `TenantMixin` (BACK-05) est OPT-IN, et le compte ne le declare pas :
@@ -20,20 +26,17 @@ l'appartenance a un groupe est une relation N:M DATEE portee par le module
 groupes avec un seul compte.
 """
 
-from uuid import UUID
-
-from sqlalchemy import String, Uuid
+from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.mixins import TimestampMixin, UUIDPrimaryKey
 
 
-class AccountModel(Base):
+class AccountModel(UUIDPrimaryKey, TimestampMixin, Base):
     """Table des comptes d'acces au service."""
 
     __tablename__ = "accounts"
-
-    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
 
     # 320 caracteres : la longueur maximale d'une adresse e-mail selon la RFC
     # 5321 (64 pour la partie locale, 255 pour le domaine, plus l'arobase).
