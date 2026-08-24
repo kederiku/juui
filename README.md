@@ -368,6 +368,10 @@ celle de la racine au reste. Prettier procède de même. Déléguer aux workspac
 serait un double parcours, et laisserait de côté les fichiers de la racine, que
 `pnpm -r` n'atteint pas.
 
+`lint` s'appuie sur les types depuis SETUP-06, ce qui lui coûte quelques
+secondes : le chiffre avant/après est dans [Configurations
+partagées](#configurations-partagées).
+
 > **Note.** Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
 > siens, décrits dans [`backend/api/README.md`](backend/api/README.md). Les
 > cibles `make` qui réuniront les deux chaînes derrière une interface unique
@@ -512,6 +516,40 @@ packages du dépôt. C'est ce qui donne leur objet à `import-x/no-unresolved` e
 Les motifs qu'il reçoit suivent [`pnpm-workspace.yaml`](pnpm-workspace.yaml) et
 sont ancrés sur la racine du dépôt, pour qu'un lint lancé depuis un sous-dossier
 trouve les mêmes `tsconfig`.
+
+**Depuis SETUP-06, ce socle est _type-aware_.** `base.js` applique
+`tseslint.configs.recommendedTypeChecked` et branche le service de projet de
+TypeScript (`parserOptions.projectService`). Le lint dispose donc des types, et
+attrape ce qu'une analyse purement syntaxique ne peut pas voir : une promesse
+jamais attendue, une comparaison que le type rend toujours vraie, une opération
+sur un `any` qui s'ignore.
+
+La frontière est nette — **tout `.ts` et `.tsx` est typé, aucun `.js` ni `.mjs`
+ne l'est.** Ce n'est pas un arbitrage de confort, c'est l'état du dépôt : les
+`include` des trois applications ne retiennent que les `.ts` et les `.tsx`, celui
+de `packages/ui` que ses sources sous `src/`, et les trois packages de
+configuration n'ont pas de `tsconfig.json`. Aucun fichier JavaScript n'appartient
+donc à un projet TypeScript, et le bloc `base-untyped` de
+[`base.js`](packages/config-eslint/base.js) les en dispense explicitement. Sans
+lui, chacun de ces dix-sept fichiers sort en `Parsing error: […] was not found by
+the project service` — le parseur s'arrête avant même de lire le code, à
+commencer par les quatre fichiers de configuration de la racine.
+
+Ce que la bascule coûte, mesuré sur ce dépôt (66 fichiers lintés : 49 en
+TypeScript, 17 en JavaScript), médiane de trois passes :
+
+| Mesure                                                | Avant  | Après  |
+| ----------------------------------------------------- | ------ | ------ |
+| `pnpm lint` — le dépôt entier                         | 0,9 s  | 3,6 s  |
+| `eslint --fix` sur un `.ts` — ce que lance le hook    | 0,5 s  | 1,3 s  |
+| `eslint --fix` sur trois fichiers de trois workspaces | 0,6 s  | 2,2 s  |
+| `eslint --fix` sur un `.mjs` — hors typage            | 0,44 s | 0,45 s |
+
+La dernière ligne est la vérification du bloc `base-untyped` : un fichier
+JavaScript ne fait construire aucun programme, et son lint ne bouge pas d'un
+centième. La troisième est celle qui compte pour le [hook de
+pre-commit](#hooks-de-pre-commit) — deux secondes environ, contre un budget de
+dix.
 
 #### `@repo/typescript-config`
 
@@ -1026,6 +1064,17 @@ cookie par une vérification du jeton.
 | Deux sections de démonstration (`cliniques`, `utilisateurs`) | Un fil d'Ariane qui n'affiche jamais qu'un seul niveau ne prouve rien, et le rôle lu par la garde resterait une intention sans écran pour l'afficher.                                                                                                                      |
 | Données de la table écrites en dur                           | Ni API ni cache avant SHARED-03 et FRONT-04. Ce que ces lignes servent à montrer, c'est que l'extension du package trie, filtre et pagine — la même logique que les pages de démonstration de FRONT-01 et FRONT-02.                                                        |
 
+### Écarts assumés avec le ticket SETUP-06
+
+| Écart                                                            | Raison                                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `no-unnecessary-condition` ajoutée hors `recommendedTypeChecked` | L'objectif du ticket nomme la « comparaison toujours vraie », qui relève de `strictTypeChecked` — pas du preset recommandé. La prendre seule évite d'embarquer une vingtaine de règles surtout stylistiques ; le `noUncheckedIndexedAccess` de `@repo/typescript-config` la rend tenable sans faux positif. |
+| Aucune règle écartée, un seul fichier corrigé                    | `recommendedTypeChecked` n'a rien signalé sur le dépôt. Seule la règle ajoutée ci-dessus a relevé un `?.` inutile dans [`field.tsx`](packages/ui/src/components/field.tsx), corrigé plutôt que désactivé. Le ticket demandait des arbitrages : il n'y en a eu aucun à faire.                                |
+| `no-misused-promises` laissée telle quelle                       | Le ticket la désignait comme première candidate à un assouplissement sur les gestionnaires d'événements React. Aucun gestionnaire `async` n'existe aujourd'hui, donc aucun motif à écrire. À reprendre en FRONT-05 et FRONT-07, quand les formulaires en introduiront.                                      |
+| Coût du lint reporté sur le hook de pre-commit                   | SETUP-04 s'était fixé dix secondes et avait refusé `tsc` pour cette raison. Mesuré ici : 1,3 s pour un `.ts`, 2,2 s pour un commit touchant trois workspaces. Le budget tient, et le hook garde le lint type-aware — sans CI, c'est le seul endroit où ces règles tournent avant une pull request.          |
+| `eslint.config.mjs` des workspaces inchangés                     | Le ticket ouvrait la possibilité d'un ajustement local. Aucun n'a été nécessaire : les quatre fichiers se contentent d'étaler un preset, et toute la bascule tient dans le preset.                                                                                                                          |
+| `import-x/no-unresolved` hors racine, laissé en l'état           | `npx eslint .` lancé depuis une application ne résout pas les alias `@/*`. Défaut du résolveur d'imports **antérieur** à ce ticket — vérifié par comparaison, identique avant et après la bascule — et étranger aux règles type-aware. Il relève de son propre correctif, pas de celui-ci.                  |
+
 ### Hooks de pre-commit
 
 `pnpm install` installe les hooks Git en même temps que les dépendances : le
@@ -1054,6 +1103,14 @@ dans [`lint-staged.config.mjs`](lint-staged.config.mjs).
 
 > **Le volet Python exige `uv` sur le poste.** Qui ne touche jamais au backend
 > n'a rien à installer : cette entrée ne se déclenche que sur un `.py` indexé.
+
+Le budget de dix secondes tient malgré le passage du lint en mode _type-aware_
+(SETUP-06) : un fichier `.ts` indexé fait désormais construire un programme
+TypeScript, ce qui porte sa passe ESLint de 0,5 s à 1,3 s, et un commit touchant
+trois workspaces à la fois de 0,6 s à 2,2 s. Un fichier `.mjs`, hors typage, ne
+bouge pas. C'est le seul endroit du dépôt où ces règles tournent avant une pull
+request, tant que la CI (QA-01 et QA-02) n'existe pas — les en dispenser les rendrait
+facultatives.
 
 Trois situations, trois gestes :
 

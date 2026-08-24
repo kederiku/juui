@@ -8,9 +8,12 @@
  * Volontairement un objet de REGLES NU, sans cle `plugins` : l'enregistrement
  * des plugins reste dans les presets, ce fichier ne porte que des arbitrages.
  *
- * Aucune regle dite « type-aware » (celles qui exigent un programme TypeScript)
- * n'y figure : il n'existe encore aucun tsconfig.json dans le depot. Le passage
- * a `tseslint.configs.recommendedTypeChecked` relevera de FRONT-01.
+ * Le socle est TYPE-AWARE depuis SETUP-06 : `base.js` applique
+ * `tseslint.configs.recommendedTypeChecked` et branche le service de projet de
+ * TypeScript. Les regles qui exigent un programme sont donc disponibles ici --
+ * c'est ce que SETUP-03 avait annonce, puis laisse en suspens faute de mesure.
+ * Ce que la bascule coute en temps est chiffre au README, section
+ * « Configurations partagees ».
  */
 export const sharedRules = {
   // `console.log` oublie en production ; warn et error restent legitimes.
@@ -63,6 +66,22 @@ export const sharedRules = {
   // bien que le meme code fonctionne en developpement et rend `undefined` une
   // fois groupe pour la production.
   'import-x/no-cycle': 'error',
+
+  // La « comparaison toujours vraie » que vise SETUP-06 : un test dont le type
+  // dit deja l'issue -- `if (obj)` sur un non-nullable, un `?.` sur ce qui ne
+  // peut pas etre absent, un `catch` compare a une valeur impossible. Ce n'est
+  // pas du style : un garde qui ne garde rien signale presque toujours que le
+  // type et l'intention ont diverge.
+  //
+  // AJOUTEE A LA MAIN parce qu'elle n'est PAS dans `recommendedTypeChecked` --
+  // elle appartient a `strictTypeChecked`, dont le reste est surtout
+  // stylistique. La prendre seule vaut mieux que tirer tout le preset.
+  //
+  // Le `noUncheckedIndexedAccess` de @repo/typescript-config la rend tenable :
+  // `tableau[i]` reste `T | undefined`, donc le test qui verifie un acces
+  // indexe n'est jamais denonce comme inutile -- c'est le faux positif qui rend
+  // cette regle insupportable sur les depots qui n'ont pas cette option.
+  '@typescript-eslint/no-unnecessary-condition': 'error',
 };
 
 /**
