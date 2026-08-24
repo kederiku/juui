@@ -515,6 +515,26 @@ services:
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
 
+      # --- Courriel sortant : A DECOMMENTER EN BACK-22 ---
+      # Le service `mailpit` existe depuis INFRA-07, ses six variables sont
+      # documentees dans .env.example, mais AUCUNE LIGNE DE CODE ne les lit
+      # encore : l'adaptateur SMTP est l'objet de BACK-22.
+      #
+      #   SMTP_HOST: ${SMTP_HOST}
+      #   SMTP_PORT: ${SMTP_PORT}
+      #   SMTP_USER: ${SMTP_USER}
+      #   SMTP_PASSWORD: ${SMTP_PASSWORD}
+      #   SMTP_USE_TLS: ${SMTP_USE_TLS}
+      #   MAIL_FROM: ${MAIL_FROM}
+      #
+      # POURQUOI PAS DES MAINTENANT, alors que Redis, S3 et JWT sont bien passes
+      # avant leurs tickets : ceux-la ont ete ajoutes par INFRA-04, qui les
+      # trouvait DEJA dans le .env.example de SETUP-05. Les six ci-dessus
+      # naissent avec INFRA-07, donc apres les .env deja crees sur les postes --
+      # les referencer produirait six avertissements `variable is not set` a
+      # chaque `up`, pour des variables que personne ne lit. Meme attente que le
+      # `depends_on: minio-init` laisse a BACK-13 plus bas.
+
       # --- Serveur uvicorn (INFRA-04) ---
       # Les deux SEULES variables du fichier a porter une valeur de repli, et
       # c'est deliberé : elles naissent avec ce ticket, donc tout .env cree
@@ -574,6 +594,98 @@ services:
       start_period: 30s
       retries: 5
 
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Mailpit -- serveur SMTP de developpement et boite de reception (INFRA-07,
+  # consomme par BACK-17, BACK-22, FRONT-14 et FRONT-15)
+  # ---------------------------------------------------------------------------
+  # Tient lieu de fournisseur d'envoi sur le poste, comme minio tient lieu
+  # d'Amazon S3 depuis INFRA-03 : il ACCEPTE tout et n'EXPEDIE rien. Sans lui, le
+  # parcours d'inscription s'arrete definitivement a l'ecran de saisie du code
+  # OTP -- l'e-mail part, personne ne le lit, et le compte reste non verifie.
+  #
+  # DEUX FACADES, ET LA SECONDE COMPTE AUTANT QUE LA PREMIERE
+  # Le port SMTP recoit, la boite web affiche -- mais c'est l'API HTTP de cette
+  # meme boite qui rendra les tests possibles : /api/v1/messages livre le code
+  # REELLEMENT emis. C'est la seule facon prevue de le recuperer en BACK-17 et en
+  # QA-04. Lire Redis a la place testerait ce que le code a ecrit, jamais ce que
+  # l'utilisateur a recu.
+  #
+  # LE CODE DE L'ADAPTATEUR N'EST PAS ICI
+  # Ce service, ses variables et sa sonde relevent d'INFRA-07 ; l'adaptateur SMTP
+  # qui les consommera appartient a BACK-22. Meme partage qu'entre INFRA-05b et
+  # BACK-15 pour le worker.
+  mailpit:
+    # Ligne MINEURE et non majeure nue : cette image ne publie pas de tag `v1`.
+    # Meme arbitrage que le `redis/redisinsight:3.8` d'INFRA-02, pour la meme
+    # raison -- on epingle le plus large des tags qui existe reellement.
+    image: axllent/mailpit:v1.31
+
+    environment:
+      # CE QUI REND LES DEUX PORTS EFFECTIFS. Mailpit ecoute 1025 et 8025 par
+      # defaut ; sans ces deux lignes, SMTP_PORT et MAILPIT_WEB_PORT ne seraient
+      # qu'une decoration a droite des mappings ci-dessous, et les changer
+      # publierait un port sur un service qui ecoute ailleurs. Meme raisonnement
+      # que le PGPORT d'INFRA-01.
+      #
+      # `0.0.0.0` est l'adresse DANS le conteneur, pas sur le poste : c'est le
+      # `127.0.0.1:` a gauche des mappings qui restreint la publication, et lui
+      # seul. Mettre `127.0.0.1` ici rendrait au contraire le service injoignable
+      # depuis app_network, donc depuis l'API.
+      MP_SMTP_BIND_ADDR: 0.0.0.0:${SMTP_PORT}
+      MP_UI_BIND_ADDR: 0.0.0.0:${MAILPIT_WEB_PORT}
+
+      # MP_MAX_MESSAGES est volontairement absente : son defaut de 500 suffit
+      # largement a un poste, et la boite repart vide a chaque redemarrage de
+      # toute facon -- voir juste en dessous.
+
+    ports:
+      # Rattaches a la BOUCLE LOCALE, comme redis et redisinsight, et pour une
+      # raison de plus. Ces deux-la n'ont pas d'authentification ; celui-ci non
+      # plus, ET il accepte n'importe quel message de n'importe qui. Sans le
+      # `127.0.0.1:`, le poste offrirait a tout le reseau -- un wifi partage
+      # suffit -- un relais SMTP ouvert en ecriture et la lecture de tous les
+      # courriels deja captures, codes OTP compris. Les conteneurs, eux, passent
+      # par app_network et ne sont pas concernes.
+      - '127.0.0.1:${MAILPIT_SMTP_HOST_PORT}:${SMTP_PORT}'
+      - '127.0.0.1:${MAILPIT_WEB_HOST_PORT}:${MAILPIT_WEB_PORT}'
+
+    # AUCUN VOLUME, ET C'EST UN CRITERE D'ACCEPTATION. Les mails de
+    # developpement n'ont pas a survivre a un redemarrage : une boite qui repart
+    # vide est une boite ou le dernier message est forcement celui qu'on vient
+    # de declencher.
+    #
+    # A SAVOIR SI L'ENVIE VENAIT DE LES GARDER : ajouter un volume ne suffirait
+    # pas. Sans MP_DATABASE, Mailpit garde tout EN MEMOIRE et n'ecrit nulle part
+    # -- le volume serait monte, resterait vide, et ne produirait aucune erreur.
+
+    healthcheck:
+      # La sonde que l'image declare elle-meme dans son HEALTHCHECK, reecrite ici
+      # pour deux raisons : les sept services au-dessus declarent tous la leur,
+      # et les intervalles suivent ainsi ceux du depot plutot que ceux de
+      # l'image.
+      #
+      # `readyz` est une SOUS-COMMANDE du binaire, pas un endpoint tape a la
+      # main : elle appelle /readyz sur l'interface web -- l'endpoint que demande
+      # le ticket -- en relisant MP_UI_BIND_ADDR. Elle suit donc un changement de
+      # MAILPIT_WEB_PORT toute seule, la ou un `wget http://127.0.0.1:8025/...`
+      # figerait le port une seconde fois.
+      #
+      # Elle evite au passage le piege qui a deja coute trois commentaires a ce
+      # fichier (redisinsight, minio, api) : pas de `localhost` a resoudre, donc
+      # pas de tentative IPv6 sur un service qui n'ecoute qu'en IPv4.
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 5s
+      # Court : Mailpit n'a ni cluster a initialiser ni journal a relire, il
+      # ecoute en une fraction de seconde.
+      start_period: 10s
+      retries: 5
+
+    # Pas de depends_on : Mailpit ne depend de rien, et rien ne lui envoie encore
+    # de courriel. C'est l'inverse qui viendra, avec l'adaptateur de BACK-22.
     networks: [app_network]
     restart: unless-stopped
 
