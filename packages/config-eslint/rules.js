@@ -2,10 +2,16 @@
  * Les decisions de regles de `@repo/eslint-config`, isolees de la plomberie.
  *
  * Les trois presets forment une chaine — `next` etend `react`, qui etend
- * `base`, qui applique ce fragment — donc toute regle ajoutee ici vaut pour les
- * trois. C'est le seul endroit a modifier pour durcir ou assouplir le socle.
+ * `base` — et ce fichier est le seul endroit a modifier pour durcir ou
+ * assouplir le socle. Deux portees s'y cotoient depuis SETUP-07, et il faut les
+ * distinguer :
  *
- * Volontairement un objet de REGLES NU, sans cle `plugins` : l'enregistrement
+ * - `sharedRules` est applique par `base`, donc par LES TROIS presets ;
+ * - `a11yRules` et `a11yComponents` le sont par `react`, donc par `react` et
+ *   `next` mais JAMAIS par `base` -- qui cible du Node sans JSX, ou des regles
+ *   d'accessibilite n'auraient rien a regarder.
+ *
+ * Volontairement des objets de REGLES NUS, sans cle `plugins` : l'enregistrement
  * des plugins reste dans les presets, ce fichier ne porte que des arbitrages.
  *
  * Le socle est TYPE-AWARE depuis SETUP-06 : `base.js` applique
@@ -83,6 +89,89 @@ export const sharedRules = {
   // cette regle insupportable sur les depots qui n'ont pas cette option.
   '@typescript-eslint/no-unnecessary-condition': 'error',
 };
+
+/**
+ * Carte des composants de `@repo/ui` vers la balise que chacun rend reellement
+ * (SETUP-07). Le preset `react` la donne a `settings['jsx-a11y-x'].components`.
+ *
+ * SANS ELLE, LES REGLES NE VOIENT RIEN. Le plugin raisonne sur des noms de
+ * balises : le type d'un `<Input>` vaut « Input », pas « input », et aucune
+ * regle ne se declenche sur un nom qui n'est celui d'aucun element HTML. Cette
+ * carte joue donc pour l'accessibilite le role que le resolveur de `base.js`
+ * joue pour import-x -- sans elle, les regles ne sont pas fausses, elles sont
+ * muettes. Et comme les applications ne consomment presque que des composants
+ * de `@repo/ui`, la carte est ce qui decide de leur couverture reelle.
+ *
+ * NE SONT MAPPES QUE LES COMPOSANTS DONT LA RACINE EST UNE BALISE FIXE.
+ *
+ * Les huit composants polymorphes du package en sont volontairement absents --
+ * ceux qui rendent `Slot.Root` sous `asChild` : Button, Badge, BreadcrumbLink,
+ * SidebarGroupLabel, SidebarGroupAction, SidebarMenuButton, SidebarMenuAction,
+ * SidebarMenuSubButton. Leur racine depend d'une prop, que le plugin ne suit
+ * pas : son reglage `polymorphicPropName` ne sait lire qu'une prop PORTANT un
+ * nom de balise (`as="h3"`), la ou `asChild` delegue a l'enfant. Les mapper
+ * fabriquerait des faux positifs de toutes pieces -- `BreadcrumbLink: 'a'`
+ * ferait echouer `anchor-is-valid` sur le
+ * `<BreadcrumbLink asChild><Link href=... /></BreadcrumbLink>` d'
+ * admin-breadcrumb.tsx, dont le `href` est porte par l'enfant.
+ *
+ * Les primitives Radix (Dialog*, Select*, DropdownMenu*, Tooltip*) n'y figurent
+ * pas davantage : ce sont des expressions membres (`DialogPrimitive.Root`), que
+ * le plugin ignore d'office. C'est sans consequence -- elles portent deja leurs
+ * roles et leurs attributs ARIA, c'est meme ce pour quoi Radix existe.
+ */
+export const a11yComponents = {
+  // Formulaires. C'est de ces lignes que dependent
+  // `label-has-associated-control` et `autocomplete-valid` -- les deux regles
+  // qui comptent vraiment pour un parcours de prise de rendez-vous.
+  Input: 'input',
+  SidebarInput: 'input',
+  Label: 'label',
+  FieldSet: 'fieldset',
+  FieldLegend: 'legend',
+
+  // Titres. `heading-has-content` ne verrait rien d'un `<DialogTitle />` vide.
+  DialogTitle: 'h2',
+  SheetTitle: 'h2',
+
+  // Tableau, ce que `scope` et `no-redundant-roles` attendent pour se prononcer.
+  Table: 'table',
+  TableHeader: 'thead',
+  TableBody: 'tbody',
+  TableFooter: 'tfoot',
+  TableRow: 'tr',
+  TableHead: 'th',
+  TableCell: 'td',
+  TableCaption: 'caption',
+
+  // Reperes de page et listes.
+  Breadcrumb: 'nav',
+  BreadcrumbList: 'ol',
+  BreadcrumbItem: 'li',
+  SidebarMenu: 'ul',
+  SidebarMenuSub: 'ul',
+  SidebarMenuItem: 'li',
+  SidebarMenuSubItem: 'li',
+  SidebarInset: 'main',
+};
+
+/**
+ * Arbitrages d'accessibilite, poses PAR-DESSUS le jeu `recommended` du plugin
+ * (SETUP-07). Le preset `react` etale d'abord ce jeu, puis cet objet.
+ *
+ * VIDE, ET C'EST UN RESULTAT, PAS UN OUBLI. La premiere passe n'a releve qu'un
+ * seul manquement sur tout le depot -- une limite d'analyse dans `field.tsx`,
+ * traitee la-bas par une derogation a la ligne, motif ecrit. Aucune regle du
+ * jeu recommande n'a eu a etre assouplie. Ecrire ici des arbitrages par
+ * anticipation banaliserait l'objet : sa valeur tient a ce que chaque entree
+ * corresponde a une gene reelle, constatee, et porte son motif.
+ *
+ * L'objet reste neanmoins etale par `react.js`, et c'est delibere : il garde
+ * vrai ce que dit le README -- le socle de regles se modifie en UN SEUL
+ * endroit, ce fichier. Sans lui, le premier durcissement irait s'ecrire dans le
+ * preset.
+ */
+export const a11yRules = {};
 
 /**
  * Version de React declaree aux presets `react` et `next`.

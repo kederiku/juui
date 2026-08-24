@@ -92,8 +92,26 @@ function FieldContent({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/*
+ * La seule derogation d'accessibilite du depot (SETUP-07), et elle tient a une
+ * limite d'analyse, pas a un defaut.
+ *
+ * `label-has-associated-control` exige de tout label un `htmlFor` ou un
+ * controle descendant. Ce composant n'est qu'un emballage : l'un comme l'autre
+ * arrivent par `{...props}`, et le plugin ne sait pas les y lire -- il ne
+ * reconnait que les attributs nommes, jamais un spread. La regle a le meme
+ * angle mort sur le TEXTE du label, mais elle y presume l'inverse : un spread
+ * « peut contenir » de quoi etiqueter, donc elle se tait. C'est cette asymetrie
+ * qu'on rencontre ici.
+ *
+ * Rien a corriger dans ce fichier -- l'association se decide chez l'appelant.
+ * La regle y reste pleinement active : elle se prononce sur chaque `<Label>` et
+ * chaque `<FieldLabel>` reellement poses dans une page, ce qui est le seul
+ * endroit ou un champ peut vraiment se retrouver sans etiquette.
+ */
 function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
   return (
+    // eslint-disable-next-line jsx-a11y-x/label-has-associated-control -- emballage : voir ci-dessus
     <Label
       data-slot="field-label"
       className={cn(
