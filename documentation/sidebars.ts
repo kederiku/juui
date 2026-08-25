@@ -48,6 +48,11 @@ const sidebars: SidebarsConfig = {
           label: 'Client d’API généré (Orval)',
         },
         { type: 'doc', id: 'adr/0008-taskiq-taches-de-fond', label: 'Tâches de fond (TaskIQ)' },
+        {
+          type: 'doc',
+          id: 'adr/0009-unite-de-travail-par-module',
+          label: 'Unité de travail par module',
+        },
       ],
     },
   ],

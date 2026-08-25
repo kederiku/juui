@@ -1,4 +1,4 @@
-"""Cas d'usage pilote : creer un compte (BACK-04).
+"""Cas d'usage pilote : creer un compte (BACK-04, unite de travail en BACK-06a).
 
 Il existe pour DEMONTRER le trajet complet -- schema d'API, commande, entite,
 modele de persistance -- sur un exemple qui ecrit reellement. C'est le sens que
@@ -12,11 +12,12 @@ ce qui convient a une creation administrative mais ferait du formulaire
 d'inscription publique un oracle d'existence de compte. BACK-28 reprendra ce
 trajet dans `register_individual`, qui portera ces trois regles.
 
-CE QUE BACK-06a CHANGERA ICI
-Le depot est injecte directement ; il le sera par l'unite de travail, ce qui
-apportera l'atomicite et le `commit`. La regle qui compte est deja tenue : AUCUNE
-session de base de donnees n'entre dans un cas d'usage. Ce qui arrive ici est un
-port, pas une technologie.
+CE QUE BACK-06A A CHANGE ICI
+Le cas d'usage recoit l'unite de travail du module et decide du commit : c'est
+lui qui possede l'atomicite, controle d'unicite et creation dans la meme
+transaction. La regle qui compte tient toujours : AUCUNE session de base de
+donnees n'entre dans un cas d'usage. Ce qui arrive ici est un port, pas une
+technologie.
 """
 
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ from dataclasses import dataclass
 from app.modules.identity.domain.entities import Account, AccountType
 from app.modules.identity.domain.exceptions import EmailAlreadyUsedError
 from app.modules.identity.domain.policies import normalize_email
-from app.modules.identity.domain.ports import AccountRepository
+from app.modules.identity.domain.ports import IdentityUnitOfWork
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,15 +51,15 @@ class CreateAccountCommand:
 class CreateAccount:
     """Cree un compte dont l'adresse n'est pas encore prise."""
 
-    def __init__(self, accounts: AccountRepository) -> None:
-        """Memorise le port par lequel les comptes sont lus et ecrits.
+    def __init__(self, uow: IdentityUnitOfWork) -> None:
+        """Memorise l'unite de travail par laquelle le module lit et ecrit.
 
         Args:
-            accounts: le depot de comptes. Un PORT, jamais une session : c'est
-                l'assemblage (la route, le test, la tache) qui decide quel
-                adaptateur arrive ici.
+            uow: l'unite de travail d'identity. Un PORT, jamais une session :
+                c'est l'assemblage (la route, le test, la tache) qui decide
+                quel adaptateur arrive ici.
         """
-        self._accounts = accounts
+        self._uow = uow
 
     async def execute(self, command: CreateAccountCommand) -> Account:
         """Applique la commande et retourne le compte cree.
@@ -79,16 +80,25 @@ class CreateAccount:
         # tour -- l'entite ne delegue pas la garde de son invariant a
         # l'appelant.
         email = normalize_email(command.email)
-        if await self._accounts.find_by_email(email) is not None:
-            message = "Un compte utilise deja cette adresse e-mail."
-            raise EmailAlreadyUsedError(message)
 
-        account = Account.create(
-            email=email,
-            first_name=command.first_name,
-            last_name=command.last_name,
-            account_type=command.account_type,
-            phone=command.phone,
-        )
-        await self._accounts.add(account)
+        # Controle et creation dans le MEME bloc : c'est l'atomicite que
+        # BACK-06a apporte. Une exception -- le refus d'unicite compris --
+        # sort du bloc sans commit, donc sans rien ecrire.
+        async with self._uow:
+            if await self._uow.accounts.find_by_email(email) is not None:
+                message = "Un compte utilise deja cette adresse e-mail."
+                raise EmailAlreadyUsedError(message)
+
+            account = Account.create(
+                email=email,
+                first_name=command.first_name,
+                last_name=command.last_name,
+                account_type=command.account_type,
+                phone=command.phone,
+            )
+            await self._uow.accounts.add(account)
+            await self._uow.commit()
+
+        # L'entite retournee est une dataclass du domaine : la fermeture de la
+        # session ne la perime pas.
         return account

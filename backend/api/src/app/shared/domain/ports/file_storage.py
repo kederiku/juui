@@ -8,9 +8,9 @@ cette contrainte, et non un gout pour l'abstraction, qui met la composition des
 cles physiques et la construction du client dans l'adaptateur.
 
 CE QUE CE PORT PROMET, ET EN QUOI IL DIFFERE DU CACHE
-Les deux ports techniques du noyau partage se ressemblent de loin -- une `ABC`,
-des methodes asynchrones, un adaptateur remplacable -- et se comportent a
-l'oppose devant une panne. `Cache` DEGRADE : Redis absent, `get` rend `MISSING`
+Les ports techniques du noyau partage se ressemblent de loin -- une `ABC`,
+des methodes asynchrones, un adaptateur remplacable -- et se comportent
+chacun a sa facon devant une panne. `Cache` DEGRADE : Redis absent, `get` rend `MISSING`
 et le service repond plus lentement, sans qu'aucun resultat change. `FileStorage`
 LEVE, toujours, parce qu'un stockage absent change les resultats :
 

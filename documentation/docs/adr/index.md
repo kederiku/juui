@@ -31,20 +31,23 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 
 ## Le registre
 
-| ADR                                           | Décision                                                         | Statut  |
-| --------------------------------------------- | ---------------------------------------------------------------- | ------- |
-| [ADR-0001](./0001-monorepo.md)                | Un monorepo pour tout le produit, deux chaînes d'outils          | Accepté |
-| [ADR-0002](./0002-uv-outillage-python.md)     | uv comme outillage Python unique, épinglé partout                | Accepté |
-| [ADR-0003](./0003-monolithe-modulaire.md)     | Un monolithe modulaire découpé en modules métier                 | Accepté |
-| [ADR-0004](./0004-tenance-par-groupe.md)      | Le groupe de cliniques est la frontière de tenance               | Accepté |
-| [ADR-0005](./0005-appartenance-datee.md)      | L'appartenance à un groupe est une relation N:M datée            | Accepté |
-| [ADR-0006](./0006-dossier-medical-animal.md)  | Le dossier médical appartient à l'animal, la détention est datée | Accepté |
-| [ADR-0007](./0007-client-api-genere-orval.md) | Le client d'API des frontends est généré par Orval               | Accepté |
-| [ADR-0008](./0008-taskiq-taches-de-fond.md)   | TaskIQ exécute les tâches de fond                                | Accepté |
+| ADR                                               | Décision                                                         | Statut  |
+| ------------------------------------------------- | ---------------------------------------------------------------- | ------- |
+| [ADR-0001](./0001-monorepo.md)                    | Un monorepo pour tout le produit, deux chaînes d'outils          | Accepté |
+| [ADR-0002](./0002-uv-outillage-python.md)         | uv comme outillage Python unique, épinglé partout                | Accepté |
+| [ADR-0003](./0003-monolithe-modulaire.md)         | Un monolithe modulaire découpé en modules métier                 | Accepté |
+| [ADR-0004](./0004-tenance-par-groupe.md)          | Le groupe de cliniques est la frontière de tenance               | Accepté |
+| [ADR-0005](./0005-appartenance-datee.md)          | L'appartenance à un groupe est une relation N:M datée            | Accepté |
+| [ADR-0006](./0006-dossier-medical-animal.md)      | Le dossier médical appartient à l'animal, la détention est datée | Accepté |
+| [ADR-0007](./0007-client-api-genere-orval.md)     | Le client d'API des frontends est généré par Orval               | Accepté |
+| [ADR-0008](./0008-taskiq-taches-de-fond.md)       | TaskIQ exécute les tâches de fond                                | Accepté |
+| [ADR-0009](./0009-unite-de-travail-par-module.md) | Une unité de travail par module, jamais globale                  | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit
-au moment où la décision se prend.
+au moment où la décision se prend — l'[ADR-0009](./0009-unite-de-travail-par-module.md),
+consigné par BACK-06a en même temps qu'il livrait l'unité de travail, est le premier à suivre la
+règle.
 
 Les règles opérationnelles qui découlent de ces décisions — comment structurer un module, écrire
 un cas d'usage, déclarer un agrégat tenant — seront reprises dans

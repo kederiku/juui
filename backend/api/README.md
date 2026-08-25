@@ -80,16 +80,20 @@ backend/api/
     ├── shared/             noyau partagé — pas un module métier
     │   ├── domain/
     │   │   ├── exceptions.py   `DomainError`, racine des erreurs métier
-    │   │   └── ports/          ports techniques : cache, stockage, jetons
+    │   │   └── ports/          ports techniques : cache, stockage, transaction, jetons
     │   │       ├── cache.py        port `Cache` et décorateur `@cached` (BACK-14)
-    │   │       └── file_storage.py port `FileStorage` et `UploadPolicy` (BACK-13)
+    │   │       ├── file_storage.py port `FileStorage` et `UploadPolicy` (BACK-13)
+    │   │       ├── repository.py   protocole générique `Repository` (BACK-06a)
+    │   │       └── unit_of_work.py port `AbstractUnitOfWork` (BACK-06a)
     │   └── infrastructure/
     │       ├── tenancy.py      contextvar du groupe actif (BACK-14)
-    │       ├── db/             socle de persistance (BACK-05)
+    │       ├── db/             socle de persistance (BACK-05, BACK-06a)
     │       │   ├── base.py         `Base`, convention de nommage, `check_schema`
     │       │   ├── mixins.py       identité, horodatage, tenance opt-in
     │       │   ├── engine.py       moteur asyncpg et pool de connexions
-    │       │   └── session.py      fabrique de sessions et accès à `app.state`
+    │       │   ├── session.py      fabrique de sessions et accès à `app.state`
+    │       │   ├── unit_of_work.py adaptateur SQLAlchemy de l'unité de travail
+    │       │   └── repositories/   dépôt générique dont les modules héritent
     │       ├── clients/        adaptateurs des ports techniques (BACK-14, BACK-13)
     │       │   ├── cache_keys.py   composition des clés physiques de cache
     │       │   ├── redis_cache.py  adaptateur Redis du port `Cache`
@@ -101,7 +105,7 @@ backend/api/
         │   ├── domain/         entities, policies, ports, exceptions
         │   ├── application/    use_cases/
         │   ├── infrastructure/ db/ (modèle, dépôt), api/ (schémas, routeur)
-        │   └── unit_of_work.py
+        │   └── unit_of_work.py unité de travail du module, `get_identity_uow` (BACK-06a)
         └── organization/   groupes et appartenances (BACK-16)
 ```
 
@@ -197,22 +201,23 @@ conversions qui comptent — `str` en base, `AccountType` dans le domaine.
 `identity` est le module de référence posé par BACK-04, et le seul complet à ce stade. Une
 création de compte le traverse ainsi :
 
-| #   | Étape                                                                        | Fichier                                   |
-| --- | ---------------------------------------------------------------------------- | ----------------------------------------- |
-| 1   | `AccountCreate` valide le JSON reçu                                          | `infrastructure/api/schemas.py`           |
-| 2   | `.to_command()` en fait une `CreateAccountCommand`, sans vocabulaire HTTP    | `infrastructure/api/schemas.py`           |
-| 3   | `CreateAccount.execute()` normalise, contrôle l'unicité, appelle la fabrique | `application/use_cases/create_account.py` |
-| 4   | `Account.create()` applique les règles et attribue l'identifiant             | `domain/entities.py`                      |
-| 5   | `AccountRepository.add()` reçoit **l'entité**, jamais un modèle              | `domain/ports.py`                         |
-| 6   | `_to_model()` traduit l'entité en ligne de la table `accounts`               | `infrastructure/db/repositories.py`       |
-| 7   | `AccountRead.from_entity()` remonte l'entité en réponse JSON                 | `infrastructure/api/schemas.py`           |
+| #   | Étape                                                                        | Fichier                                      |
+| --- | ---------------------------------------------------------------------------- | -------------------------------------------- |
+| 1   | `AccountCreate` valide le JSON reçu                                          | `infrastructure/api/schemas.py`              |
+| 2   | `.to_command()` en fait une `CreateAccountCommand`, sans vocabulaire HTTP    | `infrastructure/api/schemas.py`              |
+| 3   | `CreateAccount.execute()` normalise, contrôle l'unicité, appelle la fabrique | `application/use_cases/create_account.py`    |
+| 4   | `Account.create()` applique les règles et attribue l'identifiant             | `domain/entities.py`                         |
+| 5   | `AccountRepository.add()` reçoit **l'entité**, jamais un modèle              | `domain/ports.py`                            |
+| 6   | `_to_model()` traduit l'entité en ligne de la table `accounts`               | hérité de `shared/…/db/repositories/base.py` |
+| 7   | `AccountRead.from_entity()` remonte l'entité en réponse JSON                 | `infrastructure/api/schemas.py`              |
 
 La commande de l'étape 2 n'est **pas** un quatrième modèle du compte : elle décrit une
 _intention_, pas un état persistant. C'est ce qui permet d'appeler le cas d'usage depuis une
 route, une tâche de fond ou une commande en ligne sans changer sa signature.
 
-Le cas d'usage ne reçoit qu'un **port**, jamais une session : celui-ci lui sera fourni par
-l'unité de travail à partir de BACK-06a, et la règle qui compte est déjà tenue aujourd'hui.
+Le cas d'usage ne reçoit qu'un **port**, jamais une session : depuis BACK-06a, c'est
+l'[unité de travail](#unité-de-travail) du module qui entre dans son constructeur, et ses
+dépôts n'existent que dans le bloc `async with` qui délimite la transaction.
 
 Deux détails du trajet valent d'être signalés, parce qu'ils illustrent où se rangent les règles :
 
@@ -253,11 +258,10 @@ ranger, et quel ticket l'apporte.
 
 | Emplacement                        | Ce qui manque                                                       | Ticket                    |
 | ---------------------------------- | ------------------------------------------------------------------- | ------------------------- |
-| `shared/domain/ports/`             | `TokenService`, l'unité de travail                                  | BACK-10a, BACK-06a        |
+| `shared/domain/ports/`             | `TokenService`                                                      | BACK-10a                  |
 | `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                   |
-| `shared/infrastructure/db/`        | dépôt générique, unité de travail, filtre de tenance                | BACK-06a, BACK-06b        |
+| `shared/infrastructure/db/`        | le filtre de tenance, dans `repositories/`                          | BACK-06b                  |
 | `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11          |
-| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                  |
 | `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31 |
 | `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                   |
 
@@ -289,8 +293,8 @@ app.shared.domain.exceptions -> app.shared.infrastructure.db.base
 app.shared.infrastructure.db.base -> sqlalchemy
 ```
 
-**Le trajet complet des trois modèles.** Le dépôt en mémoire est défini _dans la sonde_ et non
-dans `src/` : les doublures de production appartiennent à BACK-06c.
+**Le trajet complet des trois modèles.** Le dépôt et l'unité de travail en mémoire sont définis
+_dans la sonde_ et non dans `src/` : les doublures de production appartiennent à BACK-06c.
 
 ```bash
 uv run python - <<'PY'
@@ -299,12 +303,9 @@ from uuid import UUID
 
 from app.modules.identity.application.use_cases.create_account import CreateAccount
 from app.modules.identity.domain.entities import Account
-from app.modules.identity.domain.ports import AccountRepository
+from app.modules.identity.domain.ports import AccountRepository, IdentityUnitOfWork
 from app.modules.identity.infrastructure.api.schemas import AccountCreate, AccountRead
-
-# Le depot du module reclame une session (BACK-05) : on emprunte ici sa seule
-# fonction de mapping, et on branche un depot en memoire jetable.
-from app.modules.identity.infrastructure.db.repositories import _to_model
+from app.modules.identity.infrastructure.db.repositories import SqlAlchemyAccountRepository
 
 
 class InMemoryAccountRepository(AccountRepository):
@@ -324,6 +325,29 @@ class InMemoryAccountRepository(AccountRepository):
         self.accounts[account.id] = account
 
 
+class InMemoryIdentityUnitOfWork(IdentityUnitOfWork):
+    # Doublure JETABLE : commit et rollback sans effet reel. La doublure de
+    # production, ou les deux gestes agissent sur l'etat, appartient a BACK-06c.
+    def __init__(self) -> None:
+        self._accounts = InMemoryAccountRepository()
+
+    @property
+    def accounts(self) -> AccountRepository:
+        return self._accounts
+
+    async def __aenter__(self) -> "InMemoryIdentityUnitOfWork":
+        return self
+
+    async def commit(self) -> None:
+        pass
+
+    async def rollback(self) -> None:
+        pass
+
+    async def _release(self) -> None:
+        pass
+
+
 async def walk_through() -> None:
     payload = AccountCreate(
         first_name=" Jean ",
@@ -337,10 +361,12 @@ async def walk_through() -> None:
     command = payload.to_command()
     print("2. commande (application) :", command)
 
-    account = await CreateAccount(InMemoryAccountRepository()).execute(command)
+    account = await CreateAccount(InMemoryIdentityUnitOfWork()).execute(command)
     print("3. entite (domaine)       :", account)
 
-    model = _to_model(account)
+    # Aucune session n'est necessaire pour le sens entite -> modele : le depot
+    # generique ne la touche pas dans `_to_model`.
+    model = SqlAlchemyAccountRepository(None)._to_model(account)
     print("4. modele (SQLAlchemy)    :", {c.name: getattr(model, c.name) for c in model.__table__.columns})
 
     print("5. schema API (reponse)   :", AccountRead.from_entity(account))
@@ -381,13 +407,13 @@ aucune route, et `/docs` reste donc vide.
 
 | Écart                                                                  | Raison                                                                                                                                                                                                                                                                                                                                           |
 | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Le routeur d'`identity` est monté mais ne porte aucune route           | Une route de création a besoin d'une session (BACK-05) et d'une unité de travail (BACK-06a). L'exposer aujourd'hui supposerait de brancher un dépôt factice dans le code de production. Les routes viennent en BACK-28 et BACK-29.                                                                                                               |
+| Le routeur d'`identity` est monté mais ne porte aucune route           | Une route de création avait besoin d'une session (BACK-05) et d'une unité de travail (BACK-06a), livrées depuis. Ce qui manque désormais est **métier** — mot de passe (BACK-10b), non-divulgation (BACK-09), vérification (BACK-17) — et les routes viennent en BACK-28 et BACK-29.                                                             |
 | `Base` déclarée ici, mais nue                                          | Le ticket la nomme dans sa portée, et le module pilote en a besoin pour déclarer sa table. La convention de nommage des contraintes, les mixins, le moteur et la session restent à BACK-05.                                                                                                                                                      |
-| Le cas d'usage reçoit un dépôt et non une unité de travail             | L'unité de travail est livrée par BACK-06a. Le contrat qui compte est déjà tenu : ce qui entre dans un cas d'usage est un **port**, jamais une session.                                                                                                                                                                                          |
+| Le cas d'usage reçoit un dépôt et non une unité de travail             | Résorbé depuis : BACK-06a a livré l'[unité de travail](#unité-de-travail), et le cas d'usage la reçoit. Le contrat qui compte n'a jamais cessé d'être tenu : ce qui entre dans un cas d'usage est un **port**, jamais une session.                                                                                                               |
 | `create_account` recouvre partiellement BACK-28                        | C'est le seul trajet d'**écriture** démontrable aujourd'hui, et le critère d'acceptation demande le sens schéma → entité → modèle. BACK-28 le reprendra en `register_individual`, avec mot de passe, OTP et non-divulgation.                                                                                                                     |
 | `shared/domain/exceptions.py` réduit à `DomainError`                   | La hiérarchie intermédiaire et les codes namespacés sont la portée de BACK-09. Les exceptions d'`identity` héritent donc de la racine en attendant d'être reparentées.                                                                                                                                                                           |
 | `shared/domain/ports/` ne contient qu'une docstring                    | `Cache`, `FileStorage` et `TokenService` appartiennent à BACK-14, BACK-13 et BACK-10a. Le paquet existe pour fixer leur place, pas pour les anticiper.                                                                                                                                                                                           |
-| `identity/unit_of_work.py` réduit à une docstring                      | Le fichier est nommé par la portée du ticket, son contenu est celui de BACK-06a. Il fixe la place — à la racine du module, pas dans une couche.                                                                                                                                                                                                  |
+| `identity/unit_of_work.py` réduit à une docstring                      | Le fichier était nommé par la portée du ticket, son contenu était celui de BACK-06a — qui l'a rempli depuis. Il fixait la place, tenue : à la racine du module, pas dans une couche.                                                                                                                                                             |
 | `domain/entities.py` plat, et non un dossier `domain/entities/`        | Le guide de référence montre un dossier ; c'est le ticket lui-même qui l'écarte, et pour une bonne raison — un dossier d'entités partagé est exactement le domaine plat qu'il s'agit d'éviter.                                                                                                                                                   |
 | `str` et non `EmailStr` pour l'adresse                                 | `EmailStr` dépend d'`email-validator`, qui n'est pas une dépendance déclarée du projet. La validation de forme relève de BACK-28, l'unicité insensible à la casse d'INFRA-09.                                                                                                                                                                    |
 | Type et statut stockés en `String` et non en enum natif                | Ajouter une valeur à un enum PostgreSQL exige une migration, et le mapping explicite vers `AccountType` devient visible plutôt que magique — ce que la règle des 3 modèles demande précisément de montrer.                                                                                                                                       |
@@ -757,10 +783,12 @@ gardent les valeurs de **leur** transaction, donc une ligne modifiée entre-temp
 requête ne se voit pas. Avec une session par requête, la fenêtre dure une requête, et le passage
 par une entité du domaine fait que la péremption ne sort jamais de l'infrastructure.
 
-Deux pièges à connaître avant BACK-06a : `rollback()` périme les instances **quoi qu'il
-arrive** — journaliser `account.email` après l'annulation lève `MissingGreenlet` au lieu de
-rendre une valeur périmée, donc capturer ce qu'on veut tracer avant. Et une session réutilisée
-d'un bloc `async with` à l'autre ressert son identity map sans relire la base.
+Deux pièges que l'[unité de travail](#unité-de-travail) (BACK-06a) affronte désormais : le
+premier reste à connaître — `rollback()` périme les instances **quoi qu'il arrive**, donc
+journaliser `account.email` après l'annulation lève `MissingGreenlet` au lieu de rendre une
+valeur périmée, et ce qu'on veut tracer se capture avant. Le second est résolu mécaniquement :
+une session réutilisée d'un bloc `async with` à l'autre resservirait son identity map sans
+relire la base, et l'unité de travail ouvre pour cela une session **neuve** à chaque bloc.
 
 `autoflush=False` enfin : avec le défaut, un `find_by_email()` appelé après un `add()` provoque
 un flush implicite, et la violation d'unicité remonte alors depuis la **lecture**, au mauvais
@@ -911,12 +939,422 @@ et `nom annonce : juui-api/development`.
 | `group_id` sans clé étrangère vers `groups`                        | Vérifié : la table n'existe pas avant BACK-16, et une `ForeignKey` posée d'avance casse `metadata.sorted_tables`, donc l'autogénération Alembic de tout le projet. Elle rendrait de plus chaque module structurellement dépendant d'`organization`.                                              |
 | Une garde mécanique plutôt qu'une consigne pour l'index de tenance | Le ticket demande l'index, pas le mécanisme. Un balayage séquentiel ne plante pas — il ralentit, une fois qu'un client a des données, et c'est trop tard pour le voir en revue.                                                                                                                  |
 | `check_schema` et la limite des 63 octets                          | Hors périmètre littéral. SQLAlchemy tronque en silence avec un condensat, Alembic l'ignore, et l'autogénération reproposerait le même index à chaque exécution — un symptôme qui se lit comme un défaut d'Alembic, ce qu'il n'est pas.                                                           |
-| Aucune dépendance `get_session()`                                  | Le ticket ne la demande pas, et BACK-06a interdit d'exposer la session à la couche application. Rien n'en a besoin d'ici là : le dépôt reçoit sa session en argument.                                                                                                                            |
+| Aucune dépendance `get_session()`                                  | Le ticket ne la demandait pas, et BACK-06a interdisait déjà d'exposer la session à la couche application — c'est désormais tenu : l'[unité de travail](#unité-de-travail) consomme la fabrique, et le dépôt reçoit sa session en argument.                                                       |
 | `autoflush=False` sur la fabrique                                  | Non demandé. Avec le défaut, une violation d'unicité remonte depuis une **lecture** — au mauvais endroit et sous le mauvais nom.                                                                                                                                                                 |
 | `main.py` modifié, hors de la portée déclarée                      | Même arbitrage qu'en BACK-03 : la portée dit `shared/infrastructure/db/`, mais le critère d'acceptation parle du `lifespan` qui ferme le moteur.                                                                                                                                                 |
 | `DatabaseUnavailableError` distincte de `ConfigurationError`       | Une base injoignable est une configuration **valide** et une panne d'exécution. Les confondre enverrait l'exploitant relire un fichier correct pendant que le serveur finit de démarrer.                                                                                                         |
 | Le premier `[[tool.mypy.overrides]]` du projet                     | `asyncpg` ne livre pas de `py.typed`, et `engine.py` doit nommer ses exceptions : SQLAlchemy n'enveloppe pas les échecs survenus **dans** `asyncpg.connect()`. La dérogation est par module, comme BACK-02 l'avait prévu — il pariait seulement qu'elle n'arriverait jamais.                     |
 | Aucun test automatisé, mais des sondes documentées                 | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03 et BACK-04.                                                                                                                                                                                |
+
+## Unité de travail
+
+BACK-06a livre la pièce que tout le socle de persistance annonçait : le **pattern Unit of
+Work**, qui donne aux cas d'usage l'atomicité sans leur montrer la session. Un cas d'usage
+ouvre un bloc, lit et écrit par ses dépôts, décide du commit — et ne sait toujours pas que
+SQLAlchemy existe :
+
+```python
+async with uow:
+    account = await uow.accounts.get(account_id)
+    account.verify_email()
+    await uow.accounts.save(account)
+    await uow.commit()
+```
+
+### Le port, et sa promesse
+
+[`AbstractUnitOfWork`](src/app/shared/domain/ports/unit_of_work.py) est le troisième port
+technique du noyau, et sa réponse à la panne complète la série : `Cache` **dégrade**,
+`FileStorage` **lève**, l'unité de travail **lève et annule**. Un `commit()` en échec remonte à
+l'appelant, et toute sortie de bloc sans commit explicite — exception comprise — n'écrit rien.
+
+Ce rollback automatique n'est pas une consigne : `__aexit__` est la **seule méthode concrète du
+port**, une méthode-gabarit qui enchaîne `rollback()` puis la libération des ressources, et que
+tous les adaptateurs héritent — celui de SQLAlchemy comme la doublure en mémoire de BACK-06c. La
+promesse centrale du pattern est ainsi du code partagé, pas une discipline à reproduire.
+
+Le rollback de sortie est **inconditionnel**, sans drapeau « déjà commité » : après un commit,
+la session n'a pas rouvert de transaction et `rollback()` est un geste vide, sans SQL émis. Un
+drapeau serait d'ailleurs faux — un bloc peut commiter **puis** continuer à lire ou écrire, et
+c'est précisément cette transaction implicite de fin de bloc que le rollback inconditionnel
+nettoie.
+
+Trois règles engagent l'appelant, écrites au port et tenues par des gardes :
+
+| Règle                               | Ce qui se passe sinon                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| le commit est **explicite**         | sortir sans `commit()` annule tout — oublier de valider n'écrit jamais    |
+| **un seul bloc** à la fois          | rentrer dans une unité déjà ouverte lève `RuntimeError`                   |
+| la transaction **vit dans le bloc** | `commit()`, `rollback()` et les dépôts lèvent `RuntimeError` hors du bloc |
+
+Rouvrir la **même** unité après la sortie d'un bloc est en revanche permis : chaque entrée
+fabrique une session neuve — c'est la doctrine « une session par bloc » de
+[la section Persistance](#ce-que-la-session-promet-et-ce-quelle-coûte), rendue mécanique. La
+fermeture est même définitive (`close_resets_only=False`) : un dépôt capturé dans un bloc et
+rejoué après la sortie lève une erreur SQLAlchemy au lieu de rouvrir une connexion en douce.
+
+### Une unité de travail par module
+
+Il n'existe **pas** d'unité de travail globale, et c'est une décision d'architecture consignée
+dans l'[ADR-0009](../../documentation/docs/adr/0009-unite-de-travail-par-module.md) : chaque
+module dérive son port — [`IdentityUnitOfWork`](src/app/modules/identity/domain/ports.py) le
+premier — qui n'expose que les dépôts de ce module. Ce qu'on ne peut pas placer dans une seule
+transaction devient une frontière **visible** — `identity` et `organization` ne partagent pas
+leur atomicité — plutôt qu'une dette invisible que le premier incident révélera.
+
+Le port du module vit dans son **domaine**, et l'implémentation
+[`SqlAlchemyIdentityUnitOfWork`](src/app/modules/identity/unit_of_work.py) à la **racine** du
+module — la place que BACK-04 avait fixée : le point d'assemblage, ni domaine ni tout à fait
+infrastructure. La raison du dédoublement est mécanique autant qu'architecturale : le fichier
+racine importe l'infrastructure, et un cas d'usage qui le nommerait créerait la chaîne
+`application → infrastructure` que le contrat [`module-layers`](#import-linter) refuse. Le cas
+d'usage type donc sur le port, qui ne connaît que le domaine — et c'est ce qui permettra à
+BACK-06c de substituer sa doublure sans toucher une signature.
+
+Les dépôts du module sont des **propriétés paresseuses**, pas des attributs posés à l'entrée du
+bloc : un attribut survivrait à la sortie, dépôt mort en main, tandis que la propriété repasse
+par la garde de l'unité à chaque accès — servir un dépôt hors bloc est donc structurellement
+impossible.
+
+### Le dépôt générique
+
+[`SqlAlchemyRepository`](src/app/shared/infrastructure/db/repositories/base.py) porte ce qui se
+répétait à l'identique d'un agrégat à l'autre : `get`, `list`, `add`, `save`, `delete`, et la
+mécanique du mapping. Un dépôt concret ne déclare plus que ce qui lui appartient :
+
+| Déclaration          | Chez `identity`                                    |
+| -------------------- | -------------------------------------------------- |
+| `_model_type`        | `AccountModel`                                     |
+| `_not_found_error`   | `AccountNotFoundError`                             |
+| `_not_found_message` | « Aucun compte ne porte l'identifiant… »           |
+| `_to_entity`         | ligne → `Account`, conversions de types visibles   |
+| `_apply_to_model`    | `Account` → ligne suivie, sans jamais toucher `id` |
+
+**Deux** fonctions de mapping et non trois : `_to_model`, le sens « entité neuve → ligne à
+insérer », est dérivé dans le générique — un modèle neuf reçoit l'identifiant, puis
+`_apply_to_model` fait le reste. « L'identifiant n'est jamais reporté » cesse d'être une
+consigne : `save` ne passe que par `_apply_to_model`, qui ne le touche pas, structurellement.
+
+Le vocabulaire du protocole [`Repository`](src/app/shared/domain/ports/repository.py) décrit la
+surface **complète** de l'infrastructure générique ; le port métier du module, lui, la
+**rétrécit**. `AccountRepository` n'expose ni `list` ni `delete` — ses cas d'usage n'en ont pas
+le droit — alors que la classe concrète les sait faire : le port ne s'élargit pas parce que la
+classe sait faire plus. C'est aussi pourquoi le port métier n'hérite **pas** du protocole : en
+hériter ferait entrer les cinq opérations dans son contrat.
+
+Quatre comportements valent d'être nommés, parce qu'ils se décident ici pour tous les agrégats :
+
+- `get`, `save` et `delete` lèvent **l'erreur du module** — l'absence est une erreur quand on
+  tient l'identifiant d'un jeton ou d'une URL, la doctrine `get_`/`find_` du port ne change pas ;
+- `add` **flushe sa ligne, sans jamais commiter** : l'INSERT part dans la transaction du bloc —
+  que le rollback de sortie sait toujours annuler — et l'entité ajoutée est aussitôt visible du
+  reste de son bloc, pour `get`, `save`, `delete` comme pour `find_by_email`. Sans ce flush,
+  `autoflush=False` la rendrait invisible à son propre bloc — un `delete` après `add` aurait
+  même déclaré la ligne inexistante tout en la laissant partir à l'INSERT au commit. Les
+  contraintes remontent donc depuis l'écriture qui les viole : la course résiduelle sur
+  l'unicité d'une adresse (deux requêtes passant `find_by_email` ensemble) éclate en
+  `IntegrityError` au flush du second `add`, que BACK-09/BACK-28 traduiront ;
+- `save` modifie la **ligne suivie** (`session.get` puis `_apply_to_model`), jamais un
+  `merge()` d'objet reconstruit qui coûterait un SELECT de plus ;
+- `list` suit la clé primaire : les identifiants **UUIDv7** étant horodatés, l'ordre est
+  chronologique et déterministe sans colonne de tri — et la sortie est **sans borne**, la
+  pagination étant une convention de BACK-24, pas un choix à figer ici en douce.
+
+### `get_identity_uow` : une instance par requête
+
+La dépendance FastAPI vit à la racine du module, à côté de l'implémentation qu'elle assemble,
+avec son alias [`IdentityUowDep`](src/app/modules/identity/unit_of_work.py) sur le modèle de
+`SettingsDep`. Elle livre une unité **fermée** — la session ne s'ouvrira qu'au `async with` du
+cas d'usage — ce qui dispense de tout finaliseur `yield` : une requête abandonnée avant le bloc
+n'a rien à nettoyer, une requête annulée en plein bloc voit `__aexit__` dérouler rollback et
+fermeture au dépilement.
+
+`get_identity_uow` et non `get_uow` : une unité par module, le nom porte la frontière —
+`organization` publiera la sienne. Et le type de retour est le **port** : une route ne sait pas
+quelle technologie la sert.
+
+### Vérifier que l'unité de travail tient
+
+Quatre sondes, dans le même esprit que celles du [socle](#vérifier-que-le-socle-tient). Depuis
+`backend/api/`. La première se joue **sans conteneur** ; les trois suivantes travaillent sur
+`app_test`, la base que INFRA-01 crée pour les opérations destructrices — **jamais** sur la
+base applicative.
+
+La première éprouve les gardes : hors bloc, et ré-entrée pendant un bloc.
+
+```bash
+uv run python - <<'PY'
+import asyncio
+
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
+
+
+async def main() -> None:
+    uow = SqlAlchemyIdentityUnitOfWork(async_sessionmaker())
+    try:
+        await uow.commit()
+    except RuntimeError as error:
+        print("hors bloc :", error)
+    async with uow:
+        try:
+            async with uow:
+                pass
+        except RuntimeError as error:
+            print("re-entree :", error)
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : `hors bloc : Aucune transaction en cours : l'unite de travail ne sert que dans son
+bloc async with.` puis `re-entree : Cette unite de travail est deja ouverte : un seul bloc a la
+fois.`
+
+La deuxième éprouve le cycle transactionnel — commit effectif, rollback sans commit, rollback
+sur exception — en relisant chaque fois depuis un bloc **neuf** de la même unité :
+
+```bash
+uv run python - <<'PY'
+import asyncio
+
+from app.core import get_settings
+from app.modules.identity.domain.entities import Account, AccountType
+from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
+from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
+from app.shared.infrastructure.db.session import build_sessionmaker
+
+settings = get_settings()
+settings = settings.model_copy(update={"db": settings.db.model_copy(update={"db": "app_test"})})
+
+
+def make_account(email: str) -> Account:
+    return Account.create(
+        email=email,
+        first_name="Sonde",
+        last_name="BACK-06a",
+        account_type=AccountType.INDIVIDUAL,
+    )
+
+
+async def main() -> None:
+    engine = build_engine(settings)
+    try:
+        await verify_connectivity(engine, settings)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        uow = SqlAlchemyIdentityUnitOfWork(build_sessionmaker(engine))
+
+        async with uow:
+            await uow.accounts.add(make_account("commite@example.com"))
+            visible = await uow.accounts.find_by_email("commite@example.com")
+            print("0. visible du bloc :", visible.email if visible else None)
+            await uow.commit()
+        async with uow:
+            found = await uow.accounts.find_by_email("commite@example.com")
+            print("1. commite       :", found.email if found else None)
+
+        async with uow:
+            await uow.accounts.add(make_account("oublie@example.com"))
+        async with uow:
+            print("2. sans commit   :", await uow.accounts.find_by_email("oublie@example.com"))
+
+        try:
+            async with uow:
+                await uow.accounts.add(make_account("panne@example.com"))
+                raise RuntimeError("panne simulee")
+        except RuntimeError:
+            pass
+        async with uow:
+            print("3. sur exception :", await uow.accounts.find_by_email("panne@example.com"))
+    finally:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : `0. visible du bloc : commite@example.com` — l'écriture flushée est relisible par son
+propre bloc —, puis `1. commite : commite@example.com`, puis `2. sans commit : None`, puis
+`3. sur exception : None` — seule l'écriture validée existe.
+
+La troisième éprouve le dépôt générique, les cinq opérations et le mapping dans les deux sens.
+Elle travaille en session directe : c'est une sonde d'**infrastructure**, assumée comme telle —
+un cas d'usage, lui, passe par l'unité de travail.
+
+```bash
+uv run python - <<'PY'
+import asyncio
+
+from app.core import get_settings
+from app.modules.identity.domain.entities import Account, AccountType
+from app.modules.identity.domain.exceptions import AccountNotFoundError
+from app.modules.identity.infrastructure.db.repositories import SqlAlchemyAccountRepository
+from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
+from app.shared.infrastructure.db.session import build_sessionmaker
+
+settings = get_settings()
+settings = settings.model_copy(update={"db": settings.db.model_copy(update={"db": "app_test"})})
+
+
+async def main() -> None:
+    engine = build_engine(settings)
+    try:
+        await verify_connectivity(engine, settings)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        async with build_sessionmaker(engine)() as session:
+            accounts = SqlAlchemyAccountRepository(session)
+
+            first = Account.create(
+                email="premier@example.com",
+                first_name="Premier",
+                last_name="Sonde",
+                account_type=AccountType.INDIVIDUAL,
+            )
+            await accounts.add(first)
+            await session.commit()
+
+            relu = await accounts.get(first.id)
+            print("aller-retour :", relu == first)
+
+            relu.verify_email()
+            await accounts.save(relu)
+            await session.commit()
+            print("sauvegarde   :", (await accounts.get(first.id)).email_verified)
+
+            second = Account.create(
+                email="second@example.com",
+                first_name="Second",
+                last_name="Sonde",
+                account_type=AccountType.INDIVIDUAL,
+            )
+            await accounts.add(second)
+            await session.commit()
+            print("liste        :", [account.email for account in await accounts.list()])
+
+            await accounts.delete(first.id)
+            await session.commit()
+            try:
+                await accounts.get(first.id)
+            except AccountNotFoundError as error:
+                print("suppression  :", type(error).__name__, "--", error)
+    finally:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : `aller-retour : True` — l'égalité de dataclass prouve le mapping dans les deux sens —
+puis `sauvegarde : True`, la liste dans l'**ordre de création** `['premier@example.com',
+'second@example.com']`, et la suppression suivie d'un `AccountNotFoundError` portant le message
+du module.
+
+La quatrième joue le cas d'usage complet à travers une route, et prouve « une instance par
+requête ». L'application est définie **dans la sonde** : les vraies routes appartiennent à
+BACK-28.
+
+```bash
+uv run python - <<'PY'
+import asyncio
+
+import httpx
+from fastapi import FastAPI
+
+from app.core import get_settings
+from app.modules.identity.application.use_cases.create_account import (
+    CreateAccount,
+    CreateAccountCommand,
+)
+from app.modules.identity.domain.entities import AccountType
+from app.modules.identity.domain.exceptions import EmailAlreadyUsedError
+from app.modules.identity.unit_of_work import IdentityUowDep
+from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
+from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
+
+settings = get_settings()
+settings = settings.model_copy(update={"db": settings.db.model_copy(update={"db": "app_test"})})
+
+application = FastAPI()
+seen: list[object] = []
+
+
+@application.post("/sonde")
+async def sonde(uow: IdentityUowDep) -> dict[str, str]:
+    seen.append(uow)
+    command = CreateAccountCommand(
+        email="Sonde@Example.COM ",
+        first_name="Sonde",
+        last_name="BACK-06a",
+        account_type=AccountType.INDIVIDUAL,
+    )
+    try:
+        account = await CreateAccount(uow).execute(command)
+    except EmailAlreadyUsedError:
+        return {"resultat": "refus"}
+    return {"resultat": account.email}
+
+
+async def main() -> None:
+    engine = build_engine(settings)
+    try:
+        await verify_connectivity(engine, settings)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        setattr(
+            application.state,
+            STATE_KEY,
+            Database(engine=engine, sessionmaker=build_sessionmaker(engine)),
+        )
+
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://sonde") as client:
+            print("premier appel :", (await client.post("/sonde")).json()["resultat"])
+            print("second appel  :", (await client.post("/sonde")).json()["resultat"])
+            print("une instance par requete :", seen[0] is not seen[1])
+    finally:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : `premier appel : sonde@example.com` — l'adresse normalisée par le domaine — puis
+`second appel : refus` — le contrôle d'unicité a vu l'écriture commitée de la première requête —
+et `une instance par requete : True`.
+
+### Écarts assumés avec le ticket BACK-06a
+
+| Écart                                                             | Raison                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| L'implémentation s'appelle `SqlAlchemyIdentityUnitOfWork`         | Le ticket écrit « une `IdentityUnitOfWork` » ; ce nom revient au **port**, dans le domaine du module, que les cas d'usage typent. La raison est mécanique : le fichier racine importe l'infrastructure, et le contrat `module-layers` interdit à `application/` de le nommer.                                                                                      |
+| `get_identity_uow` et non `get_uow`                               | Une unité de travail par module : le nom porte la frontière, et `organization` publiera la sienne sans collision.                                                                                                                                                                                                                                                  |
+| `list` et `delete` absents du port `AccountRepository`            | Le ticket demande le dépôt de base à cinq opérations, et le contrat du port « ne bouge pas ». Les deux tiennent : la classe concrète hérite des cinq, le port n'expose que ce que ses cas d'usage ont le droit de faire.                                                                                                                                           |
+| `delete` lève sur l'absent plutôt que rendre un booléen           | Même doctrine que `get` : on supprime par un identifiant qu'on tient, et un second appel signale un rejeu. Le booléen de `Cache.delete` et `FileStorage.delete` porte la sémantique d'un stockage idempotent, qui n'est pas celle d'un agrégat.                                                                                                                    |
+| `Identified` fixe l'identifiant à `UUID`                          | Un paramètre de type sans second cas réel serait de la généralité spéculative : `UUIDPrimaryKey` (BACK-05) fait de l'UUIDv7 la convention du socle.                                                                                                                                                                                                                |
+| Rollback de sortie inconditionnel, sans drapeau « commité »       | Après un commit, `rollback()` est un geste vide — vérifié dans la source de SQLAlchemy. Un drapeau serait faux : un bloc peut commiter puis continuer, et sa transaction implicite de fin de bloc doit être nettoyée.                                                                                                                                              |
+| La course d'unicité `find`/`add` n'est pas traduite ici           | Deux requêtes passant `find_by_email` ensemble se départagent sur la contrainte unique, en `IntegrityError` au flush du second `add`. La traduction en erreur métier est la frontière de BACK-09 et BACK-28 ; le chemin nominal est couvert par le contrôle du cas d'usage.                                                                                        |
+| `add` flushe sa ligne, quand BACK-05 renvoyait le flush au commit | La doctrine de BACK-05 vise le flush **implicite** déclenché par une lecture, toujours désactivé (`autoflush=False`). Sans flush explicite, une entité ajoutée serait invisible à son propre bloc — `delete` après `add` aurait déclaré la ligne inexistante tout en la laissant s'insérer au commit. Le flush part de l'écriture, l'erreur remonte de l'écriture. |
+| Arguments positionnels (`/`) ajoutés au port `AccountRepository`  | Seule retouche à un contrat existant, et une fermeture de trou : Mypy ne compare pas les noms de paramètres positionnels entre les deux bases de la classe concrète, et un appel par mot-clé (`account_id=`) aurait passé le typage pour casser à l'exécution.                                                                                                     |
+| Aucune route ajoutée                                              | La dépendance `IdentityUowDep` est prête, mais les routes portent des règles métier (BACK-10b, BACK-09, BACK-17) qui appartiennent à BACK-28 et BACK-29.                                                                                                                                                                                                           |
+| Aucun test automatisé, mais des sondes documentées                | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05, BACK-13 et BACK-14.                                                                                                                                                                                                                       |
 
 ## Cache
 
@@ -1393,8 +1831,9 @@ construction du client vivent dans `shared/infrastructure/` — même contrainte
 Cinq opérations : `upload`, `download`, `delete`, `exists`, `generate_presigned_url`. Quatre règles
 les accompagnent, écrites dans la docstring de `FileStorage`.
 
-**1. Aucune dégradation, jamais.** C'est le point où ce port s'oppose au précédent, et il faut
-l'avoir en tête avant d'écrire le troisième. `Cache` rend `MISSING` quand Redis tombe, parce qu'un
+**1. Aucune dégradation, jamais.** C'est le point où ce port s'oppose au précédent, et la
+question s'est reposée au suivant — l'[unité de travail](#unité-de-travail) y répond en levant
+**et** en annulant. `Cache` rend `MISSING` quand Redis tombe, parce qu'un
 cache absent ne change qu'une **latence**. Un stockage absent change un **résultat** :
 
 - un `upload` qui ne lèverait pas serait un fichier **perdu**, alors qu'on vient de répondre
@@ -2065,7 +2504,8 @@ de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts
 
 | Sujet                                 | Ticket   |
 | ------------------------------------- | -------- |
-| Unité de travail et dépôt générique   | BACK-06a |
+| Filtrage multi-tenant automatique     | BACK-06b |
+| Doublures en mémoire (fakes)          | BACK-06c |
 | Traduction des erreurs métier en HTTP | BACK-09  |
 | Sonde de santé et métadonnées OpenAPI | BACK-08  |
 | Migrations Alembic                    | BACK-07  |
@@ -2074,8 +2514,10 @@ de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts
 
 La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
 désormais tenues par [Import Linter](#import-linter) (BACK-04b), le socle de
-persistance est en place (BACK-05), les deux ports techniques du noyau partagé
-sont livrés — [cache](#cache) (BACK-14) et [stockage objet](#stockage-objet)
-(BACK-13) —, Ruff et Mypy sont configurés (BACK-02). Les
-dépendances de test, elles, restent **déclarées sans être configurées** : c'est
-volontaire, chaque ticket porte son propre outil.
+persistance est en place (BACK-05) et l'[unité de travail](#unité-de-travail)
+avec son dépôt générique le coiffe (BACK-06a), quatre des cinq ports techniques
+du noyau partagé sont livrés — [cache](#cache) (BACK-14),
+[stockage objet](#stockage-objet) (BACK-13), unité de travail et dépôt
+générique (BACK-06a), `TokenService` restant à BACK-10a —, Ruff et Mypy sont configurés
+(BACK-02). Les dépendances de test, elles, restent **déclarées sans être
+configurées** : c'est volontaire, chaque ticket porte son propre outil.
