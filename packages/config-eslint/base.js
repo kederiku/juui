@@ -73,7 +73,8 @@ export default defineConfig([
    * une promesse -- c'est-a-dire precisement ce qu'une analyse purement
    * syntaxique ne peut pas voir.
    *
-   * Ce que la bascule coute en temps est mesure et inscrit au README ; c'est la
+   * Ce que la bascule coute en temps est mesure et inscrit sur la page
+   * « Configurations partagees » du site de documentation ; c'est la
    * question qui l'avait fait reporter depuis SETUP-03.
    */
   ...tseslint.configs.recommendedTypeChecked,

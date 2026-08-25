@@ -67,7 +67,7 @@ export default async function LoginPage({
           </p>
           <p>
             En attendant, poser le cookie <code className="font-mono">{SESSION_COOKIE_NAME}</code>{' '}
-            sur ce domaine ouvre le back-office — la marche à suivre est dans le README.
+            sur ce domaine ouvre le back-office — la marche à suivre est dans la documentation.
           </p>
           {next ? (
             <p>
