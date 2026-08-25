@@ -35,7 +35,22 @@
 # Version de uv, EPINGLEE. Les binaires viennent de l'image officielle, jamais
 # d'un pip install : c'est une exigence du ticket, et c'est aussi ce qui rend le
 # build reproductible.
-ARG UV_VERSION=0.11.7
+#
+# 0.11.7 a l'origine, montee a 0.12.5 pour aligner les trois environnements qui
+# lancent uv -- celui-ci, la CI (`version:` de setup-uv dans ci-backend.yml) et
+# le poste. Ils avaient derive, et l'ecart ne se voyait que dans un
+# avertissement de log. Le `required-version` de backend/api/pyproject.toml le
+# fera desormais ECHOUER : si cet ARG sort de la plage qu'il declare, c'est le
+# `uv sync` de l'etage `builder` qui s'arrete, et le `docker build` avec lui --
+# au bon moment pour l'apprendre, comme pour PYTHON_VERSION juste en dessous.
+#
+# Les 22 ruptures de uv 0.12 ont ete relues contre ce que ce fichier fait
+# reellement : aucune ne s'applique. Les deux qui meritaient un regard sont
+# « require --force before clearing a directory that is not a virtual
+# environment » -- /opt/venv est cree de zero par le premier `uv sync`, les
+# suivants retrouvent un vrai venv -- et le rejet des sdists qui ne sont pas en
+# .tar.gz, sans objet ici puisque le lock n'installe que des roues.
+ARG UV_VERSION=0.12.5
 
 # Alignee sur backend/api/.python-version et sur le `requires-python = "==3.14.*"`
 # de uv.lock. Les faire diverger ferait echouer `uv sync --frozen` a la
