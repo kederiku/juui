@@ -574,11 +574,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # A AJOUTER EN BACK-13, quand l'API touchera reellement au bucket :
-      #   minio-init:
-      #     condition: service_completed_successfully
-      # L'ajouter des maintenant retarderait le demarrage sans rien garantir de
-      # plus -- aucun code ne parle encore a MinIO.
+      # AJOUTEE EN BACK-13, l'API touchant desormais reellement au bucket.
+      #
+      # `service_completed_successfully` et non `service_healthy` : minio-init est
+      # un conteneur EPHEMERE, son etat final normal est `Exited (0)` et il n'a
+      # aucune sonde de sante. La condition attend donc sa SORTIE, pas sa vivacite
+      # -- et elle attend AUSSI son code de retour, ce qui fait qu'un bucket dont
+      # la creation a echoue empeche l'API de partir au lieu de la laisser
+      # decouvrir l'absence au premier televersement.
+      #
+      # Ce n'est pas une redite du `depends_on: minio` de minio-init : celui-la
+      # garantit que le SERVEUR repond, celui-ci que le BUCKET existe.
+      minio-init:
+        condition: service_completed_successfully
 
     healthcheck:
       # SONDE PROVISOIRE. Le ticket vise `/health/live`, qui releve de BACK-08 et
