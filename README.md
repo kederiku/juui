@@ -54,6 +54,11 @@ Pour le parcours qui fonctionne aujourd'hui :
   `package.json` racine épingle la version exacte, que pnpm récupère seul.
 - **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api`. Il
   télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
+  La version attendue est déclarée par `required-version` dans
+  [`backend/api/pyproject.toml`](backend/api/pyproject.toml), et fait foi pour
+  le poste comme pour la CI et l'image Docker : un `uv` hors de cette plage
+  s'arrête en le disant, plutôt que de travailler différemment en silence.
+  `brew upgrade uv` suffit à s'y aligner.
 
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
   [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).

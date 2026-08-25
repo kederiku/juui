@@ -90,9 +90,53 @@ dev = [
     "boto3-stubs[s3]~=1.43",
 ]
 
+# Le backend de build est celui d'uv, integre au binaire : un paquet de moins a
+# resoudre que hatchling, et rien a installer separement.
+#
+# BORNE HAUTE A 0.13 ET NON A 0.12. Celle d'origine etait la sortie litterale
+# de `uv init` sous uv 0.11 ; elle est devenue fausse le jour ou uv 0.12 est
+# sorti, et chaque `uv sync` de la CI le disait en clair. Verifie avant de
+# l'elargir, en amont : les notes de version de 0.12.0 annoncent « no breaking
+# changes to the configuration of the uv build backend » et recommandent
+# d'ouvrir jusqu'a 0.13. Verifie AUSSI sur ce projet, ou le `module-name`
+# ci-dessous et la disposition src/ sont ce qui pourrait souffrir -- les deux
+# roues construites sous 0.11.7 et sous 0.12.5 portent 37 fichiers dont 35 sont
+# identiques octet pour octet, les deux autres etant la ligne `Generator:` du
+# fichier WHEEL, qui nomme le constructeur, et son empreinte dans RECORD. Le
+# paquet `app/` et le METADATA ne bougent pas d'un octet.
+#
+# CETTE BORNE NE CONTRAINT RIEN, et il faut le savoir pour ne pas s'y fier :
+# uv emploie son backend integre des que la version declaree tombe dans sa
+# plage connue compatible, et ne va chercher le paquet `uv_build` sur PyPI que
+# HORS de cette plage. La CI construisait donc deja avec uv_build 0.12.5 quand
+# la borne disait <0.12.0 -- l'avertissement signalait une declaration perimee,
+# pas un changement de backend. Ce que la borne declare, ce sont les versions
+# sous lesquelles cette roue est VERIFIEE : d'ou le plancher tenu a 0.11.7, la
+# version qui a construit le projet et celle qu'embarquait l'image Docker, et
+# non le 0.11.32 de l'exemple amont, qui rendrait la declaration fausse pour
+# les roues deja produites.
+#
+# 0.13 est le meme mur que celui du `required-version` ci-dessous, a dessein :
+# uv monte son mineur pour ses ruptures. Les deux bornes se rediscutent donc
+# ensemble, une fois, plutot que de ceder l'une apres l'autre.
 [build-system]
-requires = ["uv_build>=0.11.7,<0.12.0"]
+requires = ["uv_build>=0.11.7,<0.13.0"]
 build-backend = "uv_build"
+
+# Version d'uv EXIGEE, et non suggeree. Trois endroits la portent : le
+# `version:` de setup-uv dans .github/workflows/ci-backend.yml, l'ARG
+# UV_VERSION du Dockerfile d'INFRA-04, et le uv du poste. Rien ne les obligeait
+# a s'accorder -- c'est ainsi que la CI a derive en 0.12.5 pendant que le poste
+# restait en 0.11.7, et que l'ecart ne s'est vu que dans un avertissement de
+# log, c'est-a-dire nulle part. Cette ligne le fait ECHOUER, des le premier
+# `uv` lance, en nommant la version attendue.
+#
+# Une plage et non un `==`, pour qu'une montee de patch cote Homebrew n'arrete
+# pas le poste : ce qui doit se voir, c'est le saut de mineur. Le mur est donc
+# a 0.13, la ou uv s'autorise ses ruptures -- meme borne que le `uv_build`
+# ci-dessus, et c'est le but.
+[tool.uv]
+required-version = ">=0.12.5,<0.13"
 
 [tool.uv.build-backend]
 # Le ticket impose le chemin backend/api/src/app/main.py et la cible

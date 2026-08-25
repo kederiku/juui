@@ -67,9 +67,32 @@ jobs:
       # suivante lit backend/api/.python-version et telecharge l'interpreteur
       # s'il manque -- exactement ce que fait `uv sync` sur le poste. La nommer
       # une seconde fois dans le workflow n'ajouterait qu'un endroit ou diverger.
+      #
+      # LA VERSION DE UV, ELLE, EST NOMMEE. L'arbitrage inverse du precedent, et
+      # ce n'est pas une contradiction : `.python-version` est un fichier que
+      # setup-uv sait lire, `required-version` n'en est pas un qu'il sache lire
+      # ICI -- il le cherche a la racine du depot, or le projet Python vit dans
+      # backend/api/. Son entree `version-file:` accepterait peut-etre ce
+      # chemin, mais sa documentation ne dit ni cela ni comment elle resoudrait
+      # une PLAGE : un litteral verifiable vaut mieux qu'un comportement
+      # suppose.
+      #
+      # Sans cette ligne, le runner prenait le dernier uv publie. Il a ainsi
+      # glisse en 0.12.5 pendant que le poste restait en 0.11.7, et le seul
+      # symptome fut un avertissement dans chaque log :
+      # « build_system.requires [...] does not contain the current uv version ».
+      # Le depot epinglait pourtant deja uv a l'exact dans le Dockerfile
+      # d'INFRA-04 : la CI etait le seul des trois environnements a flotter.
+      #
+      # Ce qui empeche desormais ces trois endroits de diverger en silence,
+      # c'est le `required-version` de backend/api/pyproject.toml : un uv hors
+      # plage fait ECHOUER l'etape suivante au lieu de la faire reussir avec un
+      # avertissement. Cette ligne-ci choisit la version, celle-la verifie que
+      # tout le monde a fait le meme choix. Les deux se montent ensemble.
       - name: Installer uv
         uses: astral-sh/setup-uv@v10.0.1
         with:
+          version: '0.12.5'
           enable-cache: true
           cache-dependency-glob: backend/api/uv.lock
 
