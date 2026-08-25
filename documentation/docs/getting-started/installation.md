@@ -87,7 +87,7 @@ pnpm install
 ```
 
 Cette commande installe aussi les **hooks Git** — voir
-[Hooks de pre-commit](https://github.com/kederiku/juui#hooks-de-pre-commit).
+[Hooks de pre-commit](./conventions-du-depot.md#hooks-de-pre-commit).
 
 Côté Python, le seul service `backend/api`, absent de ces workspaces et piloté
 par `uv` :

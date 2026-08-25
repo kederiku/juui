@@ -48,7 +48,7 @@ export type Session = {
  * Tant que FRONT-07 n'a pas livre, le contenu du jeton n'est pas lu : sa seule
  * PRESENCE vaut session d'administrateur. C'est ce qui permet, sur le poste, de
  * voir le back-office en posant le cookie a la main -- la procedure est decrite
- * dans le README.
+ * sur la page « Les trois applications » du site de documentation.
  */
 export function sessionFromToken(token: string | undefined): Session | null {
   if (!token) {

@@ -18,8 +18,8 @@
  * `tseslint.configs.recommendedTypeChecked` et branche le service de projet de
  * TypeScript. Les regles qui exigent un programme sont donc disponibles ici --
  * c'est ce que SETUP-03 avait annonce, puis laisse en suspens faute de mesure.
- * Ce que la bascule coute en temps est chiffre au README, section
- * « Configurations partagees ».
+ * Ce que la bascule coute en temps est chiffre sur la page
+ * « Configurations partagees » du site de documentation.
  */
 export const sharedRules = {
   // `console.log` oublie en production ; warn et error restent legitimes.
@@ -167,7 +167,7 @@ export const a11yComponents = {
  * corresponde a une gene reelle, constatee, et porte son motif.
  *
  * L'objet reste neanmoins etale par `react.js`, et c'est delibere : il garde
- * vrai ce que dit le README -- le socle de regles se modifie en UN SEUL
+ * vraie la regle du depot -- le socle de regles se modifie en UN SEUL
  * endroit, ce fichier. Sans lui, le premier durcissement irait s'ecrire dans le
  * preset.
  */

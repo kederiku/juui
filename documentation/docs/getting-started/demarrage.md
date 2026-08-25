@@ -68,7 +68,7 @@ La commande démarre en parallèle les serveurs de développement de tout le
 dépôt : l'interface professionnelle répond sur [http://localhost:3001](http://localhost:3001), celle
 des particuliers sur [http://localhost:3002](http://localhost:3002) et le back-office sur
 [http://localhost:3003](http://localhost:3003) — ce dernier redirigeant aussitôt vers sa page de
-connexion, voir [Le back-office de `frontend-admin`](https://github.com/kederiku/juui#le-back-office-de-frontend-admin).
+connexion, voir [Le back-office de `frontend-admin`](../frontend/les-trois-applications.md#le-back-office-de-frontend-admin).
 Le site de documentation démarre lui aussi, sur [http://localhost:3004](http://localhost:3004).
 
 Pour n'en démarrer qu'une, la filtrer par le nom de son workspace :

@@ -17,10 +17,10 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
  *
  * UNE ENTREE PLATE PAR SECTION tant qu'une section n'a qu'une page ; des
  * qu'elle en gagne une seconde, l'entree devient une `category` dont le `link`
- * reste la page d'index. Demarrer, Infrastructure, les ADR (DOC-02b) et les
- * Ecarts assumes suivent cette forme ci-dessous ; Architecture (DOC-02a) et
- * les pages de DOC-02c l'adopteront a leur tour -- une categorie livree vide
- * afficherait une section qui ne se deplie pas.
+ * reste la page d'index. Toutes les sections suivent desormais cette forme,
+ * sauf Architecture, seule a n'avoir encore qu'une page : DOC-02a et les pages
+ * de DOC-02c l'adopteront a leur tour -- une categorie livree vide afficherait
+ * une section qui ne se deplie pas.
  *
  * Les libelles des items d'une categorie restent courts : le numero et le
  * titre complet d'un ADR vivent dans la page, l'ordre du registre suffit ici.
@@ -34,6 +34,11 @@ const sidebars: SidebarsConfig = {
       items: [
         { type: 'doc', id: 'getting-started/installation', label: 'Installation' },
         { type: 'doc', id: 'getting-started/demarrage', label: 'Démarrage' },
+        {
+          type: 'doc',
+          id: 'getting-started/conventions-du-depot',
+          label: 'Conventions du dépôt',
+        },
       ],
     },
     { type: 'doc', id: 'architecture/index', label: 'Architecture' },
@@ -60,7 +65,20 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'backend/qualite-et-typage', label: 'Qualité et typage' },
       ],
     },
-    { type: 'doc', id: 'frontend/index', label: 'Frontend' },
+    {
+      type: 'category',
+      label: 'Frontend',
+      link: { type: 'doc', id: 'frontend/index' },
+      items: [
+        {
+          type: 'doc',
+          id: 'frontend/configurations-partagees',
+          label: 'Configurations partagées',
+        },
+        { type: 'doc', id: 'frontend/bibliotheque-ui', label: 'Bibliothèque @repo/ui' },
+        { type: 'doc', id: 'frontend/les-trois-applications', label: 'Les trois applications' },
+      ],
+    },
     {
       type: 'category',
       label: 'Infrastructure',
@@ -119,6 +137,8 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'ecarts/setup', label: 'SETUP' },
         { type: 'doc', id: 'ecarts/infra', label: 'INFRA' },
         { type: 'doc', id: 'ecarts/back', label: 'BACK' },
+        { type: 'doc', id: 'ecarts/shared', label: 'SHARED' },
+        { type: 'doc', id: 'ecarts/front', label: 'FRONT' },
         { type: 'doc', id: 'ecarts/doc', label: 'DOC' },
       ],
     },

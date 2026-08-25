@@ -65,11 +65,11 @@ pnpm --filter documentation build && pnpm --filter documentation start
 | [Démarrer](./installation.md)                | Installer le poste, démarrer la pile, les conventions du dépôt.       | livrée             |
 | [Architecture](../architecture/index.md)     | Règles hexagonales, carte de contexte, sens des dépendances.          | DOC-02a            |
 | [Backend](../backend/index.md)               | Le service d'API : modules, persistance, tâches de fond.              | livrée             |
-| [Frontend](../frontend/index.md)             | Les trois applications, la bibliothèque partagée, le client généré.   | tickets FRONT      |
+| [Frontend](../frontend/index.md)             | Les trois applications, la bibliothèque partagée, le client généré.   | livrée             |
 | [Infrastructure](../infrastructure/index.md) | Ports, images Docker, mode développement, services de développement.  | livrée             |
 | [Décisions (ADR)](../adr/index.md)           | Les décisions structurantes, leur motif et les alternatives écartées. | DOC-02b — livrée   |
 | [Écarts assumés](../ecarts/index.md)         | Les écarts entre chaque ticket et son livrable, avec leur raison.     | au fil des tickets |
 
-La section Architecture est une **page d'attente** : DOC-02a la remplira. Le contenu détaillé de
-la section Frontend vit encore dans le README de la racine ; il rejoint le site au fil de la
-migration en cours.
+La section Architecture est une **page d'attente** : DOC-02a la remplira avec le guide normatif —
+règles hexagonales et carte de contexte. Toutes les autres sections sont vivantes : chaque ticket
+livré y dépose ou y met à jour sa page dans la même PR.

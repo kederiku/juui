@@ -11,8 +11,8 @@
  * Tailwind documente sous « Sharing across projects ». Le `content` d'autrefois
  * s'ecrit `@source`, le theme `@theme`, et les variantes `@custom-variant`.
  *
- * Ce que doit faire une application pour l'etendre est decrit dans la section
- * « Configurations partagees » du README -- elle importe `@repo/ui/globals.css`,
+ * Ce que doit faire une application pour l'etendre est decrit sur la page
+ * « Configurations partagees » du site de documentation -- elle importe `@repo/ui/globals.css`,
  * qui n'est qu'un renvoi vers ce fichier, et n'en redefinit rien.
  *
  * Identite visuelle, dans le vocabulaire de shadcn :
@@ -35,8 +35,8 @@
  * C'est le `content` qu'exige le ticket, reecrit en syntaxe v4. Le chemin est
  * resolu relativement a CE fichier : `../ui/src` designe packages/ui/src.
  *
- * Chaque application declare de son cote ses propres sources ; le README en
- * donne le gabarit.
+ * Chaque application declare de son cote ses propres sources ; la page
+ * « Les trois applications » du site de documentation en donne le gabarit.
  */
 @source '../ui/src/**/*.{ts,tsx}';
 
