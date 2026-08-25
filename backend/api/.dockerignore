@@ -23,9 +23,14 @@
 # --- Artefacts Python ---
 # Compiles pour l'interpreteur du poste. Les recopier n'apporte rien et
 # risquerait de masquer des sources reellement modifiees.
-__pycache__/
-*.py[cod]
-*.egg-info/
+#
+# Le prefixe `**/` n'est pas decoratif : les motifs d'un .dockerignore sont
+# ancres a la racine du contexte, et un `__pycache__/` nu n'aurait exclu que
+# celui de la racine -- ou il n'y en a aucun. Ceux de src/ et d'alembic/, eux,
+# partaient au demon et entraient dans l'image (constate en BACK-07).
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
 
 # --- Caches d'outillage ---
 # Ruff, Mypy, Pytest et Import Linter les reconstruisent seuls ; ils ne servent

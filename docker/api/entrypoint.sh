@@ -100,19 +100,21 @@ PY
 # ---------------------------------------------------------------------------
 # 2. Migrations
 # ---------------------------------------------------------------------------
-# alembic.ini N'EXISTE PAS ENCORE : il arrive avec BACK-07, en meme temps que
-# les premieres migrations. INFRA-04 l'attribuait a BACK-05, qui n'a livre que le
-# socle SQLAlchemy -- moteur, session et mixins, sans outil de migration. La garde de presence est ce qui permet d'ecrire
-# l'etape des maintenant sans casser le demarrage d'aujourd'hui -- et l'etape
-# s'activera d'elle-meme, sans qu'on ait a revenir sur ce fichier.
+# alembic.ini est livre par BACK-07, avec les premieres migrations. INFRA-04
+# avait ecrit l'etape d'avance derriere une garde de presence, et elle s'est
+# activee d'elle-meme a la livraison -- la branche `else` ne reste que pour un
+# checkout anterieur a BACK-07.
 #
 # Le repertoire de travail est /app, ou le Dockerfile a copie le contenu de
-# backend/api : c'est la que se trouvera alembic.ini.
+# backend/api : c'est la que se trouve alembic.ini.
 #
-# A ARBITRER EN BACK-07 : le service `worker` d'INFRA-05b partage cet entrypoint
-# et reste `--scale`-able. Plusieurs `alembic upgrade head` simultanes sur la
-# meme base sont une course. Sans objet tant qu'aucune migration n'existe ; la
-# reponse habituelle est un verrou consultatif PostgreSQL pris par env.py.
+# ARBITRAGE RENDU (BACK-07, ADR-0010) : le service `worker` d'INFRA-05b partage
+# cet entrypoint et reste `--scale`-able ; plusieurs `alembic upgrade head`
+# simultanes sur la meme base seraient une course. L'env.py d'Alembic les
+# serialise par un verrou consultatif PostgreSQL de session : le premier
+# migrateur passe, les suivants attendent puis rejouent un plan devenu vide. Un
+# demarrage suspendu ici se diagnostique dans pg_stat_activity, sous
+# application_name = 'juui-alembic/...' et wait_event = 'advisory'.
 if [ -f alembic.ini ]; then
   echo "INFRA-04 : application des migrations (alembic upgrade head)..."
   alembic upgrade head

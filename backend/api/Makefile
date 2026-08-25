@@ -1,4 +1,4 @@
-# Commandes de qualite du service d'API (BACK-02).
+# Commandes de qualite du service d'API (BACK-02) et de migration (BACK-07).
 #
 # uv n'a pas de lanceur de taches -- pas de [tool.uv.scripts], pas d'equivalent
 # aux scripts npm : ce Makefile est le seul endroit ou ces commandes portent un
@@ -12,7 +12,8 @@
 # `help` doit rester la premiere cible declaree : c'est ce que `make` nu lance.
 .DEFAULT_GOAL := help
 
-.PHONY: help lint lint-fix imports format format-check typecheck check
+.PHONY: help lint lint-fix imports format format-check typecheck check \
+	migration migrate downgrade history migrate-check
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -42,7 +43,31 @@ format-check: ## Verifie le formatage sans rien reecrire
 	uv run ruff format --check .
 
 typecheck: ## Verifie le typage en mode strict
-	uv run mypy src
+	uv run mypy src alembic
+
+# Migrations Alembic (BACK-07). Le message devient le slug du fichier ET la
+# premiere ligne de sa docstring : francais sans accents, sans point final,
+# moins de 40 caracteres.
+migration: ## Genere une migration autogeneree -- A RELIRE (m="message")
+	@test -n "$(m)" || { echo 'Usage : make migration m="message de la revision"'; exit 1; }
+	uv run alembic revision --autogenerate -m "$(m)"
+
+migrate: ## Applique les migrations jusqu'a head
+	uv run alembic upgrade head
+
+# Un cran a la fois, jamais `base` : revenir a zero est un geste de
+# verification qui s'ecrit en toutes lettres (voir le README).
+downgrade: ## Annule la derniere migration appliquee
+	uv run alembic downgrade -1
+
+history: ## Historique des migrations et revision courante
+	uv run alembic history
+	uv run alembic current
+
+# Le pendant « migrations » du check de la CI, destine a QA-01. Exige une base
+# demarree ET a head.
+migrate-check: ## Echoue si modeles et migrations divergent
+	uv run alembic check
 
 # Memes verifications, et dans le meme ordre, que le futur pipeline QA-01 : un
 # echec local reproduit ainsi exactement un echec de CI. La difference est que

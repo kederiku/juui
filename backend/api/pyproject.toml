@@ -215,6 +215,12 @@ classmethod-decorators = ["pydantic.field_validator", "pydantic.model_validator"
 # BACK-12 si la contrainte se revele penible.
 "tests/**/*.py" = ["S101", "D1"]
 
+# Le resume d'une migration est le message passe a `alembic revision -m` : un
+# slug, pas une phrase -- meme esprit que la dispense des tests ci-dessus.
+# Tout le reste (annotations, imports, format) est du, et tenu par le gabarit
+# alembic/script.py.mako et les post_write_hooks d'alembic.ini (BACK-07).
+"alembic/versions/*.py" = ["D400", "D415"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["app"]
 
@@ -236,10 +242,12 @@ plugins = ["pydantic.mypy"]
 # ce que font les editeurs) sans perdre la resolution des imports `app.*`.
 mypy_path = "src"
 
-# Rend `uv run mypy` nu equivalent a `uv run mypy src`, la commande du ticket.
-# tests/ reste volontairement hors perimetre : c'est BACK-12 qui decidera de
-# l'y faire entrer.
-files = ["src"]
+# Rend `uv run mypy` nu equivalent a la commande de `make typecheck`. alembic/
+# entre au perimetre avec BACK-07 : env.py est annote de bout en bout, et les
+# migrations sortent d'un gabarit annote -- les laisser dehors aurait fait des
+# premiers .py hors de src/ les seuls non verifies. tests/ reste volontairement
+# hors perimetre : c'est BACK-12 qui decidera de l'y faire entrer.
+files = ["src", "alembic"]
 
 # Une seule derogation, et elle est declaree PAR MODULE -- jamais globalement,
 # ce qui aveuglerait Mypy sur tout le projet. BACK-02 pariait qu'aucune ne

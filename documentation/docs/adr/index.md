@@ -42,6 +42,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0007](./0007-client-api-genere-orval.md)     | Le client d'API des frontends est généré par Orval               | Accepté |
 | [ADR-0008](./0008-taskiq-taches-de-fond.md)       | TaskIQ exécute les tâches de fond                                | Accepté |
 | [ADR-0009](./0009-unite-de-travail-par-module.md) | Une unité de travail par module, jamais globale                  | Accepté |
+| [ADR-0010](./0010-migrations-alembic.md)          | Migrations Alembic pilotées par Settings, un migrateur à la fois | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

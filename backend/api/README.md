@@ -72,7 +72,12 @@ backend/api/
 ├── uv.lock            versions résolues — versionné, jamais édité à la main
 ├── .python-version    interpréteur du projet (3.14)
 ├── .env.example       gabarit d'environnement — miroir des champs de `Settings`
-├── Makefile           raccourcis de lint, formatage et typage
+├── Makefile           raccourcis de lint, formatage, typage et migrations
+├── alembic.ini        mécanique d'Alembic — aucune URL de base ici (BACK-07)
+├── alembic/           mise sous contrôle de version du schéma (BACK-07)
+│   ├── env.py             cible `Base.metadata`, URL depuis `Settings`, verrou consultatif
+│   ├── script.py.mako     gabarit des fichiers de migration, conforme à Ruff
+│   └── versions/          les migrations, nommées par horodatage
 └── src/app/
     ├── main.py             assemblage de l'application et des routeurs
     ├── core/               réglages du processus, ni domaine ni infrastructure
@@ -682,7 +687,9 @@ serait la règle, pas l'exception.
 un condensat. Le DDL passe, la migration aussi — puis Alembic relit en base le nom tronqué, le
 compare au nom entier des métadonnées, et propose une suppression suivie d'une recréation à
 chaque autogénération, indéfiniment. `check_schema(Base.metadata)`, appelée par le `lifespan`,
-refuse le schéma avant d'en arriver là ; BACK-07 l'appellera aussi depuis son `env.py`.
+refuse le schéma avant d'en arriver là ; l'`env.py` d'Alembic l'appelle aussi — un schéma
+fautif n'empêche pas seulement le démarrage, il empêche la migration d'exister (voir
+[Migrations](#migrations)).
 
 Le motif `ck_` réclame un `%(constraint_name)s`. **Toute `CheckConstraint` doit donc porter un
 `name=`**, ainsi que tout `Enum(...)` construit de valeurs littérales, sinon la construction de
@@ -705,7 +712,8 @@ agrégat décide de les prendre ou non.
 
 `sort_order` donne partout la même silhouette — identité, tenance, colonnes propres au modèle,
 horodatage. Sans lui, les colonnes héritées se rangent selon l'ordre de résolution des classes.
-Aucune migration n'existe encore : c'est gratuit aujourd'hui et coûteux demain.
+La première migration (BACK-07) a figé cette silhouette : la changer coûte désormais une
+migration.
 
 **`UUIDPrimaryKey` n'a aucun défaut, et c'est le point.** C'est le domaine qui bat la monnaie —
 `Account.create()` produit l'identifiant avant qu'il soit question de persistance, et le dépôt
@@ -1355,6 +1363,162 @@ et `une instance par requete : True`.
 | Arguments positionnels (`/`) ajoutés au port `AccountRepository`  | Seule retouche à un contrat existant, et une fermeture de trou : Mypy ne compare pas les noms de paramètres positionnels entre les deux bases de la classe concrète, et un appel par mot-clé (`account_id=`) aurait passé le typage pour casser à l'exécution.                                                                                                     |
 | Aucune route ajoutée                                              | La dépendance `IdentityUowDep` est prête, mais les routes portent des règles métier (BACK-10b, BACK-09, BACK-17) qui appartiennent à BACK-28 et BACK-29.                                                                                                                                                                                                           |
 | Aucun test automatisé, mais des sondes documentées                | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05, BACK-13 et BACK-14.                                                                                                                                                                                                                       |
+
+## Migrations
+
+Le schéma est sous contrôle de version depuis BACK-07 : Alembic compare `Base.metadata` — le
+registre unique que tous les modèles peuplent — à la base réelle, et chaque écart devient un
+fichier de migration rejouable et réversible dans [`alembic/versions/`](alembic/versions/).
+Le nom des fichiers commence par un horodatage UTC (`20260825_<rev>_<slug>`), pour que
+`ls versions/` raconte l'histoire dans l'ordre.
+
+Le cycle complet tient en trois gestes :
+
+```bash
+make migration m="message de la revision"   # génère — puis SE RELIT, voir ci-dessous
+make migrate                                # applique jusqu'à head
+git add alembic/versions/ && git commit     # la migration relue se committe avec son ticket
+```
+
+Le message devient le slug du fichier et la première ligne de sa docstring : français sans
+accents, sans point final, moins de 40 caractères.
+
+En pile Docker, personne ne lance `make migrate` : l'entrypoint d'INFRA-04 exécute
+`alembic upgrade head` à chaque démarrage du conteneur — l'étape était écrite d'avance, la
+simple présence d'`alembic.ini` l'a activée.
+
+### Toute migration autogénérée se relit avant d'être commitée
+
+L'autogénération est un **brouillon**, pas une vérité : elle déduit un plan de la différence
+entre les métadonnées et la base, et se trompe en silence dès que l'un des deux n'est pas ce
+qu'on croit — base non vierge, modèle pas encore importé, type qu'elle ne sait pas comparer.
+La relecture est donc obligatoire, et elle vérifie au minimum :
+
+- **l'ordre des colonnes** : identité, tenance, colonnes du modèle, horodatage — la silhouette
+  imposée par les `sort_order` des [mixins](src/app/shared/infrastructure/db/mixins.py) ;
+- **les noms passés par `op.f()`** (`pk_accounts`, `ix_accounts_email`) : c'est la convention
+  de nommage figée qui parle, pas une fantaisie du générateur ;
+- **l'index unique reste un index** : `unique=True, index=True` sur une colonne produit un
+  `op.create_index(..., unique=True)` nommé `ix_…`. Le « corriger » en contrainte `uq_…`
+  ferait diverger la base des métadonnées, et `alembic check` le reprocherait à chaque fois ;
+- **les `server_default`** attendus (`sa.text("now()")` sur les deux horodatages) — c'est
+  `compare_server_default=True` qui permet de les voir apparaître et disparaître ;
+- **le `downgrade` symétrique inverse** de l'upgrade, sans opération orpheline ;
+- **aucune opération parasite** : une table inconnue signifie une base sale, une suppression
+  inattendue signifie un modèle pas importé — dans les deux cas, on corrige la cause, pas la
+  migration.
+
+La migration naît déjà propre : les `[post_write_hooks]` d'`alembic.ini` passent chaque
+fichier généré par `ruff check --fix` puis `ruff format`, et le gabarit
+[`script.py.mako`](alembic/script.py.mako) fournit docstrings et annotations. Il ne reste à la
+relecture que ce qu'aucun outil ne sait juger : le sens.
+
+### L'URL vient de `Settings`, jamais d'`alembic.ini`
+
+`alembic.ini` ne porte **aucune URL de connexion**, pas même en exemple commenté : l'`env.py`
+lit `get_settings().db.sqlalchemy_url`, la même valeur dérivée que le moteur de l'application —
+une seule source de vérité, le `.env` strict de BACK-03 compris. Toute commande qui **touche la
+base** — `upgrade`, `downgrade`, `current`, `check`, `revision --autogenerate` — exécute
+l'`env.py` et valide donc l'environnement complet, exactement comme un démarrage d'API : un
+`.env` incomplet donne la même `ConfigurationError` nommant les variables manquantes. Les
+commandes purement informatives (`history`, `heads`) ne chargent pas cet environnement et
+passent au travers — sans conséquence : elles ne génèrent rien et n'écrivent rien.
+
+L'URL porte le mot de passe en clair ; elle n'est jamais passée à `config.set_main_option` —
+qui la soumettrait à l'interpolation de configparser et la rapprocherait des chaînes
+journalisées — ni imprimée nulle part.
+
+L'`env.py` construit son moteur lui-même plutôt que par `build_engine` : une migration vit le
+temps d'une commande (`NullPool`, incompatible avec les réglages de pool que `build_engine`
+transmet toujours) et s'annonce sous son propre nom — `juui-alembic/<environnement>` — dans
+`pg_stat_activity`, là où réutiliser le moteur de l'API la rendrait indiscernable de l'API.
+
+### Un seul migrateur à la fois
+
+Les conteneurs `api` et `worker` partagent le même entrypoint, et le worker se met à l'échelle
+par `--scale` : plusieurs `alembic upgrade head` peuvent donc partir en même temps sur la même
+base. L'`env.py` les sérialise par un **verrou consultatif PostgreSQL de session**
+(`pg_advisory_lock`, clé figée `0x6A757569`, soit `1786082665`) : le premier migrateur passe,
+les suivants **attendent** puis rejouent un plan devenu vide. Un migrateur suspendu se
+diagnostique dans `pg_stat_activity`, sous `application_name = 'juui-alembic/…'` et
+`wait_event = 'advisory'`.
+
+Le détail qui n'est pas un détail : après la prise du verrou, l'`env.py` **committe** avant de
+dérouler les migrations. L'`execute` du verrou a ouvert une transaction (autobegin de
+SQLAlchemy 2.0) ; si elle restait ouverte, Alembic la détecterait et cesserait de gérer la
+sienne — charge à l'appelant de committer, ce que la fermeture de la connexion ne fait pas :
+tout le DDL serait déroulé en arrière à la déconnexion, **sans erreur**. Le verrou, lui, est de
+niveau session et survit au commit.
+
+### Le mode hors ligne est refusé
+
+`alembic upgrade head --sql` — générer le SQL sans l'exécuter — lève une `CommandError`
+explicite : personne ne consomme de script SQL généré, et le verrou ci-dessus ne peut rien
+sérialiser sans connexion. Le refus est écrit et motivé dans l'`env.py` ; c'est là qu'il se
+rouvre si un besoin réel apparaît.
+
+### Ajouter un module de modèles
+
+`Base.metadata` ne recense que les tables des modèles effectivement **importés**. Tout
+nouveau module métier qui gagne un `infrastructure/db/models.py` doit s'ajouter au tuple
+`_MODEL_MODULES` de l'`env.py` — même geste que `_MODULE_ROUTERS` dans `main.py` : la liste
+des tables sous contrôle de version se lit d'un coup d'œil. L'oubli ne pardonne pas :
+l'autogénération proposerait de **supprimer** les tables du module absent. Le filet est
+`make migrate-check` (`alembic check`) : sur une base à jour, il échoue dès que modèles et
+migrations divergent — il attend son entrée en CI avec QA-01.
+
+### Vérifier que le cycle tient
+
+PostgreSQL démarré (`docker compose --project-directory . -f docker/docker-compose.yml up -d
+postgres` depuis la racine), depuis `backend/api/` :
+
+```bash
+uv run alembic upgrade head     # applique tout
+uv run alembic current          # -> 41e48e9250af (head)
+uv run alembic downgrade base   # revient à zéro — geste de vérification, base de dev uniquement
+uv run alembic current          # -> (vide)
+uv run alembic upgrade head     # rejoue sans erreur
+uv run alembic check            # -> "No new upgrade operations detected."
+```
+
+Attendu : le cycle complet sans erreur, et le `check` final silencieux — la preuve que tous
+les modèles sont importés et que la première migration est l'image exacte des métadonnées.
+`make downgrade`, lui, ne recule que d'un cran : revenir à `base` est un geste qui s'écrit en
+toutes lettres.
+
+Les noms en base sont ceux de la convention figée :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec postgres \
+  psql -U juui -d juui -c '\d accounts'
+```
+
+Attendu : `"pk_accounts" PRIMARY KEY` et `"ix_accounts_email" UNIQUE`.
+
+### Vérifier que la comparaison voit vraiment quelque chose
+
+Un `alembic check` silencieux ne prouve rien si la comparaison est aveugle. Élargir
+temporairement une colonne — `String(30)` → `String(40)` sur `phone` dans le modèle — puis :
+
+```bash
+uv run alembic check   # -> FAILED: New upgrade operations detected: [modify_type ...]
+```
+
+Attendu : l'échec, grâce à `compare_type` ; puis restaurer le modèle. Pour le verrou : tenir
+`SELECT pg_advisory_lock(1786082665);` dans une session `psql`, lancer `make migrate` dans un
+autre terminal — il bloque, visible dans `pg_stat_activity` sous `juui-alembic/…` — puis
+`SELECT pg_advisory_unlock(1786082665);` le libère et la commande termine.
+
+### Écarts assumés avec le ticket BACK-07
+
+| Écart                                                          | Raison                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Un verrou consultatif dans `env.py`, que le ticket ne cite pas | L'arbitrage était demandé par l'entrypoint d'INFRA-04 : `api` et `worker` le partagent, et le worker est `--scale`-able. Sans sérialisation, deux `alembic upgrade head` simultanés sont une course. Décision consignée dans l'ADR-0010.                                                       |
+| Le mode hors ligne (`--sql`) est refusé                        | Aucun consommateur de scripts SQL, et le verrou ne sérialise rien sans connexion. Un chemin de code jamais exercé serait faux le jour où on en aurait besoin ; le refus, lui, est testé.                                                                                                       |
+| Pas de déclencheur `BEFORE UPDATE` pour `updated_at`           | La promesse des [mixins](src/app/shared/infrastructure/db/mixins.py) est conditionnelle — « le jour où `updated_at` deviendra porteur ». Ce jour n'est pas arrivé, et l'autogénération ne voyant pas les triggers, l'ajouter plus tard ne créera aucun diff parasite : attendre ne coûte rien. |
+| Cibles Makefile, `post_write_hooks` et `timezone = UTC`        | Hors de la lettre du ticket, mais dans son esprit : les commandes portent un nom (`make migration`…), la migration naît conforme à Ruff au lieu de le découvrir en CI, et deux postes dans deux fuseaux nomment leurs fichiers pareil.                                                         |
+| `env.py` construit son moteur sans `build_engine`              | `NullPool` refuse les `pool_size`/`max_overflow` que `build_engine` transmet toujours, et une migration doit s'annoncer sous son propre nom dans `pg_stat_activity`. Le paramètre `poolclass` de `build_engine` reste promis aux fixtures de BACK-12.                                          |
+| Aucun test automatisé, mais des vérifications documentées      | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05, BACK-06a, BACK-13 et BACK-14. Le cycle complet, la sensibilité de la comparaison et le verrou ont tous été joués avant livraison.                                     |
 
 ## Cache
 
@@ -2247,7 +2411,7 @@ premier seulement (`uv sync --frozen --no-dev`).
 | `pydantic-settings`   | Configuration typée, lue de l'environnement (BACK-03).                |
 | `sqlalchemy[asyncio]` | ORM. L'extra tire `greenlet`, sans lequel l'asynchrone ne marche pas. |
 | `asyncpg`             | Pilote PostgreSQL asynchrone.                                         |
-| `alembic`             | Migrations de schéma (BACK-07).                                       |
+| `alembic`             | Migrations de schéma — voir [Migrations](#migrations).                |
 | `pyjwt`               | Émission et vérification des jetons d'authentification (BACK-10).     |
 | `redis`               | Cache applicatif (BACK-14) et, plus tard, broker de TaskIQ.           |
 | `taskiq`              | Tâches de fond (BACK-15). Le broker Redis viendra avec ce ticket.     |
@@ -2508,15 +2672,15 @@ de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts
 | Doublures en mémoire (fakes)          | BACK-06c |
 | Traduction des erreurs métier en HTTP | BACK-09  |
 | Sonde de santé et métadonnées OpenAPI | BACK-08  |
-| Migrations Alembic                    | BACK-07  |
 | Suite de tests                        | BACK-12  |
 | Pipeline CI complet du backend        | QA-01    |
 
 La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
 désormais tenues par [Import Linter](#import-linter) (BACK-04b), le socle de
-persistance est en place (BACK-05) et l'[unité de travail](#unité-de-travail)
-avec son dépôt générique le coiffe (BACK-06a), quatre des cinq ports techniques
-du noyau partagé sont livrés — [cache](#cache) (BACK-14),
+persistance est en place (BACK-05), l'[unité de travail](#unité-de-travail)
+avec son dépôt générique le coiffe (BACK-06a) et le schéma est sous contrôle de
+version par les [migrations](#migrations) (BACK-07), quatre des cinq ports
+techniques du noyau partagé sont livrés — [cache](#cache) (BACK-14),
 [stockage objet](#stockage-objet) (BACK-13), unité de travail et dépôt
 générique (BACK-06a), `TokenService` restant à BACK-10a —, Ruff et Mypy sont configurés
 (BACK-02). Les dépendances de test, elles, restent **déclarées sans être

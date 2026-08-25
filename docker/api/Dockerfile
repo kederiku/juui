@@ -157,9 +157,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # COUCHE 2 -- LE CODE APPLICATIF.
 # Ce que le contexte contient encore apres le .dockerignore : src/, pyproject.toml,
-# uv.lock, README.md, le Makefile, .python-version. Et, a partir de BACK-05,
-# alembic.ini et le dossier de migrations -- qui suivront donc sans qu'on ait a
-# revenir sur ce fichier.
+# uv.lock, README.md, le Makefile, .python-version. Et, depuis BACK-07,
+# alembic.ini et le dossier de migrations -- entres sans qu'on ait eu a revenir
+# sur ce fichier.
 COPY . /app
 
 # `--no-editable` installe le paquet POUR DE VRAI dans /opt/venv, au lieu d'y
@@ -181,8 +181,8 @@ COPY --from=builder /opt/venv /opt/venv
 
 # Le code source, en plus du virtualenv, comme le demande le ticket. Il ne sert
 # pas aux imports -- ceux-ci passent par /opt/venv -- mais il porte ce qui vit a
-# COTE du paquet : alembic.ini et les migrations, des BACK-05, que l'entrypoint
-# ci-dessous cherche dans ce repertoire de travail.
+# COTE du paquet : alembic.ini et les migrations, livres par BACK-07, que
+# l'entrypoint ci-dessous cherche dans ce repertoire de travail.
 COPY --from=builder /app /app
 
 # Contexte de build ADDITIONNEL, declare par le fichier compose. Voir l'en-tete.
