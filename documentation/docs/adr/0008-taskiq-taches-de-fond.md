@@ -87,5 +87,5 @@ un mécanisme qui propagerait le contexte à la place du développeur.
 - `backend/api/src/app/shared/infrastructure/tenancy.py` — l'erreur de contexte manquant, que la
   tâche de fond lancée sans `group_id` déclenche.
 - `docker/docker-compose.yml` — le service `worker`, qui exécute la commande de BACK-15.
-- `backend/api/README.md`, section « Tâches de fond » — les règles d'écriture d'une tâche et les
+- [Tâches de fond](../backend/taches-de-fond.md) — les règles d'écriture d'une tâche et les
   sondes de bout en bout.

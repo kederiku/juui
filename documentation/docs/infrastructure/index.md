@@ -52,8 +52,8 @@ Le crash-loop d'avant BACK-15 — `worker-0 is dead. Scheduling reload.` en
 boucle sur un `ModuleNotFoundError`, conteneur pourtant `Up` — a disparu, mais
 le réflexe reste bon à garder : le worker n'a pas de healthcheck, **seuls ses
 journaux disent la vérité**. Le fonctionnement, les règles d'écriture d'une
-tâche et les sondes de bout en bout sont au
-[README de l'API](https://github.com/kederiku/juui/blob/main/backend/api/README.md#tâches-de-fond).
+tâche et les sondes de bout en bout sont sur la page
+[Tâches de fond](../backend/taches-de-fond.md).
 
 :::note Apportée par les tickets QA
 L'**intégration continue** — ce que chaque pipeline vérifie et ce qui bloque un merge — viendra

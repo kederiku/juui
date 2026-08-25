@@ -7,7 +7,8 @@ description: "Vérifier MinIO : la console, l'aller-retour d'un objet à la main
 
 MinIO tient lieu d'Amazon S3 sur le poste de développement — même protocole, aucune dépendance au
 nuage. Cette page vérifie le service : la console, un aller-retour d'objet à la main, puis le même
-vu depuis l'API ; le pendant applicatif — le port de stockage — est décrit dans `backend/api/README.md`.
+vu depuis l'API ; le pendant applicatif — le port de stockage — est décrit sur la page
+[Stockage objet](../backend/stockage-objet.md).
 
 ## Vérifier le stockage objet
 
@@ -67,8 +68,8 @@ signature — tout ce qui suit le `?` retiré — répond `403` : c'est la signa
 autorise, jamais le bucket.
 
 Les six sondes complètes du stockage, l'expiration réelle d'une URL et le
-comportement du service quand MinIO est éteint sont dans le
-[README de `backend/api/`](https://github.com/kederiku/juui/blob/main/backend/api/README.md#vérifier-que-le-stockage-tient).
+comportement du service quand MinIO est éteint sont sur la page
+[Stockage objet](../backend/stockage-objet.md#vérifier-que-le-stockage-tient).
 
 Les écarts assumés avec le ticket INFRA-03 sont consignés au
 [registre des écarts](../ecarts/infra.md#écarts-assumés-avec-le-ticket-infra-03).

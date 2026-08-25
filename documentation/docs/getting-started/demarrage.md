@@ -46,7 +46,7 @@ cd backend/api && uv run uvicorn app.main:app --reload
 ```
 
 La documentation interactive répond sur [http://localhost:8000/docs](http://localhost:8000/docs). L'API ne
-sert encore aucune route — voir `backend/api/README.md`.
+sert encore aucune route — voir la [section Backend](../backend/index.md).
 
 Depuis BACK-03, elle **valide sa configuration au démarrage** et refuse de partir
 si une variable obligatoire manque — d'où la copie de `backend/api/.env` faite à

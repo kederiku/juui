@@ -71,6 +71,6 @@ non concédées l'une après l'autre.
 ## Références
 
 - `backend/api/pyproject.toml` — `[tool.uv]`, `[build-system]` et leurs justifications.
-- `backend/api/README.md`, section « La version d'uv, et la borne du backend de build » —
-  l'incident de dérive qui a mené à l'épinglage.
+- [Dépendances](../backend/dependances.md), section « La version d'uv, et la borne du backend de
+  build » — l'incident de dérive qui a mené à l'épinglage.
 - `docker/api/Dockerfile` — le troisième environnement aligné.

@@ -37,7 +37,29 @@ const sidebars: SidebarsConfig = {
       ],
     },
     { type: 'doc', id: 'architecture/index', label: 'Architecture' },
-    { type: 'doc', id: 'backend/index', label: 'Backend' },
+    {
+      type: 'category',
+      label: 'Backend',
+      link: { type: 'doc', id: 'backend/index' },
+      items: [
+        { type: 'doc', id: 'backend/structure', label: 'Structure' },
+        {
+          type: 'doc',
+          id: 'backend/architecture-du-service',
+          label: 'Architecture du service',
+        },
+        { type: 'doc', id: 'backend/configuration', label: 'Configuration' },
+        { type: 'doc', id: 'backend/persistance', label: 'Persistance' },
+        { type: 'doc', id: 'backend/unite-de-travail', label: 'Unité de travail' },
+        { type: 'doc', id: 'backend/migrations', label: 'Migrations' },
+        { type: 'doc', id: 'backend/cache', label: 'Cache' },
+        { type: 'doc', id: 'backend/stockage-objet', label: 'Stockage objet' },
+        { type: 'doc', id: 'backend/taches-de-fond', label: 'Tâches de fond' },
+        { type: 'doc', id: 'backend/surface-http', label: 'Surface HTTP' },
+        { type: 'doc', id: 'backend/dependances', label: 'Dépendances' },
+        { type: 'doc', id: 'backend/qualite-et-typage', label: 'Qualité et typage' },
+      ],
+    },
     { type: 'doc', id: 'frontend/index', label: 'Frontend' },
     {
       type: 'category',
@@ -96,6 +118,7 @@ const sidebars: SidebarsConfig = {
       items: [
         { type: 'doc', id: 'ecarts/setup', label: 'SETUP' },
         { type: 'doc', id: 'ecarts/infra', label: 'INFRA' },
+        { type: 'doc', id: 'ecarts/back', label: 'BACK' },
         { type: 'doc', id: 'ecarts/doc', label: 'DOC' },
       ],
     },
