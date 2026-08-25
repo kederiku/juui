@@ -24,6 +24,7 @@ from fastapi import APIRouter, FastAPI
 from app.core import get_settings
 from app.modules.identity import router as identity_router
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, build_cache
+from app.shared.infrastructure.clients.s3_storage import STORAGE_STATE_KEY, build_file_storage
 from app.shared.infrastructure.db.base import Base, check_schema
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
@@ -35,9 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Tout ce qui doit vivre aussi longtemps que le serveur -- et non le temps
     d'une requete -- se cree ici : le pool de connexions PostgreSQL (BACK-05),
-    le client Redis (BACK-14), le broker TaskIQ (BACK-15). Ces ressources se
-    rangent ensuite dans `app.state`, d'ou les dependances FastAPI les
-    recuperent via `request.app.state`.
+    le client Redis (BACK-14), le client S3 (BACK-13), le broker TaskIQ
+    (BACK-15). Ces ressources se rangent ensuite dans `app.state`, d'ou les
+    dependances FastAPI les recuperent via `request.app.state`.
 
     Le point d'accroche fixe une contrainte que le reste du code doit respecter :
     aucune connexion ne s'ouvre a l'import du module, tout passe par ici. Ce qui
@@ -87,7 +88,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # `ping()` sonde et journalise, elle ne leve jamais.
             await cache.ping()
 
-            yield
+            # Quatrieme ressource : le stockage objet (BACK-13). Construire le
+            # client n'ouvre aucune connexion, comme pour les deux precedentes.
+            storage = build_file_storage(settings)
+            try:
+                setattr(app.state, STORAGE_STATE_KEY, storage)
+
+                # MEME GESTE QUE POUR LE CACHE, POUR UNE RAISON DIFFERENTE, et
+                # c'est ce qu'il faut avoir en tete avant de toucher a ces deux
+                # lignes. Le cache ne bloque pas le demarrage parce qu'il ne
+                # bloquera rien ensuite : sans lui, tout repond plus lentement.
+                # Le stockage, lui, ne bloque pas le demarrage parce qu'aucune
+                # route n'en depend encore -- mais ses operations LEVENT. Refuser
+                # de partir priverait le service de tout ce qui n'a rien a voir
+                # avec les fichiers ; se taire a l'appel ferait perdre des
+                # fichiers en silence. `ping()` journalise, les operations levent.
+                await storage.ping()
+
+                yield
+            finally:
+                # Toujours en ordre inverse : le stockage, puis le cache, puis le
+                # moteur. `aclose()` n'echoue pas -- une exception levee ici
+                # sauterait les deux fermetures qui suivent.
+                await storage.aclose()
         finally:
             # Fermeture en ordre INVERSE de l'ouverture : le cache avant le
             # moteur. `aclose()` ferme le client et le pool, et n'echoue pas --

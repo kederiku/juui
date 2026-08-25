@@ -583,9 +583,38 @@ docker compose --project-directory . -f docker/docker-compose.yml run --rm --ent
 ```
 
 Le bucket est **privé** : une requête anonyme sur un objet répond `403`. C'est
-délibéré — BACK-13 servira les fichiers par des URLs pré-signées, qui portent
-leur propre autorisation et expirent, plutôt que par un bucket ouvert en
-lecture.
+délibéré — l'API sert les fichiers par des **URLs pré-signées**, qui portent leur
+propre autorisation et expirent, plutôt que par un bucket ouvert en lecture.
+
+#### Le même aller-retour, vu depuis l'API
+
+Ce qui précède prouve que MinIO répond ; ceci prouve que le service sait lui
+parler. Depuis `backend/api/`, avec un `.env` local — l'API n'a pas besoin de
+tourner, le stockage n'étant pas une route :
+
+```bash
+uv run python -c "
+import asyncio, subprocess
+from app.core import get_settings
+from app.shared.infrastructure.clients.s3_storage import build_file_storage
+s = build_file_storage(get_settings())
+async def main():
+    print('ping :', await s.ping())
+    await s.upload('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf', b'%PDF-1.4', 'application/pdf')
+    url = s.generate_presigned_url('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf')
+    print('presigne :', subprocess.run(['curl','-s','-o','/dev/null','-w','%{http_code}',url], capture_output=True, text=True).stdout)
+    print('supprime :', await s.delete('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf'))
+asyncio.run(main())
+"
+```
+
+Attendu : `ping : True`, `presigne : 200`, `supprime : True`. La même URL sans sa
+signature — tout ce qui suit le `?` retiré — répond `403` : c'est la signature qui
+autorise, jamais le bucket.
+
+Les six sondes complètes du stockage, l'expiration réelle d'une URL et le
+comportement du service quand MinIO est éteint sont dans le
+[README de `backend/api/`](backend/api/README.md#vérifier-que-le-stockage-tient).
 
 ### Vérifier le SMTP de développement
 

@@ -20,10 +20,20 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `unit_of_work.py`   | `AbstractUnitOfWork`          | BACK-06a |
 | `repository.py`     | protocole generique de depot  | BACK-06a |
 
-BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. BACK-14 a
-livre le premier, `cache.py` ; les quatre autres lignes du tableau restent des
-places reservees. Le module pilote `identity` montre un port METIER, le sien --
-`AccountRepository` vit dans son propre domaine, et non ici.
+BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Deux sont
+livres -- `cache.py` par BACK-14, `file_storage.py` par BACK-13 ; les trois
+autres lignes du tableau restent des places reservees. Le module pilote
+`identity` montre un port METIER, le sien -- `AccountRepository` vit dans son
+propre domaine, et non ici.
+
+CE QUE LES DEUX PREMIERS PORTS ONT ETABLI EN S'OPPOSANT
+Ils se ressemblent de loin et se comportent a l'inverse devant une panne, et
+c'est la question a se poser en ecrivant le troisieme : `Cache` DEGRADE, parce
+qu'un cache absent ne change qu'une latence ; `FileStorage` LEVE, parce qu'un
+stockage absent change les resultats -- un upload silencieux est un fichier
+perdu. Un port ne se contente donc pas de nommer des operations : il dit ce qui
+se passe quand le service qu'il masque ne repond plus, et cette reponse ne
+s'herite pas du port precedent.
 
 CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
 Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard

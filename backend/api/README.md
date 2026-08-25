@@ -81,7 +81,8 @@ backend/api/
     │   ├── domain/
     │   │   ├── exceptions.py   `DomainError`, racine des erreurs métier
     │   │   └── ports/          ports techniques : cache, stockage, jetons
-    │   │       └── cache.py        port `Cache` et décorateur `@cached` (BACK-14)
+    │   │       ├── cache.py        port `Cache` et décorateur `@cached` (BACK-14)
+    │   │       └── file_storage.py port `FileStorage` et `UploadPolicy` (BACK-13)
     │   └── infrastructure/
     │       ├── tenancy.py      contextvar du groupe actif (BACK-14)
     │       ├── db/             socle de persistance (BACK-05)
@@ -89,9 +90,11 @@ backend/api/
     │       │   ├── mixins.py       identité, horodatage, tenance opt-in
     │       │   ├── engine.py       moteur asyncpg et pool de connexions
     │       │   └── session.py      fabrique de sessions et accès à `app.state`
-    │       ├── clients/        adaptateurs des ports techniques (BACK-14)
-    │       │   ├── cache_keys.py   composition des clés physiques
-    │       │   └── redis_cache.py  adaptateur Redis du port `Cache`
+    │       ├── clients/        adaptateurs des ports techniques (BACK-14, BACK-13)
+    │       │   ├── cache_keys.py   composition des clés physiques de cache
+    │       │   ├── redis_cache.py  adaptateur Redis du port `Cache`
+    │       │   ├── storage_keys.py convention de nommage des clés d'objets
+    │       │   └── s3_storage.py   adaptateur S3 du port `FileStorage`
     │       └── api/            socle HTTP : handlers d'erreur, intergiciels
     └── modules/            contextes métier, étanches les uns aux autres
         ├── identity/       module pilote — le seul complet à ce stade
@@ -126,7 +129,11 @@ Le module d'assemblage, et rien d'autre : aucune logique métier n'y a sa place.
   d'ouverture. Trois occupants à ce jour — la validation de la configuration
   (BACK-03), qui précède par construction toute ouverture de ressource, puis le
   [moteur PostgreSQL](#persistance) (BACK-05), puis le [cache Redis](#cache)
-  (BACK-14), fermé avant lui. Le broker TaskIQ (BACK-15) suivra.
+  (BACK-14), puis le [stockage objet](#stockage-objet) (BACK-13) — chacun fermé
+  avant celui qui l'a ouvert. Le broker TaskIQ (BACK-15) suivra. Les trois ne
+  traitent pas l'indisponibilité de la même façon, et c'est délibéré :
+  [le tableau de l'asymétrie](#lasymétrie-du-service-a-trois-temps-pas-deux) dit
+  laquelle choisir pour la ressource suivante.
 
 ## Architecture
 
@@ -259,15 +266,15 @@ est identique, et serait triplé à l'identique. Le type de compte est une _prop
 Les dossiers vides ne le sont pas par oubli : chacun porte une docstring qui dit ce qui vient s'y
 ranger, et quel ticket l'apporte.
 
-| Emplacement                        | Ce qui manque                                                       | Ticket                      |
-| ---------------------------------- | ------------------------------------------------------------------- | --------------------------- |
-| `shared/domain/ports/`             | `FileStorage`, `TokenService`, l'unité de travail                   | BACK-13, BACK-10a, BACK-06a |
-| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                     |
-| `shared/infrastructure/db/`        | dépôt générique, unité de travail, filtre de tenance                | BACK-06a, BACK-06b          |
-| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11            |
-| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                    |
-| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31   |
-| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                     |
+| Emplacement                        | Ce qui manque                                                       | Ticket                    |
+| ---------------------------------- | ------------------------------------------------------------------- | ------------------------- |
+| `shared/domain/ports/`             | `TokenService`, l'unité de travail                                  | BACK-10a, BACK-06a        |
+| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                   |
+| `shared/infrastructure/db/`        | dépôt générique, unité de travail, filtre de tenance                | BACK-06a, BACK-06b        |
+| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11          |
+| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                  |
+| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31 |
+| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                   |
 
 ### Vérifier que les règles tiennent
 
@@ -1385,6 +1392,423 @@ rien : le `finally` du `lifespan` a bien fermé le client **et** le pool.
 | `main.py` modifié, hors de la portée déclarée                                            | La portée le nomme (« init lifespan »), et le critère d'acceptation parle du pool créé et fermé dans le `lifespan`. Même arbitrage qu'en BACK-03 et BACK-05.                                                                                                                                                                                                                                    |
 | Aucun test automatisé, mais des sondes documentées                                       | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03, BACK-04 et BACK-05. L'expiration se démontre deux fois : par une horloge monotone en mémoire, et par un TTL relu dans Redis.                                                                                                                                                             |
 
+## Stockage objet
+
+Les fichiers — photos d'animaux, comptes rendus, documents de santé — vivent dans un **bucket S3**.
+MinIO en tient lieu sur le poste, Amazon S3 en production, et **un seul paramètre les distingue** :
+`S3_ENDPOINT_URL`. Rempli, boto3 parle à MinIO ; vide, il retombe sur les endpoints Amazon calculés
+depuis la région. Aucune ligne de code ne connaît le mot « MinIO ».
+
+Le domaine ne connaît que le port `FileStorage`. L'adaptateur, la convention de clés et la
+construction du client vivent dans `shared/infrastructure/` — même contrainte qu'au
+[cache](#cache) : `domain-purity` refuse au domaine `boto3`, `botocore` et les chaînes indirectes,
+`app.core` compris.
+
+### Le port, et ce qu'il promet
+
+Cinq opérations : `upload`, `download`, `delete`, `exists`, `generate_presigned_url`. Quatre règles
+les accompagnent, écrites dans la docstring de `FileStorage`.
+
+**1. Aucune dégradation, jamais.** C'est le point où ce port s'oppose au précédent, et il faut
+l'avoir en tête avant d'écrire le troisième. `Cache` rend `MISSING` quand Redis tombe, parce qu'un
+cache absent ne change qu'une **latence**. Un stockage absent change un **résultat** :
+
+- un `upload` qui ne lèverait pas serait un fichier **perdu**, alors qu'on vient de répondre
+  « enregistré » à l'utilisateur ;
+- un `exists` qui rendrait `False` sur panne déclarerait **inexistant** un document de santé qui
+  existe.
+
+Aucune des cinq opérations n'a donc de valeur de repli. `exists()` contient le seul `except` du
+fichier qui avale une erreur, et il n'avale que `StoredFileNotFoundError` — la panne, elle, continue
+de remonter. C'est ce qui sépare « ce document n'existe pas » de « je ne sais pas s'il existe ».
+
+**2. Les clés sont complètes, et validées.** Contrairement aux clés de cache, qui sont _logiques_ et
+que l'adaptateur préfixe, une clé de stockage est celle qui sera **persistée en base**.
+
+**3. Le cloisonnement entre groupes n'est pas dans le nommage.** Voir plus bas.
+
+**4. La validation précède le réseau.** `UploadPolicy` — 20 Mio, et `image/jpeg`, `image/png`,
+`image/webp`, `application/pdf` — s'applique avant le premier octet émis, et le type est vérifié
+**avant** la taille : un fichier de 40 Mo au format refusé doit s'entendre dire que le format est
+refusé, pas partir se faire compresser en vain.
+
+La politique vit dans le **port** et non dans l'adaptateur : « quels fichiers ce service
+accepte-t-il ? » ne dépend ni de S3, ni du fournisseur suivant. `image/heic` n'y figure pas, et
+c'est une lacune **connue** — c'est le format natif des photos d'iPhone, et l'accepter sans
+conversion côté serveur produirait des fichiers que ni les navigateurs ni les visionneuses de bureau
+n'affichent.
+
+Six exceptions, toutes sous `FileStorageError`, elle-même sous `DomainError` :
+`StoredFileNotFoundError`, `FileTooLargeError`, `UnsupportedContentTypeError`,
+`InvalidStorageKeyError`, `FileStorageUnavailableError`. **Aucune exception boto3 n'en sort** —
+`_call` est le seul endroit du service qui connaisse `ClientError`, et c'est ce qui permet à un cas
+d'usage d'attraper `FileStorageError` sans importer la bibliothèque du fournisseur.
+
+> `StoredFileNotFoundError` et non `FileNotFoundError` : la règle Ruff `A` refuse de masquer un
+> builtin. L'écart de nom vaut mieux qu'une classe qui, attrapée par mégarde, avalerait aussi les
+> erreurs du système de fichiers local.
+
+### La clé, et ce qu'elle ne porte pas
+
+```
+{entity_type}/{entity_id}/{nom de fichier assaini}
+```
+
+Par exemple `animal-photos/01931f2a-…/radiographie-thoracique.jpg`. Le segment central est un UUID :
+deux téléversements du même nom ne peuvent pas se confondre.
+
+`build_storage_key` **compose** une clé conforme ; `validate_storage_key` vérifie qu'une clé est
+**sans danger**, sans lui imposer cette forme. La distinction n'est pas théorique : une clé relue
+d'une colonne de base a été composée par une version antérieure du service, et la refuser sur un
+changement de convention rendrait illisibles des fichiers parfaitement valides. Ce qui est refusé
+sans discussion, c'est ce qui **sort de son préfixe** — `..`, barre initiale, segment vide, caractère
+de contrôle, clé de plus de 1024 octets.
+
+L'assainissement du nom traite le **radical et l'extension séparément**, et ce n'est pas un
+raffinement : assainis ensemble, `上書き.pdf` perdrait son radical _et_ son point, et il resterait
+`pdf` — une clé où l'extension a pris la place du nom. Séparés, il reste `fichier.pdf`, où le repli
+se voit pour ce qu'il est. Un nom entièrement non latin n'est pas un cas de laboratoire dans un
+service ouvert au public.
+
+| Nom fourni                              | Clé produite                            |
+| --------------------------------------- | --------------------------------------- |
+| `Radiographie Thoracique.JPG`           | `radiographie-thoracique.jpg`           |
+| `../../evasion.pdf`                     | `evasion.pdf`                           |
+| `C:\Users\moi\échographie (2).png`      | `echographie-2.png`                     |
+| `上書き.pdf`                            | `fichier.pdf`                           |
+| `rapport.2026.sauvegarde-du-15-janvier` | `rapport.2026.sauvegarde-du-15-janvier` |
+
+Le dernier montre la règle : ce qui suit le dernier point n'est traité comme extension que s'il est
+court et purement alphanumérique. Sinon le nom entier est gardé — mieux vaut un nom long et fidèle
+qu'un nom tronqué à un endroit choisi au hasard.
+
+**Aucun segment de tenance, et c'est délibéré.** Une clé de cache est volatile ; une clé de stockage
+est persistée. La faire dépendre de `current_group_id` la rendrait introuvable dès que le contexte de
+lecture diffère de celui de l'écriture — une tâche de fond (BACK-15), un export, ou simplement un
+vétérinaire remplaçant qui a changé de structure entre-temps. Le cloisonnement entre groupes
+appartient à l'**autorisation** : qui a le droit de demander une URL pré-signée pour cette clé. Il ne
+peut pas appartenir au nommage d'une donnée durable.
+
+> Corollaire à ne jamais oublier : **l'opacité d'un UUID n'est pas un contrôle d'accès.** Le bucket
+> est privé (INFRA-03 le referme à chaque démarrage), et c'est la route qui émet l'URL pré-signée qui
+> devra vérifier le droit d'y accéder.
+
+Pas de préfixe d'environnement non plus, contrairement aux clés de cache : les environnements ont des
+**buckets** distincts, la séparation est faite un cran au-dessus.
+
+### Les URLs pré-signées sont la voie principale
+
+Une URL pré-signée porte son autorisation et son expiration dans sa signature : le navigateur parle
+**directement** au stockage, et l'octet du fichier ne traverse jamais l'API. Faire transiter les
+fichiers par les workers reviendrait à occuper une boucle d'événements entière pendant le
+téléversement d'une radiographie.
+
+`generate_presigned_url` est la seule des cinq opérations à être **synchrone**, et c'est ce qui rend
+ce chemin gratuit : signer n'appelle personne, botocore calcule une empreinte à partir de la clé
+secrète, de la date et du verbe. Elle fonctionne même stockage éteint.
+
+Quinze minutes par défaut, `expires_in` par appel, plafond de sept jours — celui de la signature V4,
+au-delà duquel le stockage refuserait l'URL sans en dire la raison.
+
+**Une URL de téléversement exige son type MIME.** Sans lui, le chemin principal échapperait
+entièrement à `UploadPolicy` : l'API n'est plus sur le trajet pour regarder ce qui passe. Le type est
+donc validé, puis **épinglé dans la signature** — un dépôt qui annonce autre chose est refusé par le
+stockage lui-même, avec un `403`. Le rendre facultatif aurait fait de la validation une politesse.
+
+> **Ce qu'une URL de téléversement ne peut toujours pas faire : plafonner la taille.** Un PUT
+> pré-signé n'emporte aucune condition sur la longueur du corps, et il n'existe aucun moyen de lui en
+> ajouter — seul un **formulaire** pré-signé (POST, avec une condition `content-length-range` dans sa
+> policy) l'exprimerait. `max_bytes` ne s'applique donc qu'à `upload`. Le ticket qui exposera la route
+> de téléversement direct devra le savoir, et passer au formulaire pré-signé s'il tient à la borne.
+
+**Limite d'exploitation.** L'URL porte l'**hôte** de `endpoint_url`. Dans la pile Docker, c'est
+`http://minio:9000`, résolvable depuis `app_network` seulement : une URL émise par l'API en conteneur
+n'est pas ouvrable depuis le navigateur du poste. Sans conséquence tant qu'aucune route ne la publie ;
+le ticket qui exposera ces URLs au frontend devra distinguer l'endpoint **interne** de l'endpoint
+**public** — ce que BACK-13 écarte, ayant posé qu'un seul paramètre sépare MinIO d'Amazon.
+
+### L'asymétrie du service a trois temps, pas deux
+
+C'est la question à se poser en branchant la ressource suivante dans le `lifespan`.
+
+| Ressource      | Au démarrage                     | À l'appel                        | Pourquoi                                            |
+| -------------- | -------------------------------- | -------------------------------- | --------------------------------------------------- |
+| PostgreSQL     | **lève** (`verify_connectivity`) | lève                             | sans base, aucune route ne répond juste             |
+| Redis          | journalise                       | **dégrade** (`MISSING`, `False`) | sans cache, toutes répondent — plus lentement       |
+| Stockage objet | journalise                       | **lève**                         | sans bucket, seules les routes de fichiers échouent |
+
+Le stockage est le seul des trois à se comporter différemment au démarrage et à l'appel. Refuser de
+partir priverait le service de tout ce qui n'a rien à voir avec les fichiers ; se taire à l'appel
+ferait perdre des fichiers en silence. `ping()` journalise, les opérations lèvent — et l'avertissement
+part en `WARNING`, donc visible tant que BACK-11 n'a pas configuré la journalisation.
+
+### Vérifier que le stockage tient
+
+Six sondes. La première ne demande **aucun** conteneur.
+
+**1. La convention de clés et la politique d'upload — sans réseau.**
+
+```bash
+uv run python - <<'PY'
+from uuid import UUID
+from app.shared.domain.ports.file_storage import (
+    DEFAULT_UPLOAD_POLICY, FileTooLargeError, InvalidStorageKeyError,
+    UnsupportedContentTypeError,
+)
+from app.shared.infrastructure.clients.storage_keys import build_storage_key, validate_storage_key
+
+ANIMAL = UUID("01931f2a-0000-7000-8000-00000000000a")
+
+print("--- composition ---")
+for nom in ("Radiographie Thoracique.JPG", "../../evasion.pdf",
+            "C:\\Users\\moi\\échographie (2).png", "上書き.pdf", ".ssh"):
+    print(f"  {nom!r:44} -> {build_storage_key('animal-photos', ANIMAL, nom).rsplit('/', 1)[-1]}")
+
+print("--- cles refusees ---")
+for cle in ("", "/absolu.jpg", "a/../../b.jpg", "a//b.jpg", "a/b\u202e.jpg", "x/" + "a" * 1030):
+    try:
+        validate_storage_key(cle)
+        print(f"  {cle[:28]!r:32} -> ACCEPTEE  <<< PROBLEME")
+    except InvalidStorageKeyError as erreur:
+        print(f"  {cle[:28]!r:32} -> refusee : {str(erreur)[:56]}")
+
+print("--- politique d'upload ---")
+politique = DEFAULT_UPLOAD_POLICY
+for octets, type_mime in ((b"x", "image/svg+xml"),
+                          (b"x" * (politique.max_bytes + 1), "image/png"),
+                          (b"x", "image/png")):
+    try:
+        politique.validate(octets, type_mime)
+        print(f"  {len(octets):>9} o {type_mime:<14} -> accepte")
+    except (UnsupportedContentTypeError, FileTooLargeError) as erreur:
+        print(f"  {len(octets):>9} o {type_mime:<14} -> {type(erreur).__name__}")
+PY
+```
+
+Attendu : `../../evasion.pdf` devient `evasion.pdf`, `上書き.pdf` devient `fichier.pdf`, les six clés
+sont refusées, et seul le `image/png` d'un octet passe la politique.
+
+Les cinq suivantes demandent la pile (`make up`) et un `.env` local pointant `localhost:9000`.
+
+**2. L'aller-retour complet des cinq opérations.**
+
+```bash
+uv run python - <<'PY'
+import asyncio, subprocess, time
+from uuid import UUID
+
+from app.core import get_settings
+from app.shared.domain.ports.file_storage import PresignedOperation, StoredFileNotFoundError
+from app.shared.infrastructure.clients.s3_storage import build_file_storage
+from app.shared.infrastructure.clients.storage_keys import build_storage_key
+
+ANIMAL = UUID("01931f2a-0000-7000-8000-00000000000a")
+
+
+def statut(url: str) -> str:
+    """Code HTTP rendu par un GET nu sur l'URL."""
+    return subprocess.run(
+        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", url],
+        capture_output=True, text=True, check=True,
+    ).stdout
+
+
+async def main() -> None:
+    stockage = build_file_storage(get_settings())
+    print("cible :", stockage.target, "| ping :", await stockage.ping())
+
+    cle = build_storage_key("animal-photos", ANIMAL, "Radiographie Thoracique.JPG")
+    await stockage.upload(cle, b"\xff\xd8\xff-fausse-image", "image/jpeg")
+    print("upload   -> exists :", await stockage.exists(cle))
+    print("download ->", await stockage.download(cle))
+
+    url = stockage.generate_presigned_url(cle)
+    print("presign GET -> curl :", statut(url))
+
+    court = stockage.generate_presigned_url(cle, expires_in=1)
+    print("expire=1s : immediat", statut(court), end=" ")
+    time.sleep(2)
+    print("| apres 2s", statut(court))
+
+    print("delete ->", await stockage.delete(cle), "| re-delete ->", await stockage.delete(cle))
+    try:
+        await stockage.download(cle)
+        print("download apres delete -> AUCUNE ERREUR  <<< PROBLEME")
+    except StoredFileNotFoundError:
+        print("download apres delete -> StoredFileNotFoundError")
+    await stockage.aclose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu :
+
+```
+cible : http://localhost:9000/juui-dev | ping : True
+upload   -> exists : True
+download -> b'\xff\xd8\xff-fausse-image'
+presign GET -> curl : 200
+expire=1s : immediat 200 | apres 2s 403
+delete -> True | re-delete -> False
+download apres delete -> StoredFileNotFoundError
+```
+
+Les deux dernières lignes portent trois critères d'acceptation à elles seules : l'aller-retour,
+l'expiration réelle de l'URL — `200` puis `403`, pas une lecture de code — et un `delete` dont le
+retour ne ment pas.
+
+**3. Le type MIME épinglé dans la signature d'un téléversement.** C'est ce qui empêche le chemin
+direct d'échapper à la politique.
+
+```bash
+uv run python - <<'PY'
+import asyncio, subprocess
+from uuid import UUID
+
+from app.core import get_settings
+from app.shared.domain.ports.file_storage import PresignedOperation, UnsupportedContentTypeError
+from app.shared.infrastructure.clients.s3_storage import build_file_storage
+from app.shared.infrastructure.clients.storage_keys import build_storage_key
+
+ANIMAL = UUID("01931f2a-0000-7000-8000-00000000000b")
+
+
+def depose(url: str, type_mime: str) -> str:
+    """Code HTTP rendu par un PUT annoncant ce type."""
+    return subprocess.run(
+        ["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-X", "PUT",
+         "-H", f"Content-Type: {type_mime}", "--data-binary", "%PDF-1.4 faux", url],
+        capture_output=True, text=True, check=True,
+    ).stdout
+
+
+async def main() -> None:
+    stockage = build_file_storage(get_settings())
+    cle = build_storage_key("medical-documents", ANIMAL, "compte rendu.pdf")
+    url = stockage.generate_presigned_url(
+        cle, operation=PresignedOperation.UPLOAD, content_type="application/pdf"
+    )
+    print("PUT, bon type     ->", depose(url, "application/pdf"), "| exists :",
+          await stockage.exists(cle))
+    print("PUT, MAUVAIS type ->", depose(url, "image/png"))
+    await stockage.delete(cle)
+
+    try:
+        stockage.generate_presigned_url(
+            cle, operation=PresignedOperation.UPLOAD, content_type="application/x-msdownload"
+        )
+        print("type hors politique -> ACCEPTE  <<< PROBLEME")
+    except UnsupportedContentTypeError:
+        print("type hors politique -> UnsupportedContentTypeError")
+
+    for arguments in ({"operation": PresignedOperation.UPLOAD}, {"expires_in": 0},
+                      {"expires_in": 10**7}, {"content_type": "image/png"}):
+        try:
+            stockage.generate_presigned_url(cle, **arguments)
+            print(f"  {arguments} -> ACCEPTE  <<< PROBLEME")
+        except ValueError as erreur:
+            print(f"  {str(arguments)[:32]:34} -> ValueError : {str(erreur)[:44]}")
+    await stockage.aclose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : `200` avec le bon type, **`403` avec un autre** — c'est MinIO qui refuse, pas l'API —, puis
+quatre `ValueError` : un téléversement sans type, une expiration nulle, une expiration au-delà de sept
+jours, et un type MIME donné à un téléchargement.
+
+**4. Le stockage injoignable : le service démarre, les opérations lèvent.**
+
+```bash
+S3_ENDPOINT_URL=http://127.0.0.1:9 uv run python - <<'PY'
+import asyncio
+
+from app.core import get_settings
+from app.shared.domain.ports.file_storage import FileStorageUnavailableError
+from app.shared.infrastructure.clients.s3_storage import build_file_storage
+
+
+async def main() -> None:
+    stockage = build_file_storage(get_settings())
+    print("ping ->", await stockage.ping(), "(False, SANS lever : le service demarre)")
+    for nom, appel in (
+        ("upload", stockage.upload("x/y/z.png", b"x", "image/png")),
+        ("download", stockage.download("x/y/z.png")),
+        ("exists", stockage.exists("x/y/z.png")),
+        ("delete", stockage.delete("x/y/z.png")),
+    ):
+        try:
+            await appel
+            print(f"  {nom:9} -> AUCUNE ERREUR  <<< PROBLEME")
+        except FileStorageUnavailableError:
+            print(f"  {nom:9} -> FileStorageUnavailableError")
+    print("  presign   ->", stockage.generate_presigned_url("x/y/z.png")[:44], "(hors ligne)")
+    await stockage.aclose()
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu : un `WARNING` nommant l'endpoint, `ping` à `False`, **quatre** levées — `exists` compris,
+qui ne se rabat pas sur `False` — et une URL signée malgré tout, la signature étant un calcul local.
+C'est le tableau de l'asymétrie, observé plutôt que lu.
+
+**5. Basculer sur Amazon S3 ne demande qu'une configuration.** Vérifiable sans compte AWS :
+
+```bash
+S3_ENDPOINT_URL= uv run python -c "
+from app.core import get_settings
+from app.shared.infrastructure.clients.s3_storage import build_file_storage
+stockage = build_file_storage(get_settings())
+print('target :', stockage.target)
+print('URL    :', stockage.generate_presigned_url('animal-photos/x/y.jpg').split('?')[0])
+"
+```
+
+Attendu : `target : Amazon S3/juui-dev` et une URL sur `https://s3.amazonaws.com`. Une variable
+vidée, **pas une ligne de code**.
+
+**6. Le cycle de vie, et l'ordre de démarrage de la pile.**
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml up -d api
+```
+
+Attendu, dans la sortie : `minio Healthy`, puis `minio-init Started`, puis **`minio-init Exited`**,
+et seulement ensuite `api Started`. C'est le `depends_on: service_completed_successfully` qui
+l'impose — un bucket dont la création a échoué empêche l'API de partir, au lieu de la laisser
+découvrir l'absence au premier téléversement.
+
+### Écarts assumés avec le ticket BACK-13
+
+| Écart                                                                       | Raison                                                                                                                                                                                                                                                                                                                                               |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boto3` synchrone dans `asyncio.to_thread`, plutôt qu'`aioboto3`            | Le ticket laisse le choix. `generate_presigned_url` — la seule opération sur le chemin des requêtes — ne fait **aucun** I/O et reste synchrone ; les quatre autres transportent des octets. `aioboto3` imposerait `aiobotocore`, qui épingle `botocore` à la version près, et rendrait inutiles les `boto3-stubs[s3]` déjà verrouillés par BACK-01.  |
+| Aucune dégradation gracieuse, contrairement au cache                        | Un `upload` silencieux est un fichier perdu, un `exists` à `False` sur panne est un document de santé déclaré inexistant. Le contrat de `Cache` convient à un cache et à rien d'autre — sa propre docstring le dit déjà pour BACK-10d et BACK-17.                                                                                                    |
+| `ping()` journalise au lieu de lever, alors que les opérations lèvent       | Troisième temps de l'asymétrie du service. Aucune route ne dépend encore du bucket : refuser de démarrer priverait le service de tout ce qui n'a rien à voir avec les fichiers. La panne se voit dans la ligne de démarrage, en `WARNING`, donc relayée même sans BACK-11.                                                                           |
+| Clés sans segment de tenance, contrairement aux clés de cache               | Une clé de stockage est **persistée**, une clé de cache est volatile. La lier à `current_group_id` la rendrait introuvable depuis une tâche de fond, un export, ou après une bascule de structure. Le cloisonnement appartient à l'autorisation, pas au nommage d'une donnée durable.                                                                |
+| Clés sans préfixe d'environnement, contrairement aux clés de cache          | Les environnements ont des **buckets** distincts : la séparation est déjà faite un cran au-dessus, et la répéter dans la clé n'ajouterait qu'un segment à taper.                                                                                                                                                                                     |
+| `storage_keys.py`, hors de la portée nommée                                 | Même arbitrage que `cache_keys.py` en BACK-14 : l'`InMemoryFileStorage` de BACK-06c devrait sinon importer boto3 pour savoir nommer une clé. Deux fonctions et non une classe — contrairement à `CacheKeyBuilder`, il n'y a aucun état à porter.                                                                                                     |
+| `generate_presigned_url` prend `operation` et `content_type`, non prévus    | Le ticket demande des URLs pré-signées « pour l'upload **et** le téléchargement » avec une seule signature. `operation` couvre les deux sans ajouter de sixième opération. `content_type` est **exigé** pour un téléversement : sans lui, le chemin principal du ticket échapperait entièrement à la validation MIME que ce même ticket réclame.     |
+| La borne de taille ne couvre pas le téléversement pré-signé                 | Impossible autrement : un PUT pré-signé n'emporte aucune condition sur la longueur du corps. Seul un formulaire pré-signé (POST, `content-length-range`) l'exprimerait, et il n'a aucun appelant avant la route de téléversement. Le trou est nommé ici et dans la docstring du port plutôt que laissé à découvrir.                                  |
+| `main.py` modifié, hors de la portée déclarée                               | Sans branchement dans le `lifespan`, l'adaptateur serait invérifiable en conditions réelles et inutilisable par la route qui le consommera. Même arbitrage qu'en BACK-03, BACK-05 et BACK-14.                                                                                                                                                        |
+| `docker-compose.yml` modifié, hors de la portée déclarée                    | INFRA-04 y a laissé le `depends_on` de `minio-init` en commentaire, adressé nommément à BACK-13 : « à ajouter quand l'API touchera réellement au bucket ». C'est maintenant le cas.                                                                                                                                                                  |
+| `botocore` ajouté aux `forbidden_modules` du contrat `domain-purity`        | L'adaptateur importe `botocore` **directement** — `Config` et les exceptions du client en viennent, pas de `boto3`. Interdire `boto3` sans lui laisserait au domaine un chemin ouvert vers la même technologie. La règle du pyproject s'étend ainsi : tout paquet qu'un adaptateur importe par son nom s'y déclare.                                  |
+| Taille, types MIME et expiration en constantes, non configurables           | Même arbitrage que `_CONNECT_TIMEOUT_SECONDS` en BACK-05 et BACK-14 : chaque variable coûte deux gabarits, une ligne de compose et une ligne de README. Le ticket ne demande « configurable » que d'`endpoint_url`, et l'appelant passe déjà `expires_in`. **Aucun `.env.example` n'est donc modifié** — `S3Settings` était complète depuis BACK-03. |
+| `retries={"max_attempts": 3}`, à l'inverse du `retries=0` du cache          | Une lecture de cache manquée se recalcule ; une opération de stockage manquée se perd. Le mode `standard` ne rejoue que ce qui est rejouable — 429, 5xx, erreurs de connexion —, jamais un refus d'autorisation.                                                                                                                                     |
+| `addressing_style: "path"` et `signature_version: "s3v4"` épinglés          | Le style _virtual-host_ met le bucket dans le nom d'hôte, ce qui donnerait `juui-dev.minio:9000` — un nom qu'`app_network` ne résout pas. `s3v4` est exigé par MinIO et par toute région Amazon ouverte après 2014 ; l'écrire évite de dépendre du défaut de la version de botocore installée.                                                       |
+| `mypy_boto3_s3` importé sous `if TYPE_CHECKING:`                            | Le paquet appartient au groupe `dev`, que le build d'INFRA-04 écarte (`--no-dev`). Un import à l'exécution ferait échouer le démarrage du **conteneur seulement** — le genre de panne qui ne se voit qu'en production. Vérifié : l'image reconstruite démarre.                                                                                       |
+| `delete()` fait deux allers-retours                                         | S3 répond `204` qu'un objet ait existé ou non. Sans le `head_object` préalable, la méthode ne pourrait rendre que `True` en permanence, ce qui reviendrait à ne rien rendre. Course connue et sans gravité : un objet supprimé entre les deux appels fait rendre `True` à tort — le fichier est parti dans les deux cas.                             |
+| Trois codes d'erreur reconnus comme « absent », pas seulement `NoSuchKey`   | `head_object` n'a pas de corps où loger un code : botocore y reporte le statut nu, `404`. S'en tenir à `NoSuchKey` ferait lever `exists()`, dont le travail est précisément de répondre non.                                                                                                                                                         |
+| `image/heic` absent des types acceptés                                      | Format natif des photos d'iPhone, donc une lacune réelle — mais l'accepter sans conversion côté serveur produirait des fichiers que ni les navigateurs ni les visionneuses de bureau n'affichent. La question appartient au ticket qui exposera la route : convertir à l'arrivée, ou dans le navigateur.                                             |
+| URL pré-signée non ouvrable depuis le poste quand l'API tourne en conteneur | L'URL porte l'hôte de `endpoint_url`, soit `http://minio:9000`, résolvable depuis `app_network` seulement. Y remédier demanderait un **second** endpoint, public — ce que le ticket écarte en posant qu'un seul paramètre sépare MinIO d'Amazon. Sans conséquence tant qu'aucune route ne publie ces URLs ; nommé pour celui qui le fera.            |
+| Aucun test automatisé, mais six sondes documentées                          | `tests/` et la configuration de pytest appartiennent à BACK-12, qui nomme aussi le fichier de la portée. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05 et BACK-14. Les six sondes ci-dessus ont toutes été jouées avant livraison, l'expiration de l'URL comprise — `200` puis `403`.                                                      |
+
 ## Dépendances
 
 Deux groupes, strictement séparés. Le build Docker d'INFRA-04 installera le
@@ -1669,6 +2093,8 @@ de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts
 
 La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
 désormais tenues par [Import Linter](#import-linter) (BACK-04b), le socle de
-persistance est en place (BACK-05), Ruff et Mypy sont configurés (BACK-02). Les
+persistance est en place (BACK-05), les deux ports techniques du noyau partagé
+sont livrés — [cache](#cache) (BACK-14) et [stockage objet](#stockage-objet)
+(BACK-13) —, Ruff et Mypy sont configurés (BACK-02). Les
 dépendances de test, elles, restent **déclarées sans être configurées** : c'est
 volontaire, chaque ticket porte son propre outil.

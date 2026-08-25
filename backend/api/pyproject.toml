@@ -346,6 +346,14 @@ forbidden_modules = [
     "redis",
     "boto3",
     # Le reste des dependances applicatives declarees plus haut.
+    #
+    # `botocore` n'est pas une dependance DECLAREE mais une transitive de boto3,
+    # et il est malgre tout nomme ici : BACK-13 l'importe DIRECTEMENT dans son
+    # adaptateur -- `Config` et les exceptions du client viennent de la, pas de
+    # boto3. Interdire `boto3` sans lui laisserait donc au domaine un chemin
+    # ouvert vers exactement la meme technologie. La regle a tenir s'etend ainsi :
+    # tout paquet qu'un adaptateur importe par son nom s'ajoute ici.
+    "botocore",
     "pydantic_settings",
     "asyncpg",
     "alembic",
