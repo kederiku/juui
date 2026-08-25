@@ -275,7 +275,8 @@ EXPOSE 3000
 # `next dev` DIRECTEMENT, et non `pnpm dev`. Le script `dev` du package.json fixe
 # le port du POSTE (3001, 3002 ou 3003) ; en conteneur les trois applications
 # ecoutent sur 3000, c'est la publication qui les distingue -- le tableau des
-# ports du README en fait une regle, et elle doit valoir dans les deux modes.
+# ports du site de documentation en fait une regle, et elle doit valoir dans
+# les deux modes.
 #
 # `--hostname 0.0.0.0` : sans lui le serveur de developpement n'ecoute que la
 # boucle locale DU CONTENEUR, et le port publie ne mene nulle part.

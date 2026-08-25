@@ -92,8 +92,8 @@ services:
     #
     # C'est une seconde source de verite a cote du CMD de la cible `worker`
     # (docker/api/Dockerfile) -- a tenir alignee. L'alternative aurait ete un
-    # etage `worker-dev` de plus dans ce Dockerfile, que le README declare clos
-    # depuis INFRA-05a.
+    # etage `worker-dev` de plus dans ce Dockerfile, que le registre des ecarts
+    # (site de documentation) declare clos depuis INFRA-05a.
     #
     # PAS DE `--reload` : taskiq ne le propose qu'avec l'extra `taskiq[reload]`,
     # que le projet n'installe pas. Une modification de tache se prend par

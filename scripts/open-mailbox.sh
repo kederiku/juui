@@ -43,7 +43,8 @@ if [ -z "$PORT" ] && [ -f "$ENV_FILE" ]; then
   PORT=$(sed -n 's/^[[:space:]]*MAILPIT_WEB_HOST_PORT=//p' "$ENV_FILE" | tail -n 1)
 fi
 
-# Le repli est la valeur de .env.example et du tableau des ports du README. Il
+# Le repli est la valeur de .env.example et du tableau des ports du site de
+# documentation. Il
 # sert au depot fraichement clone, ou le .env n'existe pas encore.
 if [ -z "$PORT" ]; then
   echo "INFRA-06 : MAILPIT_WEB_HOST_PORT introuvable (.env absent ?) -- repli sur 8025." >&2

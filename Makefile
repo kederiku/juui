@@ -145,7 +145,8 @@ seed: ## Injecte le jeu de donnees de demonstration (INFRA-08)
 # Le backend d'abord : c'est la chaine la moins chere, meme raisonnement que le
 # `lint` de backend/api/Makefile qui passe Ruff avant les contrats d'imports.
 # Cote pnpm, `lint` et `format` parcourent le depot en UNE passe depuis la
-# racine : c'est une regle du depot (README, « Scripts racine ») -- deleguer
+# racine : c'est une regle du depot (site de documentation, page « Makefile et
+# scripts de la racine ») -- deleguer
 # aux workspaces laisserait de cote les fichiers de la racine.
 
 lint: ## Analyse statique du backend (Ruff, contrats) puis du depot (ESLint)
