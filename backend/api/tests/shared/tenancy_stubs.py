@@ -12,24 +12,29 @@ module : l'autogeneration et `alembic check` ne voient pas ces tables.
 """
 
 from dataclasses import dataclass
+from typing import ClassVar
 from uuid import UUID
 
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.shared.domain.exceptions import DomainError
+from app.shared.domain.exceptions import NotFoundError
 from app.shared.infrastructure.db.base import Base
 from app.shared.infrastructure.db.mixins import TenantMixin, UUIDPrimaryKey
 from app.shared.infrastructure.db.repositories.base import SqlAlchemyRepository
 from app.shared.infrastructure.db.repositories.tenant import TenantSqlAlchemyRepository
 
 
-class TenantNoteNotFoundError(DomainError):
+class TenantNoteNotFoundError(NotFoundError):
     """Aucune note tenant ne porte l'identifiant demande."""
 
+    code: ClassVar[str] = "tests.tenant_note.not_found"
 
-class PlainNoteNotFoundError(DomainError):
+
+class PlainNoteNotFoundError(NotFoundError):
     """Aucune note partagee ne porte l'identifiant demande."""
+
+    code: ClassVar[str] = "tests.plain_note.not_found"
 
 
 @dataclass(slots=True, kw_only=True)

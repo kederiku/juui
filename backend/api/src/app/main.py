@@ -24,6 +24,7 @@ from fastapi import APIRouter, FastAPI
 
 from app.core import AppSettings, get_settings
 from app.modules.identity import router as identity_router
+from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.health import router as health_router
 from app.shared.infrastructure.api.router import build_api_router
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, build_cache
@@ -227,6 +228,11 @@ def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
         openapi_url=None if settings.is_production else "/openapi.json",
         lifespan=lifespan,
     )
+
+    # Avant les routes : l'application sait repondre en erreur (BACK-09) avant
+    # de savoir repondre tout court. Fonctionnellement l'ordre est indifferent,
+    # la lecture ne l'est pas.
+    register_error_handlers(application)
 
     # Les sondes se montent SUR l'application, hors du routeur v1 : leur URL
     # est un contrat d'exploitation, pas un contrat d'API.

@@ -2,8 +2,10 @@
 
 Deux choses y vivent, et rien d'autre :
 
-- `exceptions` -- la racine `DomainError` dont heritent les erreurs metier de
-  tous les modules ;
+- `exceptions` -- la racine `DomainError`, ses categories intermediaires
+  (`NotFoundError`, `AlreadyExistsError`, `ConflictError`, `ValidationError`,
+  `PermissionDeniedError`) et les codes namespaces dont heritent les erreurs
+  metier de tous les modules (BACK-09) ;
 - `ports` -- les contrats techniques que les modules expriment et que
   l'infrastructure remplit.
 

@@ -70,6 +70,14 @@ alternatives écartées et ce qu'elle coûte sont consignés dans
 l'[ADR-0012](../adr/0012-perimetre-de-requete.md) ; son application
 revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe).
 
+## Le format d'erreur
+
+Toute réponse d'erreur de la surface — refus métier, validation, routage, 500 — porte le même
+corps à quatre clés `{ code, message, details, request_id }`, traduit à un seul endroit depuis la
+hiérarchie `DomainError` (BACK-09). La hiérarchie, les codes namespacés et la règle 404-jamais-403
+sont détaillés dans [Erreurs](./erreurs.md) ; la décision est consignée dans
+l'[ADR-0014](../adr/0014-traduction-des-erreurs-a-la-bordure.md).
+
 ## Vérifier que la surface tient
 
 Cinq sondes. Les trois premières se jouent depuis la **racine du monorepo**, pile lancée ; les

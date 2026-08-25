@@ -123,13 +123,12 @@ l'[ADR-0003](../adr/0003-monolithe-modulaire.md) ; la docstring de
 Les dossiers vides ne le sont pas par oubli : chacun porte une docstring qui dit ce qui vient s'y
 ranger, et quel ticket l'apporte.
 
-| Emplacement                        | Ce qui manque                                                       | Ticket                    |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------------------- |
-| `shared/domain/ports/`             | `TokenService`                                                      | BACK-10a                  |
-| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                   |
-| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11          |
-| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31 |
-| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                   |
+| Emplacement                        | Ce qui manque                                            | Ticket                    |
+| ---------------------------------- | -------------------------------------------------------- | ------------------------- |
+| `shared/domain/ports/`             | `TokenService`                                           | BACK-10a                  |
+| `shared/infrastructure/api/`       | intergiciels, identifiant de requête                     | BACK-11                   |
+| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe | BACK-28, BACK-29, BACK-31 |
+| `modules/organization/`            | groupes, cliniques, appartenances, affectations          | BACK-16                   |
 
 ## Vérifier que les règles tiennent
 

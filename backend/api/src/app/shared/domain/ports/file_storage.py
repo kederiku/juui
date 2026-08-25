@@ -35,9 +35,9 @@ serveur traite lui-meme ; ils ne sont pas le chemin par defaut.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import ClassVar, Final
 
-from app.shared.domain.exceptions import DomainError
+from app.shared.domain.exceptions import DomainError, NotFoundError, ValidationError
 
 
 class FileStorageError(DomainError):
@@ -47,10 +47,17 @@ class FileStorageError(DomainError):
     exception de boto3 n'en sort : c'est la promesse qui permet a un cas d'usage
     d'attraper `FileStorageError` sans jamais importer la bibliotheque du
     fournisseur. Le jour ou l'adaptateur change, les `except` du metier tiennent.
+
+    Les classes qui suivent heritent AUSSI d'une categorie de BACK-09 quand une
+    correspondance HTTP evidente existe -- la famille du port en premier dans les
+    bases, la categorie ensuite : l'adaptateur d'API resout par `isinstance`,
+    l'ordre ne change rien pour lui, mais la promesse ci-dessus reste premiere.
     """
 
+    code: ClassVar[str] = "shared.file.error"
 
-class StoredFileNotFoundError(FileStorageError):
+
+class StoredFileNotFoundError(FileStorageError, NotFoundError):
     """La cle demandee ne designe aucun objet du bucket.
 
     Nommee `Stored...` et non `FileNotFoundError` : ce dernier est un builtin, et
@@ -59,13 +66,19 @@ class StoredFileNotFoundError(FileStorageError):
     fichiers local.
     """
 
+    code: ClassVar[str] = "shared.file.not_found"
 
-class FileTooLargeError(FileStorageError):
+
+class FileTooLargeError(FileStorageError, ValidationError):
     """Le contenu depasse la taille maximale autorisee par la politique."""
 
+    code: ClassVar[str] = "shared.file.too_large"
 
-class UnsupportedContentTypeError(FileStorageError):
+
+class UnsupportedContentTypeError(FileStorageError, ValidationError):
     """Le type MIME annonce n'est pas accepte par la politique."""
+
+    code: ClassVar[str] = "shared.file.unsupported_content_type"
 
 
 class InvalidStorageKeyError(FileStorageError):
@@ -75,7 +88,14 @@ class InvalidStorageKeyError(FileStorageError):
     un octet de controle. Ce n'est pas un exces de prudence : le seul
     cloisonnement des fichiers d'une entite est leur PREFIXE de cle, et un
     `../../` bien place le traverse.
+
+    PAS une `ValidationError` : la cle est composee cote serveur par
+    `StorageKeyBuilder`, jamais saisie par un utilisateur. Une cle invalide est
+    un bug ou une tentative de traversee -- un 400 generique suffit, sans
+    detailler la convention de cles a l'appelant.
     """
+
+    code: ClassVar[str] = "shared.file.invalid_key"
 
 
 class FileStorageUnavailableError(FileStorageError):
@@ -85,7 +105,14 @@ class FileStorageUnavailableError(FileStorageError):
     objet n'existe pas », celle-ci dit « je ne sais pas s'il existe ». Les
     confondre ferait supprimer d'une base la reference d'un fichier parfaitement
     intact, au seul motif que le reseau avait hoquete.
+
+    Panne TECHNIQUE malgre son parent : l'adaptateur d'API (BACK-09) la re-leve
+    vers le chemin 500 generique plutot que de la traduire en 4xx -- le client
+    n'a rien fait de mal, et son code ne sort donc jamais dans une reponse. Il
+    reste utile aux journaux, et a un eventuel 503 dedie plus tard.
     """
+
+    code: ClassVar[str] = "shared.file.storage_unavailable"
 
 
 class PresignedOperation(StrEnum):

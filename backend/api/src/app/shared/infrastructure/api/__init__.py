@@ -3,8 +3,8 @@
 Paquet cree par BACK-04 pour fixer la place de ces briques -- au NIVEAU DU
 NOYAU et non dans un module : un handler d'erreur ou un identifiant de requete
 qui vivraient dans `identity` obligeraient tous les autres modules a en
-dependre. BACK-08 y pose les deux premieres : les sondes de sante et le
-routeur racine versionne.
+dependre. BACK-08 y pose les deux premieres briques -- les sondes de sante et
+le routeur racine versionne -- et BACK-09 la traduction des erreurs.
 
 CE QUE CHAQUE TICKET APPORTE ICI
 

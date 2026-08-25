@@ -151,7 +151,7 @@ class TenantSqlAlchemyRepository[EntityT: Identified, ModelT: Base](
 
         Raises:
             MissingTenantContextError: si aucun perimetre n'est pose.
-            DomainError: l'erreur d'absence declaree par le depot concret, si
+            NotFoundError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant -- ou si elle appartient
                 a un autre groupe.
         """
