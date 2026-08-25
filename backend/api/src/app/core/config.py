@@ -20,8 +20,8 @@ NOMMAGE DES VARIABLES
 Chaque sous-modele porte son propre `env_prefix` (`POSTGRES_`, `REDIS_`, `S3_`,
 `JWT_`) plutot que le `env_nested_delimiter` prevu par la carte : `POSTGRES_USER`
 et `MINIO_ROOT_USER` sont imposes par les images Docker, et un delimiteur
-imposerait une couche de traduction pour rien. L'ecart est inscrit au README de
-la racine, ou il a ete arbitre des SETUP-05.
+imposerait une couche de traduction pour rien. L'ecart est inscrit au registre
+des ecarts du site de documentation, ou il a ete arbitre des SETUP-05.
 """
 
 from collections.abc import Iterable

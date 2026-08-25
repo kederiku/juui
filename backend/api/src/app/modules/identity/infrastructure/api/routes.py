@@ -9,8 +9,8 @@ recevoir. Ce qui manque est METIER : le parcours d'inscription porte des regles
 documenter comme si elles etaient tenues.
 
 Le trajet complet -- schema, commande, entite, unite de travail, modele -- est
-en revanche EXECUTABLE des maintenant : les sondes du README le parcourent de
-bout en bout, route de sonde comprise.
+en revanche EXECUTABLE des maintenant : les sondes de la section Backend du
+site de documentation le parcourent de bout en bout, route de sonde comprise.
 
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
 `POST /auth/register` (BACK-28), `POST /auth/login` et le rafraichissement de
