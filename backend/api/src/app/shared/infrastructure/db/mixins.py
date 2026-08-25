@@ -155,17 +155,17 @@ class TenantMixin:
     d'un agregat declarant ce mixin herite de `TenantSqlAlchemyRepository`, et
     les autres depots restent vierges de tenance.
 
-    PAS DE CLE ETRANGERE VERS `groups`, POUR L'INSTANT
-    La table `groups` n'existe pas avant BACK-16. Une `ForeignKey("groups.id")`
-    posee ici se declarerait sans erreur mais casserait
-    `metadata.sorted_tables` -- donc `alembic revision --autogenerate` pour TOUT
-    le projet -- des le premier modele adoptant le mixin. S'y ajoute une raison
-    d'architecture : une cle etrangere partant de `shared/` vers une table
-    d'`organization` rendrait tous les modules structurellement dependants de
-    celui-la. La dette est assumee et nommee : BACK-16 posera la contrainte
-    table par table, quand `groups` existera et que chaque module pourra y
-    consentir explicitement. En attendant, l'integrite tient par le filtre du
-    depot, pas par la base.
+    LA CLE ETRANGERE VERS `groups` SE POSE TABLE PAR TABLE, PAR CONSENTEMENT
+    Le mixin ne porte AUCUNE `ForeignKey`, et c'est definitif : une cle
+    etrangere partant de `shared/` vers une table d'`organization` rendrait
+    tous les modules structurellement dependants de celui-la. Depuis que
+    BACK-16 a livre la table `groups`, chaque modele adoptant le mixin declare
+    la contrainte dans son propre `__table_args__` s'il y consent :
+
+        __table_args__ = (ForeignKeyConstraint(["group_id"], ["groups.id"]), ...)
+
+    Premier exemple en production : `clinics` (ADR-0015). Un modele qui s'en
+    abstiendrait garde l'integrite par le filtre du depot, pas par la base.
     """
 
     group_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, sort_order=-99)

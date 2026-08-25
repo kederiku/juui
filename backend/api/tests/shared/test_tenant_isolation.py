@@ -76,11 +76,13 @@ async def test_locum_context_only_sees_the_active_group(
 ) -> None:
     """Cas du remplacant : un jeton emis pour A ne voit rien du groupe B.
 
-    L'appartenance N:M d'un compte a plusieurs groupes (BACK-16) n'est pas
-    encore modelisee : au niveau depot, le cas se reduit a « contexte pose sur
-    A, donnee du groupe B » -- c'est exactement ce que produira un jeton dont
-    le claim `active_group_id` vaut A entre les mains d'un remplacant des deux
-    groupes.
+    Au niveau du socle, le cas se reduit a « contexte pose sur A, donnee du
+    groupe B » -- c'est exactement ce que produit un jeton dont le claim
+    `active_group_id` vaut A entre les mains d'un remplacant des deux groupes.
+    Depuis BACK-16, l'appartenance N:M datee est modelisee et le scenario
+    entier -- deux appartenances reelles, une affectation par groupe -- est
+    rejoue sur les vraies tables par
+    `tests/modules/organization/test_ports.py::test_locum_assignments_stay_in_the_active_group`.
     """
     note_a = await _seed(session, group_a, "consultation chez A")
     note_b = await _seed(session, group_b, "consultation chez B")

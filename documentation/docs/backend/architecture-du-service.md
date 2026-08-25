@@ -128,7 +128,7 @@ ranger, et quel ticket l'apporte.
 | `shared/domain/ports/`             | `TokenService`                                           | BACK-10a                  |
 | `shared/infrastructure/api/`       | intergiciels, identifiant de requête                     | BACK-11                   |
 | `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe | BACK-28, BACK-29, BACK-31 |
-| `modules/organization/`            | groupes, cliniques, appartenances, affectations          | BACK-16                   |
+| `modules/organization/`            | cas d'usage, invitations, routes d'administration        | BACK-25                   |
 
 ## Vérifier que les règles tiennent
 

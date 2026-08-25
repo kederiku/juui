@@ -66,7 +66,10 @@ backend/api/
         │   ├── application/    use_cases/
         │   ├── infrastructure/ db/ (modèle, dépôt), api/ (schémas, routeur)
         │   └── unit_of_work.py unité de travail du module, `get_identity_uow` (BACK-06a)
-        └── organization/   groupes et appartenances (BACK-16)
+        └── organization/   groupes, cliniques, appartenances, affectations (BACK-16)
+            ├── domain/         entités, rôles, règle d'affectation, les 3 ports
+            ├── infrastructure/ db/ (4 tables, dépôts — pas encore d'api/)
+            └── unit_of_work.py `get_organization_uow`
 ```
 
 Le paquet s'appelle `app` alors que le projet se nomme `juui-api` : la

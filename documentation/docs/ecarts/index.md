@@ -51,6 +51,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)       | Le port de stockage objet                              |
 | [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)       | Le port de cache Redis                                 |
 | [BACK-15](./back.md#écarts-assumés-avec-le-ticket-back-15)       | Le broker TaskIQ et la tâche de démonstration          |
+| [BACK-16](./back.md#écarts-assumés-avec-le-ticket-back-16)       | Le socle du module organization                        |
 | [SHARED-01](./shared.md#écarts-assumés-avec-le-ticket-shared-01) | La bibliothèque @repo/ui                               |
 | [SHARED-02](./shared.md#écarts-assumés-avec-le-ticket-shared-02) | Les configurations partagées                           |
 | [FRONT-01](./front.md#écarts-assumés-avec-le-ticket-front-01)    | L'application des professionnels                       |

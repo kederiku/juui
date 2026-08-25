@@ -99,12 +99,14 @@ six mois plus tard en revue de code.
 Trois choix de configuration méritent d'être connus avant d'y toucher :
 
 - **Les contrats 2 et 3 visent `app.modules.*`, pas une liste de modules.** Ils
-  couvriront `organization` (BACK-16), `medical_records` (BACK-19) et les
-  suivants le jour où ceux-ci naîtront — c'est la différence entre un garde-fou
-  et une liste qu'on oublie de tenir à jour.
+  couvrent `organization` depuis BACK-16 et couvriront `medical_records`
+  (BACK-19) et les suivants le jour où ceux-ci naîtront — c'est la différence
+  entre un garde-fou et une liste qu'on oublie de tenir à jour.
 - **Les couches du contrat 2 sont optionnelles** (elles s'écrivent entre
-  parenthèses) parce que `modules/organization/` ne porte encore qu'un
-  `__init__.py`. Ce que cela relâche, `exhaustive = true` le rattrape : tout
+  parenthèses) parce qu'un module vit sans certaines d'entre elles —
+  `modules/organization/` n'a pas de couche `application/` avant BACK-25, et un
+  module naissant se réduit à son `__init__.py`. Ce que cela relâche,
+  `exhaustive = true` le rattrape : tout
   fichier ou dossier ajouté dans un module, dans `shared/` ou à la racine d'`app`
   fait échouer le contrat tant qu'il n'est pas déclaré comme une couche. Seul
   `unit_of_work` est exempté — BACK-04 le range volontairement à la racine du
