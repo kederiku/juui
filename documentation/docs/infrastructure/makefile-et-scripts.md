@@ -39,7 +39,7 @@ serait un double parcours, et laisserait de côté les fichiers de la racine, qu
 
 `lint` s'appuie sur les types depuis SETUP-06, ce qui lui coûte quelques
 secondes : le chiffre avant/après est dans [Configurations
-partagées](https://github.com/kederiku/juui#configurations-partagées).
+partagées](../frontend/configurations-partagees.md).
 
 :::note Portée des scripts pnpm
 Ces scripts ne couvrent que les workspaces pnpm ; le backend a les

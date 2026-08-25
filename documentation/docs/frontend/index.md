@@ -1,6 +1,6 @@
 ---
 title: Frontend
-description: Les trois applications Next.js et leurs packages partagés — page d'attente.
+description: Les trois applications Next.js, leurs packages partagés et la carte des pages de cette section.
 ---
 
 # Frontend
@@ -16,16 +16,21 @@ Trois applications **Next.js** se partagent le dossier `frontend/`, une par publ
 Elles ne sont **pas** le découpage du backend : ce sont des canaux de livraison, pas des contextes
 métier. Le cœur d'authentification leur est commun et n'est écrit qu'une fois, côté API.
 
+## Les pages de cette section
+
+| Page                                                      | Ce qu'on y trouve                                                           |
+| --------------------------------------------------------- | --------------------------------------------------------------------------- |
+| [Configurations partagées](./configurations-partagees.md) | Les quatre packages de configuration et la chaîne de presets qui les relie. |
+| [La bibliothèque @repo/ui](./bibliotheque-ui.md)          | Les composants shadcn/ui partagés, le thème, la `DataTable`.                |
+| [Les trois applications](./les-trois-applications.md)     | Le socle commun FRONT-01 à 03, le volet SEO, le back-office et sa garde.    |
+
 ## Ce qui viendra ici
 
-- La **bibliothèque de composants partagée** `@repo/ui` et son usage en monorepo.
-- Les **configurations communes** — ESLint, Prettier, TypeScript, Tailwind — et la règle qui veut
-  qu'un réglage ne se modifie qu'à un seul endroit.
-- Le **client d'API généré** depuis le contrat OpenAPI, et l'interdiction d'éditer son code.
+- Le **client d'API généré** depuis le contrat OpenAPI, et l'interdiction d'éditer son code
+  (SHARED-03).
 - Les conventions de **données côté client** : cache, formulaires, validation.
-- Le rendu, les routes protégées et l'**accessibilité**.
+- L'**accessibilité** au-delà du lint : parcours clavier et lecteurs d'écran.
 
 :::note Apportée par les tickets FRONT et SHARED
-La section « Configurations partagées » du README de la racine décrit déjà les quatre packages
-communs et la façon de les consommer.
+Les tickets à venir — SHARED-03, FRONT-04 et suivants — rempliront ces sujets à leur livraison.
 :::

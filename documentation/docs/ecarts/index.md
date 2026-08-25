@@ -24,30 +24,38 @@ même PR. Un ticket sans écart n'apparaît pas.
 
 ## Le registre
 
-| Ticket                                                          | Livrable                                               |
-| --------------------------------------------------------------- | ------------------------------------------------------ |
-| [SETUP-05](./setup.md#écarts-assumés-avec-le-ticket-setup-05)   | Les gabarits d'environnement et l'allocation des ports |
-| [INFRA-01](./infra.md#écarts-assumés-avec-le-ticket-infra-01)   | PostgreSQL et pgAdmin                                  |
-| [INFRA-02](./infra.md#écarts-assumés-avec-le-ticket-infra-02)   | Redis et RedisInsight                                  |
-| [INFRA-03](./infra.md#écarts-assumés-avec-le-ticket-infra-03)   | MinIO et l'amorçage du bucket                          |
-| [INFRA-04](./infra.md#écarts-assumés-avec-le-ticket-infra-04)   | L'image Docker du service d'API                        |
-| [INFRA-05a](./infra.md#écarts-assumés-avec-le-ticket-infra-05a) | L'image Docker des trois frontends                     |
-| [INFRA-05b](./infra.md#écarts-assumés-avec-le-ticket-infra-05b) | La pile compose complète                               |
-| [INFRA-06](./infra.md#écarts-assumés-avec-le-ticket-infra-06)   | Le Makefile de la racine                               |
-| [INFRA-07](./infra.md#écarts-assumés-avec-le-ticket-infra-07)   | Mailpit, le SMTP de développement                      |
-| [BACK-02](./back.md#écarts-assumés-avec-le-ticket-back-02)      | L'outillage qualité Python (Ruff, Mypy)                |
-| [BACK-03](./back.md#écarts-assumés-avec-le-ticket-back-03)      | La configuration validée au démarrage                  |
-| [BACK-04](./back.md#écarts-assumés-avec-le-ticket-back-04)      | Le socle hexagonal et le module pilote                 |
-| [BACK-04b](./back.md#écarts-assumés-avec-le-ticket-back-04b)    | Les contrats d'architecture Import Linter              |
-| [BACK-05](./back.md#écarts-assumés-avec-le-ticket-back-05)      | Le socle SQLAlchemy et le pool                         |
-| [BACK-06a](./back.md#écarts-assumés-avec-le-ticket-back-06a)    | L'unité de travail et le dépôt générique               |
-| [BACK-07](./back.md#écarts-assumés-avec-le-ticket-back-07)      | Alembic et la première migration                       |
-| [BACK-08](./back.md#écarts-assumés-avec-le-ticket-back-08)      | La sonde de santé et les métadonnées OpenAPI           |
-| [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)      | Le port de stockage objet                              |
-| [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)      | Le port de cache Redis                                 |
-| [BACK-15](./back.md#écarts-assumés-avec-le-ticket-back-15)      | Le broker TaskIQ et la tâche de démonstration          |
-| [DOC-01](./doc.md#écarts-assumés-avec-le-ticket-doc-01)         | Le site de documentation Docusaurus                    |
-| [DOC-02b](./doc.md#écarts-assumés-avec-le-ticket-doc-02b)       | Le registre des ADR                                    |
+| Ticket                                                           | Livrable                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------------ |
+| [SETUP-04](./setup.md#écarts-assumés-avec-le-ticket-setup-04)    | Les hooks de pre-commit et commitlint                  |
+| [SETUP-05](./setup.md#écarts-assumés-avec-le-ticket-setup-05)    | Les gabarits d'environnement et l'allocation des ports |
+| [SETUP-06](./setup.md#écarts-assumés-avec-le-ticket-setup-06)    | Le lint type-aware                                     |
+| [SETUP-07](./setup.md#écarts-assumés-avec-le-ticket-setup-07)    | Les règles d'accessibilité du lint                     |
+| [INFRA-01](./infra.md#écarts-assumés-avec-le-ticket-infra-01)    | PostgreSQL et pgAdmin                                  |
+| [INFRA-02](./infra.md#écarts-assumés-avec-le-ticket-infra-02)    | Redis et RedisInsight                                  |
+| [INFRA-03](./infra.md#écarts-assumés-avec-le-ticket-infra-03)    | MinIO et l'amorçage du bucket                          |
+| [INFRA-04](./infra.md#écarts-assumés-avec-le-ticket-infra-04)    | L'image Docker du service d'API                        |
+| [INFRA-05a](./infra.md#écarts-assumés-avec-le-ticket-infra-05a)  | L'image Docker des trois frontends                     |
+| [INFRA-05b](./infra.md#écarts-assumés-avec-le-ticket-infra-05b)  | La pile compose complète                               |
+| [INFRA-06](./infra.md#écarts-assumés-avec-le-ticket-infra-06)    | Le Makefile de la racine                               |
+| [INFRA-07](./infra.md#écarts-assumés-avec-le-ticket-infra-07)    | Mailpit, le SMTP de développement                      |
+| [BACK-02](./back.md#écarts-assumés-avec-le-ticket-back-02)       | L'outillage qualité Python (Ruff, Mypy)                |
+| [BACK-03](./back.md#écarts-assumés-avec-le-ticket-back-03)       | La configuration validée au démarrage                  |
+| [BACK-04](./back.md#écarts-assumés-avec-le-ticket-back-04)       | Le socle hexagonal et le module pilote                 |
+| [BACK-04b](./back.md#écarts-assumés-avec-le-ticket-back-04b)     | Les contrats d'architecture Import Linter              |
+| [BACK-05](./back.md#écarts-assumés-avec-le-ticket-back-05)       | Le socle SQLAlchemy et le pool                         |
+| [BACK-06a](./back.md#écarts-assumés-avec-le-ticket-back-06a)     | L'unité de travail et le dépôt générique               |
+| [BACK-07](./back.md#écarts-assumés-avec-le-ticket-back-07)       | Alembic et la première migration                       |
+| [BACK-08](./back.md#écarts-assumés-avec-le-ticket-back-08)       | La sonde de santé et les métadonnées OpenAPI           |
+| [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)       | Le port de stockage objet                              |
+| [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)       | Le port de cache Redis                                 |
+| [BACK-15](./back.md#écarts-assumés-avec-le-ticket-back-15)       | Le broker TaskIQ et la tâche de démonstration          |
+| [SHARED-01](./shared.md#écarts-assumés-avec-le-ticket-shared-01) | La bibliothèque @repo/ui                               |
+| [SHARED-02](./shared.md#écarts-assumés-avec-le-ticket-shared-02) | Les configurations partagées                           |
+| [FRONT-01](./front.md#écarts-assumés-avec-le-ticket-front-01)    | L'application des professionnels                       |
+| [FRONT-02](./front.md#écarts-assumés-avec-le-ticket-front-02)    | L'application des particuliers                         |
+| [FRONT-03](./front.md#écarts-assumés-avec-le-ticket-front-03)    | Le back-office d'administration                        |
+| [DOC-01](./doc.md#écarts-assumés-avec-le-ticket-doc-01)          | Le site de documentation Docusaurus                    |
+| [DOC-02b](./doc.md#écarts-assumés-avec-le-ticket-doc-02b)        | Le registre des ADR                                    |
 
-Les familles SHARED et FRONT — et les tickets SETUP restants — rejoindront ce registre avec la
-migration du README restant.
+Le registre est complet : chaque ticket livré avec un écart y a son tableau, et les prochains
+ajouteront le leur dans la PR qui les livre.

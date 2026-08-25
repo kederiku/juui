@@ -32,7 +32,7 @@ Deux cibles réécrivent le code : `make format` (`ruff format .`) et `make lint
 Ces deux-là s'appliquent aussi **toutes seules au moment du commit** : le hook de
 pre-commit du monorepo (SETUP-04) passe chaque fichier `.py` indexé par
 `ruff check --fix` puis `ruff format`, et interrompt le commit sur ce qui reste.
-Voir [Hooks de pre-commit](https://github.com/kederiku/juui#hooks-de-pre-commit). Le typage et
+Voir [Hooks de pre-commit](../getting-started/conventions-du-depot.md#hooks-de-pre-commit). Le typage et
 les contrats d'architecture, eux, n'entrent pas dans le hook : lint-staged passe
 des **fichiers**, quand Mypy et Import Linter raisonnent sur le **projet
 entier**. Ils restent à lancer à la main, et la CI les vérifie.
