@@ -265,11 +265,11 @@ warn_untyped_fields = true
 # ---------------------------------------------------------------------------
 # Garde-fous d'architecture (BACK-04b)
 # ---------------------------------------------------------------------------
-# BACK-04 a pose les regles ; elles n'existaient que dans les docstrings, le
-# README et quatre sondes `grep` qu'il fallait penser a lancer. Import Linter
-# les rend MECANIQUES : `lint-imports` lit le graphe d'imports reel du paquet
-# `app` et refuse ce qui ne respecte pas les contrats ci-dessous. Une violation
-# echoue donc en CI, elle ne se decouvre plus six mois plus tard en revue.
+# BACK-04 a pose les regles ; les docstrings et le README les enoncent, et
+# Import Linter les rend MECANIQUES : `lint-imports` lit le graphe d'imports
+# reel du paquet `app` et refuse ce qui ne respecte pas les contrats
+# ci-dessous. Une violation echoue donc en CI, elle ne se decouvre plus six
+# mois plus tard en revue.
 #
 # Se lance par `make imports`, et par `make lint` qui l'enchaine apres Ruff.
 #
