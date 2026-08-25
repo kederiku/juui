@@ -55,7 +55,8 @@ migrateurs, et l'autogénération est un brouillon qui se relit.** Trois volets 
 
 3. **Relecture obligatoire.** Une migration autogénérée ne se committe qu'après relecture —
    ordre des colonnes, noms passés par `op.f()`, `server_default`, `downgrade` symétrique,
-   aucune opération parasite ; la checklist vit dans le README du backend. `alembic check`
+   aucune opération parasite ; la checklist vit sur la page
+   [Migrations](../backend/migrations.md). `alembic check`
    (`make migrate-check`) garde la synchronisation modèles/migrations et entrera en CI avec
    QA-01.
 
@@ -112,7 +113,7 @@ avec QA-01.
 - `backend/api/alembic/env.py` — l'`env.py` : `Settings`, `check_schema`, verrou consultatif
   et refus du mode hors ligne, chaque arbitrage commenté.
 - `backend/api/alembic.ini` — la mécanique de l'outil, et aucune URL.
-- `backend/api/README.md`, section « Migrations » — le cycle, la checklist de relecture et les
+- [Migrations](../backend/migrations.md) — le cycle, la checklist de relecture et les
   vérifications reproductibles.
 - `docker/api/entrypoint.sh` — l'étape `alembic upgrade head` écrite d'avance par INFRA-04,
   activée par la présence d'`alembic.ini`, et l'arbitrage de la course consigné sur place.
