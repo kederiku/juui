@@ -81,6 +81,14 @@ documentation/build/
 **/.env
 **/.env.*
 
+# --- Orchestration du poste (INFRA-06) ---
+# Le Makefile de la racine et ses scripts pilotent Docker DEPUIS le poste :
+# rien dans un build ne les lit. Les exclure evite surtout que leur
+# modification invalide le `COPY . .` de l'etage `deps` des frontends, en
+# amont du `pnpm install` -- soit une reconstruction complete des trois images.
+Makefile
+scripts/
+
 # --- Caches d'outillage ---
 .ruff_cache/
 .mypy_cache/
