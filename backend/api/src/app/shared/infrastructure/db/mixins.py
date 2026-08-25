@@ -11,13 +11,13 @@ etrangere comprise. Il reste indispensable pour `__tablename__`,
 `relationship()`, et pour tout objet de schema qu'on ne peut pas rattacher a
 deux tables a la fois.
 
-L'ORDRE DES COLONNES SE FIGE AVEC LA PREMIERE MIGRATION
+L'ORDRE DES COLONNES EST FIGE DEPUIS LA PREMIERE MIGRATION
 `sort_order` n'est pas decoratif. Sans lui, les colonnes heritees se rangent
 avant ou apres celles du modele selon l'ordre de resolution des classes, et le
 resultat se lit mal dans une description de table comme en revue. Les valeurs retenues
 donnent partout la meme silhouette : identite, tenance, colonnes propres au
-modele, horodatage. Aucune migration n'existe encore (BACK-07), c'est donc
-gratuit aujourd'hui et couteux demain.
+modele, horodatage. La premiere migration (BACK-07) a grave cet ordre : le
+changer coute desormais une migration.
 """
 
 from datetime import datetime
@@ -96,7 +96,8 @@ class TimestampMixin:
     declenchera donc pas. `server_onupdate` ne reglerait rien : il est purement
     informatif et n'emet aucun DDL. Le jour ou `updated_at` deviendra porteur
     pour une synchronisation ou un ETag, il faudra un declencheur `BEFORE
-    UPDATE`, et sa place sera dans une migration (BACK-07), pas ici.
+    UPDATE`, et sa place sera dans une migration dediee, pas ici -- BACK-07 a
+    livre l'outillage sans ce declencheur, report assume dans ses ecarts.
     """
 
     created_at: Mapped[datetime] = mapped_column(

@@ -53,6 +53,7 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0009-unite-de-travail-par-module',
           label: 'Unité de travail par module',
         },
+        { type: 'doc', id: 'adr/0010-migrations-alembic', label: 'Migrations (Alembic)' },
       ],
     },
   ],

@@ -107,9 +107,9 @@ def check_schema(metadata: MetaData) -> None:
     autogeneration, indefiniment. Le symptome se lit alors comme un defaut
     d'Alembic, ce qu'il n'est pas.
 
-    Appelee par le `lifespan` (BACK-05) et destinee a l'etre aussi par l'`env.py`
-    d'Alembic (BACK-07) : un schema qui echoue ici doit empecher le demarrage ET
-    la generation d'une migration.
+    Appelee par le `lifespan` (BACK-05) et par l'`env.py` d'Alembic (BACK-07) :
+    un schema qui echoue ici empeche le demarrage ET la generation d'une
+    migration.
 
     Args:
         metadata: le registre a controler, en pratique `Base.metadata`.
