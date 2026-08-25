@@ -48,8 +48,11 @@ dependencies = [
     # --- Infrastructure ---
     "redis~=8.1",
     "taskiq~=0.12.5",
-    # Le broker Redis de TaskIQ (taskiq-redis) viendra avec BACK-15 : ici on ne
-    # declare que le coeur, qui n'impose aucun broker.
+    # Le broker retenu (BACK-15) est RedisStreamBroker : le seul broker Redis
+    # de TaskIQ qui ACQUITTE les messages -- un worker tue en pleine execution
+    # ne perd pas la tache, le stream la represente. Sa borne `redis>=8.0,<9`
+    # est satisfaite par le `redis~=8.1` ci-dessus.
+    "taskiq-redis~=1.2.3",
     "boto3~=1.43",
 ]
 
@@ -367,6 +370,9 @@ forbidden_modules = [
     "alembic",
     "jwt",
     "taskiq",
+    # Application de la regle ci-dessus, dans la meme pull request que la
+    # dependance : le broker (BACK-15) importe `taskiq_redis` par son nom.
+    "taskiq_redis",
     "uvicorn",
     # Client HTTP du groupe dev, qui deviendrait applicatif si un adaptateur
     # sortant en avait besoin. Interdit d'avance : appeler le reseau depuis le

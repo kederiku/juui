@@ -5,16 +5,16 @@ description: Les traitements longs sortent des requêtes HTTP vers un worker Tas
 
 # ADR-0008 — TaskIQ exécute les tâches de fond
 
-| Statut      | Date       | Tickets                              |
-| ----------- | ---------- | ------------------------------------ |
-| **Accepté** | 2026-08-25 | BACK-15 (à venir), BACK-22 (à venir) |
+| Statut      | Date       | Tickets                    |
+| ----------- | ---------- | -------------------------- |
+| **Accepté** | 2026-08-25 | BACK-15, BACK-22 (à venir) |
 
 ## Contexte
 
-Décision portée par BACK-15, dont l'application est à venir — mais elle est prise, et le dépôt en
-porte les traces : la dépendance `taskiq` est déclarée dans `pyproject.toml` (le cœur seul, le
-broker viendra avec le ticket), le service `worker` existe dans la pile Docker Compose, et
-`taskiq` figure dans la liste des paquets interdits au domaine.
+Décision portée par BACK-15, qui l'a depuis appliquée : le broker, le cycle de vie du worker et
+la tâche de démonstration vivent dans `backend/api/src/app/shared/infrastructure/tasks/`, le
+service `worker` de la pile Docker Compose consomme la file, et `taskiq` comme `taskiq_redis`
+figurent dans la liste des paquets interdits au domaine.
 
 Les traitements longs — envoi d'e-mails, génération de documents, notifications — ne doivent
 jamais bloquer une requête HTTP. Or toute la pile est **async-native** : FastAPI, SQLAlchemy en
@@ -76,8 +76,16 @@ un mécanisme qui propagerait le contexte à la place du développeur.
 
 ## Références
 
-- `backend/api/pyproject.toml` — la dépendance `taskiq` et son commentaire, la liste interdite au
-  domaine.
-- `backend/api/src/app/shared/infrastructure/tenancy.py` — l'erreur de contexte manquant, qui
-  nomme déjà le cas de la tâche de fond.
-- `docker/docker-compose.yml` — le service `worker`, déclaré en attendant BACK-15.
+- `backend/api/src/app/shared/infrastructure/tasks/broker.py` — le broker `RedisStreamBroker`
+  (base 1) et le backend de résultats, au chemin que la CLI du worker fige.
+- `backend/api/src/app/shared/infrastructure/tasks/middlewares.py` — la politique de reprise
+  assemblée explicitement : tentatives, repli exponentiel, file de rejets.
+- `backend/api/src/app/shared/infrastructure/tasks/demo.py` — le patron de référence :
+  identifiants sérialisables, `group_id` en argument reposé par `use_group`, idempotence.
+- `backend/api/pyproject.toml` — les dépendances `taskiq` et `taskiq-redis`, la liste interdite
+  au domaine.
+- `backend/api/src/app/shared/infrastructure/tenancy.py` — l'erreur de contexte manquant, que la
+  tâche de fond lancée sans `group_id` déclenche.
+- `docker/docker-compose.yml` — le service `worker`, qui exécute la commande de BACK-15.
+- `backend/api/README.md`, section « Tâches de fond » — les règles d'écriture d'une tâche et les
+  sondes de bout en bout.
