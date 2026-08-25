@@ -20,6 +20,8 @@ from typing import Final
 
 from fastapi import APIRouter
 
+from app.shared.infrastructure.api.schemas.error import ErrorResponse
+
 # Prefixe de version. Une constante exportee et non un litteral repete : les
 # messages, la documentation et les tests de BACK-12 doivent parler du meme nom.
 API_V1_PREFIX: Final = "/api/v1"
@@ -35,7 +37,20 @@ def build_api_router(module_routers: Sequence[APIRouter]) -> APIRouter:
     Returns:
         Le routeur unique, prefixe `/api/v1`, a monter sur l'application.
     """
-    api_router = APIRouter(prefix=API_V1_PREFIX)
+    # Le 422 se declare ICI, une fois pour toutes les routes v1 : FastAPI ne
+    # genere son `HTTPValidationError` automatique que si aucun 422 n'est deja
+    # declare -- cette ligne documente donc le format REEL (BACK-09) partout,
+    # y compris sur les routes futures. Chaque route declarera elle-meme ses
+    # statuts METIER (404, 409...) : eux dependent de ce qu'elle fait.
+    api_router = APIRouter(
+        prefix=API_V1_PREFIX,
+        responses={
+            422: {
+                "model": ErrorResponse,
+                "description": "La requete ne respecte pas le schema attendu.",
+            }
+        },
+    )
     for module_router in module_routers:
         api_router.include_router(module_router)
     return api_router

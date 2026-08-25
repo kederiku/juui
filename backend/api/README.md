@@ -82,6 +82,7 @@ foi.
 | Le port S3/MinIO et les URLs pré-signées            | [Stockage objet](https://kederiku.github.io/juui/backend/stockage-objet)                   |
 | TaskIQ : broker, worker, politique de reprise       | [Tâches de fond](https://kederiku.github.io/juui/backend/taches-de-fond)                   |
 | Le routeur `/api/v1` et les sondes                  | [Surface HTTP](https://kederiku.github.io/juui/backend/surface-http)                       |
+| La hiérarchie d'erreurs et le format unique         | [Erreurs](https://kederiku.github.io/juui/backend/erreurs)                                 |
 | Les dépendances et la version d'`uv`                | [Dépendances](https://kederiku.github.io/juui/backend/dependances)                         |
 | Ruff, Mypy et Import Linter                         | [Qualité et typage](https://kederiku.github.io/juui/backend/qualite-et-typage)             |
 | Les écarts entre tickets BACK et livrables          | [Écarts assumés — tickets BACK](https://kederiku.github.io/juui/ecarts/back)               |
@@ -91,6 +92,5 @@ foi.
 | Sujet                                                                                                 | Ticket   |
 | ----------------------------------------------------------------------------------------------------- | -------- |
 | Doublures en mémoire (fakes)                                                                          | BACK-06c |
-| Traduction des erreurs métier en HTTP                                                                 | BACK-09  |
 | Harnais de tests complet (BACK-06b a ouvert `tests/` avec la suite `tenant_isolation` et `make test`) | BACK-12  |
 | Pipeline CI complet du backend                                                                        | QA-01    |

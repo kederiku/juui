@@ -1,0 +1,342 @@
+"""Tests de la traduction des erreurs en HTTP (BACK-09).
+
+Sans base de donnees : la matrice statut/format se prouve sur une application
+minimale -- `FastAPI()` nue, `register_error_handlers`, routes jetables qui
+levent chaque exception -- et le cablage reel se prouve sur `create_app()`
+(jamais l'instance module `app`, regle du depot). `ASGITransport` ne declenche
+pas le lifespan : l'application reelle se teste donc sans PostgreSQL, Redis ni
+S3.
+
+`raise_app_exceptions=False` sur le transport est OBLIGATOIRE pour les tests
+du 500 : `ServerErrorMiddleware` envoie la reponse du handler PUIS re-leve
+l'exception, et sans ce drapeau elle traverserait le client de test.
+"""
+
+import logging
+
+import pytest
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from httpx import ASGITransport, AsyncClient
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.correlation import use_request_id
+from app.main import create_app
+from app.shared.domain.exceptions import (
+    AlreadyExistsError,
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
+from app.shared.domain.ports.file_storage import FileStorageUnavailableError
+from app.shared.infrastructure.api.error_handlers import register_error_handlers
+from app.shared.infrastructure.tenancy import MissingTenantContextError
+
+_INTERNAL_DETAIL = "detail-interne-10.0.0.5"
+
+_DELIBERATE_BODY = {"status": "unready", "components": {"postgres": "unreachable", "redis": "ok"}}
+
+
+class _ProbeNotFoundError(NotFoundError):
+    """Absence de sonde, reparentee comme le ferait un module."""
+
+    code = "probe.note.not_found"
+
+
+class _ProbeAlreadyExistsError(AlreadyExistsError):
+    """Doublon de sonde."""
+
+    code = "probe.note.already_exists"
+
+
+class _ProbeConflictError(ConflictError):
+    """Conflit d'etat de sonde."""
+
+    code = "probe.note.conflict"
+
+
+class _ProbeValidationError(ValidationError):
+    """Valeur refusee par une regle de sonde."""
+
+    code = "probe.note.invalid"
+
+
+class _ProbePermissionDeniedError(PermissionDeniedError):
+    """Refus de droit de sonde."""
+
+    code = "probe.note.forbidden"
+
+
+class _ProbePayload(BaseModel):
+    """Corps de sonde : un champ contraint et aucun champ inconnu tolere."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    count: int = Field(gt=0)
+
+
+def _build_app() -> FastAPI:
+    """Construit l'application minimale : handlers enregistres, routes jetables."""
+    application = FastAPI()
+    register_error_handlers(application)
+
+    @application.get("/raise/not-found")
+    async def raise_not_found() -> None:
+        raise _ProbeNotFoundError("Aucune note de sonde ne porte cet identifiant.")
+
+    @application.get("/raise/already-exists")
+    async def raise_already_exists() -> None:
+        raise _ProbeAlreadyExistsError("Une note de sonde identique existe deja.")
+
+    @application.get("/raise/conflict")
+    async def raise_conflict() -> None:
+        raise _ProbeConflictError("La note de sonde n'est pas dans le bon etat.")
+
+    @application.get("/raise/validation")
+    async def raise_validation() -> None:
+        raise _ProbeValidationError("La valeur de sonde est refusee.")
+
+    @application.get("/raise/permission")
+    async def raise_permission() -> None:
+        raise _ProbePermissionDeniedError("La sonde n'a pas ce droit.")
+
+    @application.get("/raise/untyped")
+    async def raise_untyped() -> None:
+        raise DomainError("Refus metier sans categorie.")
+
+    @application.get("/raise/unexpected")
+    async def raise_unexpected() -> None:
+        raise MissingTenantContextError(_INTERNAL_DETAIL)
+
+    @application.get("/raise/storage-unavailable")
+    async def raise_storage_unavailable() -> None:
+        raise FileStorageUnavailableError("Le stockage objet ne repond pas.")
+
+    @application.post("/probe/payload")
+    async def echo_payload(payload: _ProbePayload) -> dict[str, int]:
+        return {"count": payload.count}
+
+    @application.get("/probe/int/{item_id}")
+    async def probe_int(item_id: int) -> dict[str, int]:
+        return {"item_id": item_id}
+
+    @application.get("/deliberate-503")
+    async def deliberate_503() -> JSONResponse:
+        return JSONResponse(status_code=503, content=_DELIBERATE_BODY)
+
+    return application
+
+
+def _client(application: FastAPI) -> AsyncClient:
+    """Client httpx sur transport ASGI, sans lifespan, 500 non re-leves."""
+    return AsyncClient(
+        transport=ASGITransport(app=application, raise_app_exceptions=False),
+        base_url="http://test",
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_status", "expected_code"),
+    [
+        ("/raise/not-found", 404, "probe.note.not_found"),
+        ("/raise/already-exists", 409, "probe.note.already_exists"),
+        ("/raise/conflict", 409, "probe.note.conflict"),
+        ("/raise/validation", 422, "probe.note.invalid"),
+        ("/raise/permission", 403, "probe.note.forbidden"),
+        ("/raise/untyped", 400, "shared.domain.error"),
+    ],
+)
+async def test_each_typed_error_maps_to_its_status(
+    path: str, expected_status: int, expected_code: str
+) -> None:
+    async with _client(_build_app()) as client:
+        response = await client.get(path)
+    assert response.status_code == expected_status
+    assert response.headers["content-type"].startswith("application/json")
+    body = response.json()
+    assert body["code"] == expected_code
+    assert body["message"]
+    assert body["details"] is None
+
+
+async def test_all_error_responses_share_the_same_shape() -> None:
+    """Le critere « toutes les erreurs partagent le meme format », en un test."""
+    async with _client(_build_app()) as client:
+        responses = [
+            await client.get("/raise/not-found"),
+            await client.get("/raise/untyped"),
+            await client.post("/probe/payload", json={"count": 0}),
+            await client.get("/raise/unexpected"),
+            await client.get("/route/inconnue"),
+            await client.post("/raise/not-found"),
+        ]
+    for response in responses:
+        assert response.status_code >= 400
+        body = response.json()
+        assert set(body) == {"code", "message", "details", "request_id"}, body
+
+
+async def test_request_id_field_is_null_without_correlation() -> None:
+    """Etat BACK-09 : le champ est present et vaut null, l'intergiciel est BACK-11."""
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/not-found")
+    assert response.json()["request_id"] is None
+
+
+async def test_request_id_reflects_the_correlation_context() -> None:
+    """La plomberie de correlation est prete : posee, elle sort dans la reponse."""
+    async with _client(_build_app()) as client:
+        with use_request_id("req-test-0001"):
+            response = await client.get("/raise/not-found")
+    assert response.json()["request_id"] == "req-test-0001"
+
+
+async def test_pydantic_extra_field_is_reformatted() -> None:
+    async with _client(_build_app()) as client:
+        response = await client.post("/probe/payload", json={"count": 1, "intrus": True})
+    assert response.status_code == 422
+    body = response.json()
+    assert body["code"] == "http.request.validation_error"
+    assert "detail" not in body
+    errors = body["details"]["errors"]
+    assert any(error["type"] == "extra_forbidden" for error in errors)
+    assert all(set(error) == {"loc", "msg", "type"} for error in errors)
+
+
+async def test_pydantic_constraint_error_is_reformatted() -> None:
+    """Le `ctx` non serialisable des erreurs de contrainte ne fait pas exploser le handler."""
+    async with _client(_build_app()) as client:
+        response = await client.post("/probe/payload", json={"count": 0})
+    assert response.status_code == 422
+    errors = response.json()["details"]["errors"]
+    assert any(error["type"] == "greater_than" for error in errors)
+
+
+async def test_malformed_json_body_is_reformatted() -> None:
+    async with _client(_build_app()) as client:
+        response = await client.post(
+            "/probe/payload",
+            content=b"pas du json",
+            headers={"content-type": "application/json"},
+        )
+    assert response.status_code == 422
+    assert response.json()["code"] == "http.request.validation_error"
+
+
+async def test_path_param_type_error_is_reformatted() -> None:
+    async with _client(_build_app()) as client:
+        response = await client.get("/probe/int/abc")
+    assert response.status_code == 422
+    assert response.json()["code"] == "http.request.validation_error"
+
+
+async def test_unexpected_exception_returns_a_generic_500() -> None:
+    """L'assertion centrale du 500 : aucune information interne ne sort."""
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/unexpected")
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == "http.server.internal_error"
+    assert body["message"] == "Une erreur interne est survenue."
+    assert body["details"] is None
+    assert _INTERNAL_DETAIL not in response.text
+    assert "MissingTenantContextError" not in response.text
+
+
+async def test_unexpected_exception_is_logged_with_stack(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """La double face du 500 : le detail part au journal, jamais dans le corps."""
+    logger_name = "app.shared.infrastructure.api.error_handlers"
+    with caplog.at_level(logging.ERROR, logger=logger_name):
+        async with _client(_build_app()) as client:
+            response = await client.get("/raise/unexpected")
+    assert response.status_code == 500
+    record = next(r for r in caplog.records if r.exc_info is not None)
+    assert isinstance(record.exc_info[1], MissingTenantContextError)
+    assert _INTERNAL_DETAIL in str(record.exc_info[1])
+
+
+async def test_storage_unavailability_follows_the_generic_500_path() -> None:
+    """Une panne du stockage est technique : re-levee vers le 500, jamais un 4xx."""
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/storage-unavailable")
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == "http.server.internal_error"
+    assert "stockage" not in response.text
+
+
+async def test_http_exceptions_share_the_format() -> None:
+    """404 de routage et 405 sortent au format unique, plus jamais en `{"detail"}`."""
+    async with _client(_build_app()) as client:
+        not_found = await client.get("/route/inconnue")
+        method_not_allowed = await client.post("/raise/not-found")
+    assert not_found.status_code == 404
+    assert not_found.json()["code"] == "http.request.not_found"
+    assert "detail" not in not_found.json()
+    assert method_not_allowed.status_code == 405
+    assert method_not_allowed.json()["code"] == "http.request.method_not_allowed"
+
+
+async def test_deliberate_error_status_body_is_untouched() -> None:
+    """Un corps pose avec un statut d'erreur (le modele de /health/ready) ne bouge pas.
+
+    Les handlers s'enregistrent par CLASSE d'exception, jamais par code de
+    statut : une reponse construite sans exception traverse intacte.
+    """
+    async with _client(_build_app()) as client:
+        response = await client.get("/deliberate-503")
+    assert response.status_code == 503
+    assert response.json() == _DELIBERATE_BODY
+
+
+async def test_create_app_registers_the_handlers() -> None:
+    """LE test qui prouve la prod : `create_app()` sait traduire un refus metier."""
+    application = create_app()
+
+    @application.get("/probe/back-09")
+    async def raise_probe() -> None:
+        raise _ProbeNotFoundError("Aucune note de sonde ne porte cet identifiant.")
+
+    async with _client(application) as client:
+        response = await client.get("/probe/back-09")
+    assert response.status_code == 404
+    body = response.json()
+    assert body["code"] == "probe.note.not_found"
+    assert set(body) == {"code", "message", "details", "request_id"}
+
+
+async def test_create_app_unknown_route_shares_the_format() -> None:
+    async with _client(create_app()) as client:
+        response = await client.get("/api/v1/inexistant")
+    assert response.status_code == 404
+    assert response.json()["code"] == "http.request.not_found"
+
+
+async def test_create_app_health_live_is_untouched() -> None:
+    """Temoin du nominal : les handlers ne touchent pas aux reponses saines."""
+    async with _client(create_app()) as client:
+        response = await client.get("/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "alive"}
+
+
+async def test_create_app_ready_without_lifespan_does_not_leak() -> None:
+    """Une erreur levee en resolution de dependance passe aussi par le filet."""
+    async with _client(create_app()) as client:
+        response = await client.get("/health/ready")
+    assert response.status_code == 500
+    body = response.json()
+    assert body["code"] == "http.server.internal_error"
+    assert body["message"] == "Une erreur interne est survenue."
+    assert "lifespan" not in response.text
+
+
+async def test_openapi_schema_still_serves() -> None:
+    async with _client(create_app()) as client:
+        response = await client.get("/openapi.json")
+    assert response.status_code == 200
+    assert response.json()["info"]["title"] == "Juui API"

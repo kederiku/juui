@@ -29,7 +29,7 @@ backend/api/
     │   └── correlation.py  contextvar de l'identifiant de requête (BACK-15)
     ├── shared/             noyau partagé — pas un module métier
     │   ├── domain/
-    │   │   ├── exceptions.py   `DomainError`, racine des erreurs métier
+    │   │   ├── exceptions.py   hiérarchie des erreurs métier, codes namespacés (BACK-09)
     │   │   └── ports/          ports techniques : cache, stockage, transaction, jetons
     │   │       ├── cache.py        port `Cache` et décorateur `@cached` (BACK-14)
     │   │       ├── file_storage.py port `FileStorage` et `UploadPolicy` (BACK-13)
@@ -55,9 +55,11 @@ backend/api/
     │       │   ├── lifecycle.py    ressources du worker (`WORKER_STARTUP`)
     │       │   ├── discovery.py    import des tâches déclarées par les modules
     │       │   └── demo.py         patron de référence : `record_ping`
-    │       └── api/            socle HTTP (BACK-08 ; puis BACK-09, BACK-11)
+    │       └── api/            socle HTTP (BACK-08, BACK-09 ; puis BACK-11)
     │           ├── health.py       sondes `/health/live` et `/health/ready`
-    │           └── router.py       routeur racine `/api/v1`, assemblé par `main.py`
+    │           ├── router.py       routeur racine `/api/v1`, assemblé par `main.py`
+    │           ├── error_handlers.py traduction `DomainError` → HTTP, format unique (BACK-09)
+    │           └── schemas/error.py  corps d'erreur { code, message, details, request_id }
     └── modules/            contextes métier, étanches les uns aux autres
         ├── identity/       module pilote — le seul complet à ce stade
         │   ├── domain/         entities, policies, ports, exceptions

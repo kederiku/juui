@@ -75,8 +75,8 @@ class Repository[EntityT: Identified](Protocol):
             L'entite reconstituee.
 
         Raises:
-            DomainError: l'erreur d'absence du module concret, si aucune entite
-                ne porte cet identifiant.
+            NotFoundError: l'erreur d'absence du module concret, si aucune
+                entite ne porte cet identifiant.
         """
         ...
 
@@ -113,7 +113,7 @@ class Repository[EntityT: Identified](Protocol):
             entity: l'entite modifiee.
 
         Raises:
-            DomainError: l'erreur d'absence du module concret, si l'entite
+            NotFoundError: l'erreur d'absence du module concret, si l'entite
                 n'a jamais ete enregistree.
         """
         ...
@@ -131,7 +131,7 @@ class Repository[EntityT: Identified](Protocol):
             entity_id: l'identifiant de l'entite a supprimer.
 
         Raises:
-            DomainError: l'erreur d'absence du module concret, si aucune entite
-                ne porte cet identifiant.
+            NotFoundError: l'erreur d'absence du module concret, si aucune
+                entite ne porte cet identifiant.
         """
         ...

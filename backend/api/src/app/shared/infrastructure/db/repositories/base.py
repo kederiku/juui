@@ -14,12 +14,13 @@ BACK-04, est DERIVE ici : un modele neuf recoit l'identifiant, puis
 d'etre une consigne : `save` ne passe que par `_apply_to_model`, qui ne touche
 pas a `id` -- structurellement.
 
-L'ERREUR D'ABSENCE EST CELLE DU MODULE
+L'ERREUR D'ABSENCE EST CELLE DU MODULE, ET C'EST UNE `NotFoundError`
 `get`, `save` et `delete` levent l'exception declaree par le depot concret
 (`AccountNotFoundError` chez identity), avec son message a lui. Le generique ne
-fabrique aucune erreur `shared` : la hierarchie intermediaire des absences
-appartient a BACK-09, et une `EntityNotFoundError` posee ici entrerait en
-collision avec elle.
+fabrique aucune erreur `shared`, mais l'annotation `type[NotFoundError]` VERROUILLE
+la non-divulgation (BACK-06b, BACK-09) : un depot ne PEUT pas declarer une absence
+qui sorte autrement qu'en 404 -- une ressource d'un autre groupe repond donc
+mecaniquement comme une ressource inexistante, jamais en 403.
 
 DEUX COUTURES, ET AUCUNE TENANCE ICI
 `_select` est le point de depart de TOUTE requete SELECT -- `list` comme les
@@ -37,7 +38,7 @@ from uuid import UUID
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.shared.domain.exceptions import DomainError
+from app.shared.domain.exceptions import NotFoundError
 from app.shared.domain.ports.repository import Identified
 from app.shared.infrastructure.db.base import Base
 
@@ -56,7 +57,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
     """
 
     _model_type: type[ModelT]
-    _not_found_error: type[DomainError]
+    _not_found_error: type[NotFoundError]
     _not_found_message: str
 
     def __init__(self, session: AsyncSession) -> None:
@@ -126,7 +127,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         self._apply_to_model(entity, model)
         return model
 
-    def _not_found(self, entity_id: UUID) -> DomainError:
+    def _not_found(self, entity_id: UUID) -> NotFoundError:
         """Fabrique l'erreur d'absence du module, prete a etre levee.
 
         Args:
@@ -166,7 +167,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             La ligne chargee, suivie par la session.
 
         Raises:
-            DomainError: l'erreur d'absence declaree par le depot concret, si
+            NotFoundError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant.
         """
         model = await self._session.get(self._model_type, entity_id)
@@ -184,7 +185,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             L'entite reconstituee.
 
         Raises:
-            DomainError: l'erreur d'absence declaree par le depot concret, si
+            NotFoundError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant.
         """
         return self._to_entity(await self._load(entity_id))
@@ -230,7 +231,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             entity: l'entite modifiee.
 
         Raises:
-            DomainError: l'erreur d'absence declaree par le depot concret, si
+            NotFoundError: l'erreur d'absence declaree par le depot concret, si
                 l'entite n'a jamais ete enregistree.
         """
         model = await self._load(entity.id)
@@ -248,7 +249,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             entity_id: l'identifiant de l'entite a supprimer.
 
         Raises:
-            DomainError: l'erreur d'absence declaree par le depot concret, si
+            NotFoundError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant.
         """
         model = await self._load(entity_id)
