@@ -507,6 +507,11 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       REDIS_CACHE_DB: ${REDIS_CACHE_DB}
       REDIS_BROKER_DB: ${REDIS_BROKER_DB}
+      # Le `:-` pour la meme raison que les quatre reglages de pool ci-dessus :
+      # un .env anterieur a BACK-14 ne porte pas cette cle, et compose
+      # transmettrait alors une chaine vide -- que pydantic refuse comme entier,
+      # ce qui empecherait le conteneur de demarrer.
+      REDIS_CACHE_TTL_SECONDS: ${REDIS_CACHE_TTL_SECONDS:-300}
 
       # --- Stockage objet (BACK-13) ---
       # MINIO_ROOT_USER et MINIO_ROOT_PASSWORD sont passes en tant qu'ALIAS DE

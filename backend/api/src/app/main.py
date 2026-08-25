@@ -23,6 +23,7 @@ from fastapi import APIRouter, FastAPI
 
 from app.core import get_settings
 from app.modules.identity import router as identity_router
+from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, build_cache
 from app.shared.infrastructure.db.base import Base, check_schema
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
@@ -71,7 +72,27 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             Database(engine=engine, sessionmaker=build_sessionmaker(engine)),
         )
 
-        yield
+        # Troisieme ressource : le cache Redis (BACK-14), base 0. Comme le
+        # moteur, le construire n'ouvre aucune connexion.
+        cache = build_cache(settings)
+        try:
+            setattr(app.state, CACHE_STATE_KEY, cache)
+
+            # NE PAS transformer ceci en garde bloquante. L'asymetrie avec
+            # `verify_connectivity` est deliberee : sans base de donnees aucune
+            # route ne peut repondre juste, donc echouer vite est correct ; sans
+            # cache toutes repondent, plus lentement. Un demarrage qui echoue
+            # parce qu'un CACHE est absent rendrait par ailleurs inatteignable le
+            # critere « si Redis est arrete, l'application continue de repondre ».
+            # `ping()` sonde et journalise, elle ne leve jamais.
+            await cache.ping()
+
+            yield
+        finally:
+            # Fermeture en ordre INVERSE de l'ouverture : le cache avant le
+            # moteur. `aclose()` ferme le client et le pool, et n'echoue pas --
+            # une exception levee ici sauterait le `dispose()` ci-dessous.
+            await cache.aclose()
     finally:
         # `finally` et non simplement apres le `yield` : un moteur construit
         # avant un `SELECT 1` en echec doit etre libere lui aussi, sans quoi une

@@ -217,6 +217,16 @@ class RedisSettings(_SettingsSection):
     cache_db: int = Field(default=0, ge=0, le=15)
     broker_db: int = Field(default=1, ge=0, le=15)
 
+    # Duree de vie par defaut d'une entree de cache, en secondes. Toujours
+    # surchargeable appel par appel (BACK-14).
+    #
+    # `gt=0` et non `ge=0` : il n'existe volontairement AUCUNE valeur signifiant
+    # « pas d'expiration ». Le redis.conf d'INFRA-02 fait reposer sur BACK-14 la
+    # promesse qu'une future politique `volatile-lru` n'evincera jamais une cle
+    # de TaskIQ -- promesse qui tient a ce que chaque entree de cache, et elle
+    # seule, porte un TTL.
+    cache_ttl_seconds: int = Field(default=300, gt=0)
+
     # L'instance de developpement n'a pas de mot de passe. `None` et non chaine
     # vide : une chaine vide serait un mot de passe, pas une absence.
     password: SecretStr | None = None
