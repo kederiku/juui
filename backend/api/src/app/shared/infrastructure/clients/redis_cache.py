@@ -179,6 +179,7 @@ class RedisCache(Cache):
         self._target = target
         self._serializer: CacheSerializer = JsonSerializer() if serializer is None else serializer
         self._degraded = False
+        self._announced = False
 
     @property
     def target(self) -> str:
@@ -303,7 +304,7 @@ class RedisCache(Cache):
         return removed
 
     async def ping(self) -> bool:
-        """Sonde le serveur au demarrage, sans jamais empecher le demarrage.
+        """Sonde le serveur, sans jamais lever.
 
         Le pendant de `verify_connectivity` (BACK-05) et son contraire assume :
         celle-la leve, celle-ci journalise. Elle ouvre aussi la premiere
@@ -311,16 +312,24 @@ class RedisCache(Cache):
         c'est ce qui permet de VERIFIER que le pool naît et meurt avec le
         processus, au lieu de le lire dans le code.
 
+        Deux appelants depuis BACK-08 : le `lifespan` au demarrage, puis la
+        sonde de disponibilite `/health/ready`, PERIODIQUEMENT. D'ou l'INFO de
+        joignabilite emise au premier succes seulement : un sondage toutes les
+        dix secondes n'ecrira pas une ligne par appel, et la reprise apres une
+        panne est deja annoncee par `_recover`.
+
         Returns:
             Vrai si Redis a repondu au PING.
         """
         try:
             await self._client.ping()
         except _UNREACHABLE as error:
-            self._report("demarrage", error)
+            self._report("sonde", error)
             return False
         self._recover()
-        _LOGGER.info("Cache Redis joignable sur %s.", self._target)
+        if not self._announced:
+            self._announced = True
+            _LOGGER.info("Cache Redis joignable sur %s.", self._target)
         return True
 
     async def aclose(self) -> None:

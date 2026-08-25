@@ -11,9 +11,10 @@ du service qui ait le droit de connaitre plus d'un module a la fois. Chaque
 module publie son routeur, ce fichier les monte, et c'est tout -- les modules,
 eux, restent etanches les uns aux autres.
 
-L'application ne sert encore AUCUNE route : le routeur d'`identity` est monte
-mais vide, ses routes venant avec BACK-28 et BACK-29, et la sonde de sante avec
-BACK-08. `/docs` s'affiche donc vide, ce qui est attendu.
+L'application sert les sondes de sante (`/health/live`, `/health/ready`,
+BACK-08) ; les routes METIER, elles, vivront sous `/api/v1` -- le routeur
+d'`identity` y est monte mais reste vide, ses routes venant avec BACK-28 et
+BACK-29. `/docs` n'affiche donc que le groupe `health`, ce qui est attendu.
 """
 
 from collections.abc import AsyncIterator, Sequence
@@ -21,8 +22,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from app.core import get_settings
+from app.core import AppSettings, get_settings
 from app.modules.identity import router as identity_router
+from app.shared.infrastructure.api.health import router as health_router
+from app.shared.infrastructure.api.router import build_api_router
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, build_cache
 from app.shared.infrastructure.clients.s3_storage import STORAGE_STATE_KEY, build_file_storage
 from app.shared.infrastructure.db.base import Base, check_schema
@@ -139,7 +142,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 _MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
 
 
-def create_app() -> FastAPI:
+# Descriptions des etiquettes OpenAPI, dans l'ordre d'affichage de /docs.
+#
+# La cle `name` doit valoir EXACTEMENT le `tags=[...]` du routeur concerne :
+# une etiquette mal appariee produirait un groupe sans description ET un groupe
+# fantome. Orval (SHARED-03) decoupe ses clients par etiquette -- une par
+# module, plus `health`. Ajouter un module = une ligne ici, une ligne dans
+# `_MODULE_ROUTERS`.
+_OPENAPI_TAGS: Sequence[dict[str, str]] = (
+    {
+        "name": "health",
+        "description": "Sondes de vie et de disponibilite du service, hors /api/v1.",
+    },
+    {
+        "name": "identity",
+        "description": "Comptes et authentification : qui etes-vous, pouvez-vous le prouver.",
+    },
+)
+
+
+def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
     """Construit une instance neuve et independante de l'application.
 
     Passer par une factory plutot que de configurer un objet global est ce qui
@@ -147,17 +169,48 @@ def create_app() -> FastAPI:
     application, avec ses propres surcharges de dependances, sans heriter de
     l'etat laisse par le test precedent.
 
+    Args:
+        app_settings: reglages generaux employes A LA CONSTRUCTION -- fermeture
+            de /docs comprise. `None` les lit de l'environnement ; les tests de
+            BACK-12 passeront les leurs sans manipuler de variables.
+
     Returns:
-        L'application FastAPI, routeurs des modules deja montes.
+        L'application FastAPI, sondes et routeur v1 deja montes.
     """
+    # `AppSettings()` et non `get_settings()`, et la nuance compte : cette
+    # fonction s'execute a l'import du module (`app = create_app()`), qui doit
+    # rester importable sans configuration complete -- voir la docstring du
+    # lifespan. `AppSettings` n'a que des champs a defaut, sa construction
+    # n'exige rien ; `Settings` reclamerait POSTGRES_USER et consorts.
+    settings = AppSettings() if app_settings is None else app_settings
+
+    # En production la surface de documentation se ferme ENTIEREMENT : /docs et
+    # /redoc (le ticket), et aussi /openapi.json -- ecart assume au README. Le
+    # healthcheck du conteneur vise desormais /health/live et Orval (SHARED-03)
+    # genere depuis un poste de developpement : plus aucun consommateur
+    # legitime, et un plan complet de l'API servi sans authentification est de
+    # la reconnaissance offerte.
     application = FastAPI(
         title="Juui API",
         version="0.1.0",
+        description=(
+            "API du SaaS veterinaire Juui. Les routes metier vivent sous "
+            "`/api/v1` ; les sondes de sante sous `/health`, hors versionnage."
+        ),
+        # Nom et depot : aucune adresse de support n'existe encore, et en
+        # inventer une serait pire que ce vide -- a completer quand elle existera.
+        contact={"name": "Equipe Juui", "url": "https://github.com/kederiku/juui"},
+        openapi_tags=list(_OPENAPI_TAGS),
+        docs_url=None if settings.is_production else "/docs",
+        redoc_url=None if settings.is_production else "/redoc",
+        openapi_url=None if settings.is_production else "/openapi.json",
         lifespan=lifespan,
     )
 
-    for module_router in _MODULE_ROUTERS:
-        application.include_router(module_router)
+    # Les sondes se montent SUR l'application, hors du routeur v1 : leur URL
+    # est un contrat d'exploitation, pas un contrat d'API.
+    application.include_router(health_router)
+    application.include_router(build_api_router(_MODULE_ROUTERS))
 
     return application
 

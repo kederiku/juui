@@ -718,11 +718,12 @@ services:
         condition: service_completed_successfully
 
     healthcheck:
-      # SONDE PROVISOIRE. Le ticket vise `/health/live`, qui releve de BACK-08 et
-      # n'existe pas encore : la poser aujourd'hui laisserait le service
-      # indefiniment `unhealthy`, et bloquerait les `depends_on` d'INFRA-05b.
-      # `/openapi.json` repond 200 des a present et disparaitra rarement. A
-      # BASCULER SUR /health/live A BACK-08.
+      # `/health/live` (BACK-08) : la sonde de VIE, sans dependance externe --
+      # elle remplace le `/openapi.json` provisoire d'INFRA-04, desormais ferme
+      # en production. Surtout pas `/health/ready` ici : un conteneur declare
+      # `unhealthy` parce que PostgreSQL est tombe serait redemarre en boucle
+      # sans que cela repare quoi que ce soit -- et postgres comme redis portent
+      # deja leur propre sonde, que les `depends_on` ci-dessus consomment.
       #
       # En python plutot qu'en curl ou wget : l'image `python:3.14-slim` n'en
       # embarque aucun des deux, et en ajouter un contredirait le « runtime
@@ -737,7 +738,7 @@ services:
           'CMD',
           'python',
           '-c',
-          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)",
         ]
       interval: 10s
       timeout: 5s

@@ -60,9 +60,11 @@ uv run uvicorn app.main:app --reload
 La documentation interactive répond alors sur <http://localhost:8000/docs>, et
 le contrat OpenAPI sur <http://localhost:8000/openapi.json>.
 
-> L'API ne sert **aucune route** pour l'instant : `/docs` s'affiche donc vide.
-> C'est attendu — le routeur du module `identity` est bien monté (BACK-04), mais
-> ses routes relèvent de BACK-28 et BACK-29, et la sonde de santé de BACK-08.
+> L'API sert les [sondes de santé](#surface-http) (`/health/live`,
+> `/health/ready`, BACK-08) ; les routes **métier**, elles, restent à venir —
+> le routeur du module `identity` est bien monté sous `/api/v1` (BACK-04,
+> BACK-08), mais ses routes relèvent de BACK-28 et BACK-29. `/docs` n'affiche
+> donc que le groupe `health`, et c'est attendu.
 
 ## Structure
 
@@ -104,7 +106,9 @@ backend/api/
     │       │   ├── redis_cache.py  adaptateur Redis du port `Cache`
     │       │   ├── storage_keys.py convention de nommage des clés d'objets
     │       │   └── s3_storage.py   adaptateur S3 du port `FileStorage`
-    │       └── api/            socle HTTP : handlers d'erreur, intergiciels
+    │       └── api/            socle HTTP (BACK-08 ; puis BACK-09, BACK-11)
+    │           ├── health.py       sondes `/health/live` et `/health/ready`
+    │           └── router.py       routeur racine `/api/v1`, assemblé par `main.py`
     └── modules/            contextes métier, étanches les uns aux autres
         ├── identity/       module pilote — le seul complet à ce stade
         │   ├── domain/         entities, policies, ports, exceptions
@@ -124,14 +128,19 @@ pourquoi — est l'objet de la section [Architecture](#architecture).
 
 Le module d'assemblage, et rien d'autre : aucune logique métier n'y a sa place.
 
-- **`create_app()`** construit une instance neuve de l'application. Les tests
-  (BACK-12) en dépendront pour repartir d'une application propre à chaque cas.
+- **`create_app()`** construit une instance neuve de l'application — sondes de
+  santé et routeur v1 montés, [métadonnées OpenAPI](#surface-http) posées, et
+  documentation fermée quand `ENVIRONMENT=production`. Les tests (BACK-12) en
+  dépendront pour repartir d'une application propre à chaque cas.
 - **`app = create_app()`** est le point d'entrée ASGI, celui que désigne
   `uvicorn app.main:app`. Un serveur ASGI attend un objet, pas une fonction.
-- **`_MODULE_ROUTERS`** est la liste des routeurs montés. Un tuple plutôt
-  qu'une suite d'appels : la liste des contextes servis par l'API se lit d'un
-  coup d'œil, et chaque module reste maître de son préfixe. C'est le seul
-  endroit du service autorisé à connaître plusieurs modules à la fois.
+- **`_MODULE_ROUTERS`** est la liste des routeurs de modules, montés sous
+  `/api/v1` via `build_api_router` (BACK-08). Un tuple plutôt qu'une suite
+  d'appels : la liste des contextes servis par l'API se lit d'un coup d'œil, et
+  chaque module reste maître de son préfixe de ressource. C'est le seul endroit
+  du service autorisé à connaître plusieurs modules à la fois — raison pour
+  laquelle le routeur racine, qui vit dans `shared`, reçoit cette liste en
+  argument au lieu de l'importer.
 - **`lifespan`** est le point d'accroche des ressources de longue durée. Il pose
   la règle que toutes devront suivre : rien ne s'ouvre à l'import du module, tout
   passe par lui, et l'ordre de fermeture est l'inverse exact de l'ordre
@@ -440,13 +449,13 @@ gabarit ; ce README ne le recopie pas, pour éviter que les deux divergent.
 
 ### Les cinq sous-modèles
 
-| Sous-modèle        | Préfixe     | Ce qu'il porte                                    | Consommé par     |
-| ------------------ | ----------- | ------------------------------------------------- | ---------------- |
-| `AppSettings`      | _aucun_     | environnement, niveau de log, origines CORS       | BACK-08, BACK-11 |
-| `DatabaseSettings` | `POSTGRES_` | connexion PostgreSQL                              | BACK-05          |
-| `RedisSettings`    | `REDIS_`    | connexion Redis, bases de cache et de broker      | BACK-14, BACK-15 |
-| `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod | BACK-13          |
-| `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie       | BACK-10          |
+| Sous-modèle        | Préfixe     | Ce qu'il porte                                    | Consommé par                                 |
+| ------------------ | ----------- | ------------------------------------------------- | -------------------------------------------- |
+| `AppSettings`      | _aucun_     | environnement, niveau de log, origines CORS       | BACK-08 (environnement), BACK-11 (CORS, log) |
+| `DatabaseSettings` | `POSTGRES_` | connexion PostgreSQL                              | BACK-05                                      |
+| `RedisSettings`    | `REDIS_`    | connexion Redis, bases de cache et de broker      | BACK-14, BACK-15                             |
+| `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod | BACK-13                                      |
+| `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie       | BACK-10                                      |
 
 Un préfixe par sous-modèle plutôt qu'un délimiteur de nesting : `POSTGRES_USER` et
 `MINIO_ROOT_USER` sont imposés par les images Docker, et la traduction n'aurait servi à rien.
@@ -2396,6 +2405,158 @@ découvrir l'absence au premier téléversement.
 | URL pré-signée non ouvrable depuis le poste quand l'API tourne en conteneur | L'URL porte l'hôte de `endpoint_url`, soit `http://minio:9000`, résolvable depuis `app_network` seulement. Y remédier demanderait un **second** endpoint, public — ce que le ticket écarte en posant qu'un seul paramètre sépare MinIO d'Amazon. Sans conséquence tant qu'aucune route ne publie ces URLs ; nommé pour celui qui le fera.            |
 | Aucun test automatisé, mais six sondes documentées                          | `tests/` et la configuration de pytest appartiennent à BACK-12, qui nomme aussi le fichier de la portée. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05 et BACK-14. Les six sondes ci-dessus ont toutes été jouées avant livraison, l'expiration de l'URL comprise — `200` puis `403`.                                                      |
 
+## Surface HTTP
+
+La surface publique du service, posée par BACK-08 pour ses trois consommateurs **mécaniques** :
+le healthcheck du conteneur Docker, la CI, et Orval
+([ADR-0007](../../documentation/docs/adr/0007-client-api-genere-orval.md)), qui générera le
+client des frontends à partir du schéma OpenAPI (SHARED-03). Les conventions de routage sont
+consignées dans
+l'[ADR-0011](../../documentation/docs/adr/0011-routage-versionne-par-module.md) ; cette section
+dit comment elles se matérialisent ici.
+
+### Le routeur racine `/api/v1`
+
+Toutes les routes **métier** vivent sous `/api/v1`. Le préfixe de version se pose une fois, dans
+[`shared/infrastructure/api/router.py`](src/app/shared/infrastructure/api/router.py) — la
+**version** est un choix du service, le chemin de la **ressource** (`/auth`, …) reste celui du
+module, chacun maître de sa moitié de l'URL. Le routeur racine est une **fonction**
+(`build_api_router`) et non un routeur pré-assemblé : `shared` n'a pas le droit d'importer les
+modules (contrat d'Import Linter n° 5), c'est donc [`main.py`](src/app/main.py) qui possède la
+liste `_MODULE_ROUTERS` et la passe en argument.
+
+### Deux sondes, deux questions
+
+[`shared/infrastructure/api/health.py`](src/app/shared/infrastructure/api/health.py) répond à
+deux questions distinctes, et l'URL des deux vit **hors** de `/api/v1` : une sonde est un
+contrat d'exploitation — compose, orchestrateur, supervision — qui doit survivre à une v2 sans
+reconfiguration.
+
+- **`GET /health/live`** — « le processus répond-il ? ». Aucune dépendance externe : c'est la
+  sonde du conteneur, et une base arrêtée ne doit pas faire redémarrer l'API en boucle.
+- **`GET /health/ready`** — « le service peut-il servir ? ». PostgreSQL (le `SELECT 1` de
+  `verify_connectivity`, BACK-05) et Redis (PING, BACK-14) sont interrogés **en parallèle** ;
+  le premier composant défaillant vaut `503`, avec un corps qui le nomme :
+  `{"status":"unready","components":{"postgres":"ok","redis":"unreachable"}}`.
+
+Redis est **bloquant ici, et seulement ici** : les routes métier dégradent sans cache
+([l'asymétrie du service](#lasymétrie-du-service-a-trois-temps-pas-deux)), mais la sonde de
+disponibilité doit dire la vérité d'une panne — retirer l'instance du trafic n'est pas casser le
+service. Le stockage objet, lui, n'est **pas** sondé : aucune route n'en dépend (BACK-13), et
+ses opérations lèvent d'elles-mêmes.
+
+### Étiquettes, `operation_id` et le client généré
+
+L'étiquette OpenAPI vaut le **nom du module** — une par contexte métier, plus `health`. Orval
+découpe le client généré par étiquette (`tags-split`) : le découpage du code frontend coïncide
+ainsi avec la carte des modules, gratuitement. Chaque route porte un **`operation_id` explicite,
+égal au nom de sa fonction**, en snake_case verbe-objet (`check_liveness`, `check_readiness`) :
+Orval en dérive le nom des hooks, et l'égalité rend la convention vérifiable au grep — puis par
+un test de BACK-12.
+
+### Métadonnées OpenAPI et la production
+
+`create_app()` pose title, description, version, contact et les descriptions d'étiquettes
+(`_OPENAPI_TAGS`). Quand `ENVIRONMENT=production`, la surface de documentation se ferme
+**entièrement** : `/docs`, `/redoc` et `/openapi.json` répondent 404. La fermeture se décide à
+la **construction** de l'application, d'après `AppSettings` seul — voir les écarts ci-dessous.
+
+### Le périmètre de requête
+
+Le groupe actif voyage dans le **jeton** (claim `active_group_id`), la clinique active dans
+l'**en-tête** `X-Clinic-Id`, jamais l'inverse — et l'en-tête n'autorise rien. La convention, ses
+alternatives écartées et ce qu'elle coûte sont consignés dans
+l'[ADR-0012](../../documentation/docs/adr/0012-perimetre-de-requete.md) ; son application
+revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe).
+
+### Vérifier que la surface tient
+
+Cinq sondes. Les trois premières se jouent depuis la **racine du monorepo**, pile lancée ; les
+deux dernières depuis `backend/api`.
+
+**1. Les deux sondes répondent.**
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml up -d --build api
+curl -s http://localhost:8000/health/live
+# {"status":"alive"}
+curl -s http://localhost:8000/health/ready
+# {"status":"ready","components":{"postgres":"ok","redis":"ok"}}
+```
+
+**2. La panne se nomme.** Composant par composant, et le code passe à 503.
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml stop postgres
+curl -si http://localhost:8000/health/ready | head -1
+# HTTP/1.1 503 Service Unavailable
+curl -s http://localhost:8000/health/ready
+# {"status":"unready","components":{"postgres":"unreachable","redis":"ok"}}
+docker compose --project-directory . -f docker/docker-compose.yml start postgres
+
+docker compose --project-directory . -f docker/docker-compose.yml stop redis
+curl -s http://localhost:8000/health/ready
+# {"status":"unready","components":{"postgres":"ok","redis":"unreachable"}}
+docker compose --project-directory . -f docker/docker-compose.yml start redis
+```
+
+**3. Le conteneur se déclare sain** — sa sonde vise désormais `/health/live` (interval 10 s).
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml ps api
+# STATUS ... (healthy)
+```
+
+**4. La production ferme la documentation.** Le `JWT_SECRET_KEY` est nécessaire : la
+configuration refuse de partir en production avec la clé du gabarit
+([BACK-03](#configuration)) — et le `lifespan` exige toujours PostgreSQL, donc la pile reste
+lancée.
+
+```bash
+uv run uvicorn app.main:app --port 8001 &
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8001/docs          # 200
+kill %1
+
+ENVIRONMENT=production JWT_SECRET_KEY=$(openssl rand -hex 32) \
+  uv run uvicorn app.main:app --port 8001 &
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8001/docs          # 404
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8001/redoc         # 404
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8001/openapi.json  # 404
+kill %1
+```
+
+**5. Le schéma dit qui il est.** Métadonnées, étiquettes et `operation_id` — ce que verra Orval.
+
+```bash
+curl -s http://localhost:8000/openapi.json | uv run python -c "
+import json, sys
+spec = json.load(sys.stdin)
+info = spec['info']
+print(info['title'], info['version'], info.get('contact'))
+print([tag['name'] for tag in spec.get('tags', [])])
+for path, ops in spec['paths'].items():
+    for method, op in ops.items():
+        print(method.upper(), path, '->', op.get('operationId'), op.get('tags'))
+"
+# Juui API 0.1.0 {'name': 'Equipe Juui', 'url': 'https://github.com/kederiku/juui'}
+# ['health', 'identity']
+# GET /health/live -> check_liveness ['health']
+# GET /health/ready -> check_readiness ['health']
+```
+
+### Écarts assumés avec le ticket BACK-08
+
+| Écart                                                                | Raison                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sondes montées hors du routeur racine `/api/v1`                      | Le ticket parle d'« un routeur racine unique », mais l'URL d'une sonde est un contrat d'**exploitation** : la versionner casserait l'orchestration à chaque montée de version, et le healthcheck du compose — écrit par INFRA-04 à l'intention de BACK-08 — vise littéralement `/health/live`. La checklist du ticket réserve d'ailleurs `/api/v1` aux « routes métier ».   |
+| `/openapi.json` fermé en production, au-delà du ticket               | Le ticket ne nomme que `/docs` et `/redoc`. Mais plus aucun consommateur légitime ne reste : la sonde du conteneur vise `/health/live`, et Orval (SHARED-03) génère depuis un poste de développement. Un plan complet de l'API servi sans authentification est de la reconnaissance offerte.                                                                                |
+| `/health/ready` n'interroge pas le stockage objet                    | Le ticket nomme PostgreSQL et Redis, et c'est cohérent : aucune route ne dépend du bucket (BACK-13), et ses opérations **lèvent** — une panne S3 ne justifie pas de retirer du trafic un service qui n'en fait rien. Nommé dans la docstring de `health.py`, à rediscuter au premier module consommateur de fichiers.                                                       |
+| `create_app()` lit `AppSettings()` directement, pas `get_settings()` | `app = create_app()` s'exécute à l'**import**, qui doit rester possible sans `.env` complet — la règle posée par le `lifespan`. `AppSettings` n'a que des champs à défaut ; `Settings` réclamerait `POSTGRES_USER` et consorts. Corollaire : la fermeture de `/docs` se surcharge par `create_app(app_settings=...)`, pas par `dependency_overrides`.                       |
+| `redis_cache.py` (BACK-14) retouché                                  | `ping()` gagnait un second appelant **périodique** — la sonde de disponibilité — et son INFO de joignabilité partait à chaque succès : une ligne toutes les dix secondes après BACK-11. L'INFO ne part plus qu'au premier succès, la reprise après panne restant annoncée par `_recover`. Le libellé d'échec « demarrage » devient « sonde », les deux appelants confondus. |
+| `contact` réduit au nom et au dépôt                                  | Aucune adresse de support n'existe : en inventer une serait pire que ce vide. Le nom et l'URL du dépôt satisfont l'exigence de métadonnées sans mentir — à compléter quand une adresse réelle existera.                                                                                                                                                                     |
+| `docker-compose.yml` modifié, hors de la portée déclarée             | INFRA-04 y a laissé sa sonde provisoire avec un commentaire adressé nommément à ce ticket : « À BASCULER SUR /health/live À BACK-08 ». Même arbitrage qu'en BACK-13.                                                                                                                                                                                                        |
+| Aucun test automatisé, mais cinq sondes documentées                  | `tests/` et la configuration de pytest appartiennent à BACK-12 — auquel ce ticket lègue aussi un test tout désigné : chaque `APIRoute` porte un `operation_id` explicite égal au nom de sa fonction. Même arbitrage qu'en BACK-02, BACK-03, BACK-04, BACK-05, BACK-06a, BACK-07, BACK-13 et BACK-14. Les cinq sondes ci-dessus ont été jouées avant livraison.              |
+
 ## Dépendances
 
 Deux groupes, strictement séparés. Le build Docker d'INFRA-04 installera le
@@ -2671,7 +2832,6 @@ de code pressée n'auraient vu la couche clandestine ni la chaîne à deux sauts
 | Filtrage multi-tenant automatique     | BACK-06b |
 | Doublures en mémoire (fakes)          | BACK-06c |
 | Traduction des erreurs métier en HTTP | BACK-09  |
-| Sonde de santé et métadonnées OpenAPI | BACK-08  |
 | Suite de tests                        | BACK-12  |
 | Pipeline CI complet du backend        | QA-01    |
 
@@ -2682,6 +2842,8 @@ avec son dépôt générique le coiffe (BACK-06a) et le schéma est sous contrô
 version par les [migrations](#migrations) (BACK-07), quatre des cinq ports
 techniques du noyau partagé sont livrés — [cache](#cache) (BACK-14),
 [stockage objet](#stockage-objet) (BACK-13), unité de travail et dépôt
-générique (BACK-06a), `TokenService` restant à BACK-10a —, Ruff et Mypy sont configurés
-(BACK-02). Les dépendances de test, elles, restent **déclarées sans être
-configurées** : c'est volontaire, chaque ticket porte son propre outil.
+générique (BACK-06a), `TokenService` restant à BACK-10a —, la
+[surface HTTP](#surface-http) versionnée et ses sondes sont en place (BACK-08),
+Ruff et Mypy sont configurés (BACK-02). Les dépendances de test, elles, restent
+**déclarées sans être configurées** : c'est volontaire, chaque ticket porte son
+propre outil.
