@@ -36,46 +36,42 @@ tenance, Orval, TaskIQ… — sont consignés dans les
 [ADR](documentation/docs/adr/index.md), publiés sur le
 [site de documentation](https://kederiku.github.io/juui/adr).
 
-## Démarrage rapide
+## Documentation
 
-La pile entière démarre depuis INFRA-05b : l'API et son worker, les trois
-interfaces — professionnelle, grand public et back-office —, PostgreSQL avec sa
-console pgAdmin, Redis, le stockage objet MinIO et le serveur SMTP Mailpit. Le
-site de documentation (DOC-01) reste seul en dehors, faute d'être conteneurisé.
-Cette section décrit donc **deux parcours** — sur le poste, puis en conteneurs —
-et l'allocation de ports qu'ils partagent.
+Le détail du dépôt vit sur le [site de documentation](https://kederiku.github.io/juui/) —
+consultable en local avec `pnpm --filter documentation dev` sur <http://localhost:3004>. Ce
+README ne garde que l'entrée en matière et le démarrage express ; quand une information existe
+aux deux endroits, le site fait foi.
+
+| Sujet                                            | Page                                                                                                                                                                                                    |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Installer le poste — prérequis, chaînes d'outils | [Installation](https://kederiku.github.io/juui/getting-started/installation)                                                                                                                            |
+| Démarrer la pile — les deux parcours             | [Démarrage](https://kederiku.github.io/juui/getting-started/demarrage)                                                                                                                                  |
+| L'allocation des ports et les URLs               | [Ports et URLs des services](https://kederiku.github.io/juui/infrastructure/ports-et-services)                                                                                                          |
+| Les images Docker construites depuis le dépôt    | [Image de l'API](https://kederiku.github.io/juui/infrastructure/image-api), [Image des frontends](https://kederiku.github.io/juui/infrastructure/image-frontends)                                       |
+| Le mode développement — rechargement à chaud     | [Mode développement](https://kederiku.github.io/juui/infrastructure/mode-developpement)                                                                                                                 |
+| Vérifier les services de développement           | [MinIO](https://kederiku.github.io/juui/infrastructure/minio), [Mailpit](https://kederiku.github.io/juui/infrastructure/mailpit), [le worker](https://kederiku.github.io/juui/infrastructure#le-worker) |
+| Le Makefile et les scripts de la racine          | [Makefile et scripts](https://kederiku.github.io/juui/infrastructure/makefile-et-scripts)                                                                                                               |
+| Le site de documentation lui-même                | [Site de documentation](https://kederiku.github.io/juui/infrastructure/site-de-documentation)                                                                                                           |
+| Les décisions structurantes et leurs motifs      | [Décisions (ADR)](https://kederiku.github.io/juui/adr)                                                                                                                                                  |
+| Les écarts entre tickets et livrables            | [Écarts assumés](https://kederiku.github.io/juui/ecarts)                                                                                                                                                |
+
+## Démarrage rapide
 
 ### Prérequis
 
-Pour le parcours qui fonctionne aujourd'hui :
-
-- **Node 24 LTS** — la version de référence est déclarée dans [`.nvmrc`](.nvmrc) :
-  avec `nvm` ou `fnm`, `nvm use` suffit à s'y aligner.
+- **Node 24 LTS** — la version de référence est déclarée dans [`.nvmrc`](.nvmrc).
 - **pnpm** — rien à installer soi-même : le champ `packageManager` du
-  `package.json` racine épingle la version exacte, que pnpm récupère seul.
-- **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api`. Il
-  télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
-  La version attendue est déclarée par `required-version` dans
-  [`backend/api/pyproject.toml`](backend/api/pyproject.toml), et fait foi pour
-  le poste comme pour la CI et l'image Docker
-  ([ADR-0002](documentation/docs/adr/0002-uv-outillage-python.md)).
-  `brew upgrade uv` suffit à s'y aligner.
-
+  [`package.json`](package.json) racine épingle la version exacte.
+- **[`uv`](https://docs.astral.sh/uv/)** — uniquement pour `backend/api` ; la version attendue
+  est déclarée dans [`backend/api/pyproject.toml`](backend/api/pyproject.toml).
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
-  [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).
-  Requis depuis INFRA-01 : c'est lui qui fait tourner PostgreSQL et pgAdmin.
-  Depuis BACK-05, même un `uvicorn` lancé sur le poste en dépend : l'API ouvre
-  son pool de connexions au démarrage et refuse de partir si la base ne répond
-  pas. C'est bien `docker compose`, sous-commande du client, qui est attendue —
-  pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
+  [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima), avec la
+  sous-commande `docker compose` — pas l'ancien binaire `docker-compose`.
+- **`make`** — sur macOS, il vient des Command Line Tools : `xcode-select --install`.
 
-Un outil de plus pour le parcours conteneurisé, requis depuis INFRA-06 — c'est
-lui qui porte `make up`, `make db-reset` et les autres cibles du
-[`Makefile`](Makefile) de la racine :
-
-- **`make`** — sur macOS, il vient des Command Line Tools :
-  `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est elle
-  qui exécute les deux `Makefile` du dépôt.
+Le détail de chaque prérequis — versions exactes, motifs, pièges — est sur la page
+[Installation](https://kederiku.github.io/juui/getting-started/installation).
 
 ### Installation
 
@@ -83,1064 +79,81 @@ lui qui porte `make up`, `make db-reset` et les autres cibles du
 git clone git@github.com:kederiku/juui.git && cd juui
 ```
 
-Aucun `.env` n'est versionné — [`.gitignore`](.gitignore) les exclut tous et
-n'excepte que les gabarits. Chaque fichier d'environnement se crée à partir du
-sien, en retirant le suffixe `.example` :
+Aucun `.env` n'est versionné : chaque fichier d'environnement se crée à partir de son gabarit,
+en retirant le suffixe `.example`. **Chaque variable est documentée dans son gabarit** — les
+commentaires y font foi.
 
-| Gabarit versionné               | Fichier à créer    | Lu par                                 |
-| ------------------------------- | ------------------ | -------------------------------------- |
-| `.env.example`                  | `.env`             | `docker compose` — toute la pile       |
-| `backend/api/.env.example`      | `backend/api/.env` | l'API lancée **hors** Docker (BACK-03) |
-| `frontend/*/.env.local.example` | `.env.local`       | chaque application Next.js             |
+| Gabarit versionné               | Fichier à créer    | Lu par                           |
+| ------------------------------- | ------------------ | -------------------------------- |
+| `.env.example`                  | `.env`             | `docker compose` — toute la pile |
+| `backend/api/.env.example`      | `backend/api/.env` | l'API lancée **hors** Docker     |
+| `frontend/*/.env.local.example` | `.env.local`       | chaque application Next.js       |
 
 ```bash
 cp .env.example .env
 cp backend/api/.env.example backend/api/.env
 ```
 
-Les valeurs livrées conviennent telles quelles sur un poste vierge : rien n'est
-à modifier pour un premier démarrage. **Chaque variable est documentée dans son
-gabarit** — les commentaires y font foi, ce README ne les recopie pas pour
-éviter qu'ils divergent. Une seule mérite d'être changée dès qu'on quitte le
-poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
+Les valeurs livrées conviennent telles quelles sur un poste vierge. Une seule mérite d'être
+changée dès qu'on quitte le poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 `openssl rand -hex 32`.
 
-> **Note.** Des trois gabarits `frontend/*/.env.local.example`, seul celui de
-> `frontend-professional` a aujourd'hui une application pour le lire. Sa copie
-> n'est d'ailleurs pas nécessaire pour démarrer : les deux variables qu'il porte
-> désignent l'API, que l'interface n'appelle pas encore (SHARED-03).
-
-Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre
-([ADR-0001](documentation/docs/adr/0001-monorepo.md)).
-
-Côté JavaScript, les workspaces pnpm — `frontend/*`, `packages/*` et
-`documentation`, déclarés dans [`pnpm-workspace.yaml`](pnpm-workspace.yaml) :
+Puis les deux chaînes d'outils — pnpm, qui installe aussi les
+[hooks Git](#hooks-de-pre-commit), et uv :
 
 ```bash
 pnpm install
-```
-
-Cette commande installe aussi les **hooks Git** — voir
-[Hooks de pre-commit](#hooks-de-pre-commit).
-
-Côté Python, le seul service `backend/api`, absent de ces workspaces et piloté
-par `uv` :
-
-```bash
 cd backend/api && uv sync
 ```
 
-### Démarrer aujourd'hui
+### Démarrer
 
-Deux morceaux démarrent : les services d'infrastructure, en conteneurs, et
-l'API, sur le poste.
-
-D'abord l'infrastructure — PostgreSQL avec sa base de test `app_test` et la
-console pgAdmin, Redis, MinIO avec son bucket applicatif, et Mailpit qui capte
-le courrier sortant :
+Toute la pile en conteneurs :
 
 ```bash
-docker compose --project-directory . -f docker/docker-compose.yml up -d
-```
-
-Le `--project-directory .` n'est pas décoratif, et il n'est pas non plus
-facultatif : le fichier compose vit dans `docker/` alors que le `.env` est à la
-racine, et c'est ce drapeau qui accorde les deux. Il commande aussi la
-résolution des chemins montés — le détail est dans
-[`docker/docker-compose.yml`](docker/docker-compose.yml), en tête de fichier.
-
-pgAdmin répond sur <http://localhost:5050> ; s'y connecter avec
-`PGADMIN_DEFAULT_EMAIL` et `PGADMIN_DEFAULT_PASSWORD`. Le serveur
-« Juui - PostgreSQL local » y est déjà enregistré, mot de passe compris : il n'y
-a **rien à saisir** pour ouvrir la base. La console de MinIO, elle, répond sur
-<http://localhost:9001> — voir « Vérifier le stockage objet » plus bas. La boîte
-de réception de Mailpit s'ouvre sur <http://localhost:8025>, sans identifiants :
-tout e-mail émis par la pile y atterrit, et aucun n'en sort — voir « Vérifier le
-SMTP de développement ».
-
-Puis l'API, hors conteneur tant qu'INFRA-04 n'a pas livré son image :
-
-```bash
-cd backend/api && uv run uvicorn app.main:app --reload
-```
-
-La documentation interactive répond sur <http://localhost:8000/docs>. L'API ne
-sert encore aucune route — voir [`backend/api/README.md`](backend/api/README.md).
-
-Depuis BACK-03, elle **valide sa configuration au démarrage** et refuse de partir
-si une variable obligatoire manque — d'où la copie de `backend/api/.env` faite à
-l'installation. Le message d'erreur nomme alors chaque variable en défaut.
-
-Depuis BACK-05, elle **ouvre son pool PostgreSQL au démarrage** et l'éprouve par
-un `SELECT 1`. Le service `postgres` doit donc tourner, sans quoi le processus
-s'arrête en nommant l'hôte injoignable, avec un code de sortie 3 — plutôt que de
-paraître sain et d'échouer au premier appel.
-
-Enfin les deux interfaces livrées, seuls workspaces pnpm à définir aujourd'hui
-un script `dev` :
-
-```bash
-pnpm dev
-```
-
-La commande démarre en parallèle les serveurs de développement de tout le
-dépôt : l'interface professionnelle répond sur <http://localhost:3001>, celle
-des particuliers sur <http://localhost:3002> et le back-office sur
-<http://localhost:3003> — ce dernier redirigeant aussitôt vers sa page de
-connexion, voir [Le back-office de `frontend-admin`](#le-back-office-de-frontend-admin).
-La documentation s'y ajoutera avec DOC-01, sur le port du tableau ci-dessous.
-
-Pour n'en démarrer qu'une, la filtrer par le nom de son workspace :
-
-```bash
-pnpm --filter frontend-individual run dev
-```
-
-### La pile complète, avec Docker
-
-> **Note.** La pile est **complète** depuis INFRA-05b.
-> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte les douze
-> services du dépôt : `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`,
-> `minio-init`, `mailpit`, `api`, `worker` et les trois frontends. Onze démarrent
-> avec un `up` nu — `redisinsight` attend son profil `tools`.
->
-> Le `worker` consomme les tâches de fond depuis BACK-15 — voir
-> [Le worker](#le-worker).
-
-L'installation tient en trois commandes :
-
-```bash
-git clone git@github.com:kederiku/juui.git && cd juui
-cp .env.example .env
 make up
 ```
 
 | Cible                   | Effet                                                                     |
 | ----------------------- | ------------------------------------------------------------------------- |
-| `make help`             | Cible par défaut : liste toutes les cibles.                               |
+| `make help`             | Cible par défaut : liste toutes les cibles — c'est elle qui fait foi.     |
 | `make up`               | Démarre toute la pile en arrière-plan, sur les images servies.            |
 | `make dev`              | Démarre la pile en mode développement — code monté, rechargement à chaud. |
 | `make down`             | Arrête la pile et libère les ports ; les volumes survivent.               |
-| `make restart`          | Redémarre les conteneurs sans les recréer.                                |
 | `make logs service=api` | Suit les logs d'un service.                                               |
-| `make shell-api`        | Ouvre un shell `bash` dans le conteneur d'API.                            |
-| `make mail`             | Ouvre la boîte de réception Mailpit dans le navigateur.                   |
 
-Les cibles de base de données et de qualité sont décrites dans
-[Cibles `make` de la racine](#cibles-make-de-la-racine). `make help` fait foi,
-comme dans [`backend/api/Makefile`](backend/api/Makefile), qui adopte les mêmes
-conventions et auquel le `Makefile` de la racine délègue.
-
-Le fichier compose vit dans `docker/`, le `.env` à la racine. Sans
-`--project-directory`, `docker compose` chercherait son `.env` dans `docker/` et
-n'en trouverait pas : c'est cette commande que `make up` encapsule.
+Ou, pour travailler hors conteneurs — l'infrastructure en Docker, l'API sur le poste, les
+interfaces avec pnpm :
 
 ```bash
 docker compose --project-directory . -f docker/docker-compose.yml up -d
 ```
 
-Elle démarre la pile sur les images **servies** : l'API sans rechargement, les
-frontends sur leur sortie `standalone`. Pour travailler sur le code, c'est la
-variante à deux fichiers qu'il faut — voir
-[Le mode développement](#le-mode-développement).
-
-Ajouter `--profile tools` pour démarrer en plus les consoles d'inspection
-optionnelles — aujourd'hui RedisInsight, qui s'ouvre déjà raccordée aux deux
-bases Redis.
-
-> **Après modification d'un mot de passe dans `.env`.** PostgreSQL ne lit ses
-> identifiants qu'à la **première** création de son volume : les changer ensuite
-> reste sans effet tant que le volume vit. `make db-reset` fait cela proprement :
-> il ne détruit que le volume de PostgreSQL — les fichiers de MinIO, le cache
-> Redis et la configuration de pgAdmin survivent —, demande confirmation
-> (`force=1` pour la sauter), puis rejoue les migrations. MinIO, lui, relit ses
-> identifiants à chaque recréation — un `make up` suffit, sans rien perdre.
-
-Node et `uv` restent utiles sur le poste même avec ce parcours : les hooks de
-pre-commit s'exécutent en dehors des conteneurs.
-
-### Ports et URLs des services
-
-Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'ait
-à en choisir un dans son coin :
-
-| Service                       | Port hôte | Port interne | Arrive avec |
-| ----------------------------- | --------- | ------------ | ----------- |
-| API FastAPI                   | 8000      | 8000         | disponible  |
-| `frontend-professional`       | 3001      | 3000         | disponible  |
-| `frontend-individual`         | 3002      | 3000         | disponible  |
-| `frontend-admin`              | 3003      | 3000         | disponible  |
-| Documentation (Docusaurus)    | 3004      | —            | disponible  |
-| PostgreSQL                    | 5432      | 5432         | disponible  |
-| pgAdmin                       | 5050      | 80           | disponible  |
-| Redis                         | 6379      | 6379         | disponible  |
-| RedisInsight (profil `tools`) | 5540      | 5540         | disponible  |
-| MinIO — API S3                | 9000      | 9000         | disponible  |
-| MinIO — console web           | 9001      | 9001         | disponible  |
-| Mailpit — SMTP                | 1025      | 1025         | disponible  |
-| Mailpit — boîte de réception  | 8025      | 8025         | disponible  |
-| Worker TaskIQ                 | aucun     | —            | disponible  |
-
-Quelques choix méritent leur explication :
-
-- **3000 n'apparaît pas.** C'est le port d'écoute interne des trois conteneurs
-  Next.js, jamais publié : INFRA-05b le mappe sur 3001, 3002 et 3003 côté hôte.
-  Ce sont donc les mêmes ports qu'en développement local — d'où la règle : ne
-  pas lancer `pnpm dev` et `make up` en même temps.
-- **pgAdmin sur 5050.** Ni SETUP-05 ni INFRA-01 ne fixaient ce port, et un
-  tableau censé garantir l'absence de collision ne peut pas laisser de case
-  vide : le choix a été fait ici, et INFRA-01 s'y est tenu. 5050 est le port des
-  exemples Compose de pgAdmin — le moins surprenant — et il évite `8080`, déjà
-  disputé par trop d'outils, comme les ports 5000 et 7000 que le récepteur
-  AirPlay de macOS occupe par défaut.
-- **RedisInsight sur 5540**, port d'écoute par défaut de l'image : le publier
-  tel quel évite une correspondance de plus à retenir. Le service reste derrière
-  le profil Compose `tools` et ne démarre donc pas avec `make up`.
-- **Redis, RedisInsight et Mailpit ne sont publiés que sur `127.0.0.1`.** Les
-  autres services le sont sur toutes les interfaces du poste ; ces trois-là non.
-  Le Redis de développement n'a pas de mot de passe et la console n'a pas de page
-  de connexion : les publier largement les offrirait en lecture et en écriture
-  à tout le réseau auquel le poste est raccordé — un wifi partagé suffit. Mailpit
-  ajoute à cela un relais SMTP qui accepte n'importe quel message de n'importe
-  qui, et une boîte où se lisent en clair les codes OTP déjà émis : la règle du
-  dépôt tient en une phrase — service sans authentification, boucle locale. Rien
-  ne change à l'usage, les URLs et les commandes restent celles de ce tableau.
-- **Le worker n'écoute rien.** Il consomme la file Redis et n'ouvre aucun port
-  entrant : rien à publier, rien à réserver. `docker compose ps` affiche
-  pourtant `8000/tcp` en face de lui — c'est l'`EXPOSE` hérité de l'étage
-  `runtime` qu'il partage avec l'API, une métadonnée d'image et rien d'autre :
-  aucun port n'est publié, et aucun processus n'écoute. C'est aussi son absence
-  de `ports:` qui rend `--scale worker=2` possible.
-
-Les ports publiés sur le poste sont tous **configurables** par une variable
-`*_HOST_PORT` du `.env` : un PostgreSQL ou un Redis déjà installé localement se
-contourne en changeant une ligne, sans rien toucher aux conteneurs, qui
-continuent de se parler sur les ports internes.
-
-Les adresses à ouvrir dans un navigateur :
-
-| Service                         | URL                                  | Identifiants                                         |
-| ------------------------------- | ------------------------------------ | ---------------------------------------------------- |
-| API — documentation interactive | <http://localhost:8000/docs>         | —                                                    |
-| API — contrat OpenAPI           | <http://localhost:8000/openapi.json> | —                                                    |
-| API — sonde de disponibilité    | <http://localhost:8000/health/ready> | —                                                    |
-| `frontend-professional`         | <http://localhost:3001>              | —                                                    |
-| `frontend-individual`           | <http://localhost:3002>              | —                                                    |
-| `frontend-admin`                | <http://localhost:3003>              | —                                                    |
-| Documentation                   | <http://localhost:3004>              | —                                                    |
-| pgAdmin                         | <http://localhost:5050>              | `PGADMIN_DEFAULT_EMAIL` / `PGADMIN_DEFAULT_PASSWORD` |
-| MinIO — console web             | <http://localhost:9001>              | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`            |
-| Mailpit — boîte de réception    | <http://localhost:8025>              | —                                                    |
-| RedisInsight                    | <http://localhost:5540>              | —                                                    |
-
-PostgreSQL et Redis ne parlent pas HTTP : ils s'atteignent par une chaîne de
-connexion, que l'API compose elle-même à partir des variables `POSTGRES_*` et
-`REDIS_*`. Redis sépare ses usages par base — la base 0 pour le cache
-applicatif, la base 1 pour le broker TaskIQ — et RedisInsight les présente comme
-deux connexions distinctes, pré-remplies au démarrage.
-
-Les identifiants ne sont pas recopiés ici, seulement nommés : leurs valeurs sont
-celles du `.env`, dont [`.env.example`](.env.example) porte les exemples de
-développement. Une seule source de vérité — un mot de passe écrit à deux
-endroits finit toujours par diverger.
-
-### L'image du service d'API
-
-Le service `api` est le premier de la pile à se **construire depuis le dépôt** :
-les cinq autres tirent une image publique. Son Dockerfile vit dans
-[`docker/api/`](docker/api/Dockerfile) et expose trois cibles utiles :
-
-| Cible    | Ce qu'elle fait                                                                         | Qui l'utilise                  |
-| -------- | --------------------------------------------------------------------------------------- | ------------------------------ |
-| `prod`   | uvicorn sans rechargement, `WEB_CONCURRENCY` processus, dépendances applicatives seules | le service `api` du compose    |
-| `dev`    | `uvicorn --reload`, groupe `dev` installé (Ruff, Mypy, Pytest), installation éditable   | `docker-compose.override.yml`  |
-| `worker` | même image que `prod`, commande `taskiq worker`                                         | le service `worker` du compose |
-
-`docker compose up` construit la cible `prod`. Pour construire une cible à la
-main, hors compose :
+```bash
+cd backend/api && uv run uvicorn app.main:app --reload
+```
 
 ```bash
-docker build --target dev --build-context scripts=docker/api -t juui-api:dev -f docker/api/Dockerfile backend/api
+pnpm dev
 ```
 
-Le `--build-context` n'est pas décoratif. Le contexte de build est
-`backend/api` — c'est ce qui rend
-[`backend/api/.dockerignore`](backend/api/.dockerignore) effectif et ce qui évite
-d'envoyer `node_modules` au démon — mais `entrypoint.sh` vit dans `docker/api/`,
-donc **hors** de ce contexte. Ce drapeau l'y raccroche ; le fichier compose fait
-la même chose avec sa clé `additional_contexts`. Sans lui, le build échoue sur un
-`COPY --from=scripts` qui ne trouve rien.
-
-#### Ce que fait l'entrypoint
-
-[`docker/api/entrypoint.sh`](docker/api/entrypoint.sh) s'exécute avant la
-commande du conteneur, dans les trois cibles :
-
-1. **il attend PostgreSQL** — une vraie connexion `asyncpg`, pas un test de port
-   ouvert : pendant son initialisation, le serveur écoute déjà sans accepter
-   personne ;
-2. **il applique les migrations**, `alembic upgrade head` — l'étape, écrite
-   d'avance par INFRA-04, s'est activée d'elle-même quand BACK-07 a livré
-   `alembic.ini` ; l'`env.py` sérialise les migrateurs concurrents (`api` et
-   `worker --scale`) par un verrou consultatif PostgreSQL ;
-3. **il `exec` la commande**, qui hérite du PID 1 et reçoit donc le `SIGTERM` de
-   `docker stop`.
-
-Ces trois étapes se lisent dans le journal du service :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml logs api
-```
-
-```
-INFRA-04 : PostgreSQL joignable sur postgres:5432 (tentative 1).
-INFRA-04 : application des migrations (alembic upgrade head)...
-INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-INFO  [alembic.runtime.migration] Will assume transactional DDL.
-INFRA-04 : demarrage de -- uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers
-```
-
-L'API répond alors sur <http://localhost:8000/docs>. La sonde du service vise
-`/health/live` (BACK-08) : la sonde de **vie**, sans dépendance externe — c'est
-exactement ce qu'un healthcheck de conteneur doit tester, un PostgreSQL tombé ne
-se répare pas en redémarrant l'API. L'état des dépendances, lui, se lit sur
-`/health/ready`, qui nomme le composant défaillant.
-
-#### L'IP réelle du client
-
-Un conteneur ne voit **jamais** l'IP réelle de celui qui l'appelle : les requêtes
-publiées par Docker lui arrivent avec celle de la passerelle — `192.168.65.1`
-sous Docker Desktop. Se donner l'occasion de le constater :
-
-```bash
-curl -s -o /dev/null http://localhost:8000/health/live
-docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
-```
-
-`--proxy-headers` seul n'y change rien : uvicorn ne substitue l'adresse annoncée
-par l'en-tête `X-Forwarded-For` que si le pair qui l'envoie figure dans
-`FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement, et
-la valeur par défaut ne fait confiance qu'à `127.0.0.1` : la passerelle continue
-donc de s'afficher, et c'est le comportement attendu. Le mécanisme se vérifie en
-élargissant temporairement la confiance :
-
-```bash
-FORWARDED_ALLOW_IPS='*' docker compose --project-directory . -f docker/docker-compose.yml up -d api
-curl -s -o /dev/null -H 'X-Forwarded-For: 203.0.113.7' http://localhost:8000/health/live
-docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
-# INFO:     203.0.113.7:0 - "GET /health/live HTTP/1.1" 200 OK
-```
-
-Remettre ensuite la valeur du `.env` — `*` ferait confiance à n'importe quel
-client, qui n'aurait plus qu'à s'annoncer sous l'IP de son choix. C'est en
-production, derrière un proxy qui pose réellement l'en-tête, que la variable
-compte : sans l'adresse de ce proxy, toutes les requêtes semblent venir de lui et
-la limitation de renvoi d'OTP par IP (BACK-17) devient **globale**.
-
-#### Taille de l'image
-
-Le critère d'acceptation demande moins de 400 Mo. Trois chiffres différents
-circulent, et il vaut mieux savoir lequel on lit :
-
-```bash
-docker image ls --tree juui-api
-```
-
-| Mesure                           | Valeur       | Ce que c'est                                                                     |
-| -------------------------------- | ------------ | -------------------------------------------------------------------------------- |
-| `CONTENT SIZE`                   | **≈ 91 Mo**  | ce qui transite vers un registre, couches compressées                            |
-| somme des couches décompressées  | **≈ 310 Mo** | l'« image size » d'avant Docker 25, et la mesure usuelle                         |
-| `DISK USAGE` (`docker image ls`) | ≈ 402 Mo     | sous le magasin containerd : les blobs compressés **et** leur copie décompressée |
-
-Le service tient donc largement sous la barre ; c'est `DISK USAGE` qui compte
-deux fois la même chose. La taille réellement occupée dans le conteneur se
-mesure sans ambiguïté :
-
-```bash
-docker run --rm --entrypoint sh juui-api:prod -c 'du -sm /'   # -> 293
-```
-
-Le virtualenv en représente 144 Mo, dont 30 pour `botocore` et 32 pour les `.pyc`
-précompilés à l'installation (`UV_COMPILE_BYTECODE=1`, qui échange ces 32 Mo
-contre un démarrage plus rapide).
-
-### L'image des trois frontends
-
-Les trois applications Next.js se construisent depuis **un seul** Dockerfile,
-[`docker/frontend/Dockerfile`](docker/frontend/Dockerfile), paramétré par un
-`ARG APP_NAME`. Rien ne les distingue à la construction — mêmes scripts, même
-`next.config.ts` à leurs commentaires près : trois fichiers auraient triplé
-chaque correction à venir.
-
-| Cible    | Ce qu'elle fait                                                                           | Qui l'utilise                              |
-| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `runner` | Sortie `standalone` servie par `node server.js`, sans pnpm ni `node_modules` complet      | les trois services `frontend-*` du compose |
-| `dev`    | `next dev` sur le port 3000, pnpm et les `node_modules` du monorepo, code monté en volume | `docker-compose.override.yml`              |
-
-Un `docker build` sans `--target` construit `runner` : c'est le dernier étage du
-fichier, et sa position est délibérée.
-
-**Le contexte de build est la racine du dépôt** — ni `docker/`, ni
-`frontend/<app>/`. Un build pnpm en monorepo a besoin du `pnpm-lock.yaml`, du
-`pnpm-workspace.yaml`, du `package.json` racine et de tout `packages/` : aucun
-sous-dossier ne les contient tous. C'est ce qui a rendu nécessaire le
-[`.dockerignore`](.dockerignore) de la racine, créé par ce ticket — Docker ne lit
-que celui de la racine du contexte, et sans lui les 618 Mo de `node_modules`
-partiraient au démon à chaque build.
-
-```bash
-docker build --build-arg APP_NAME=frontend-professional -t juui-frontend-professional:local -f docker/frontend/Dockerfile .
-```
-
-#### Les trois valeurs figées au build
-
-Ce sont celles que [`.env.example`](.env.example) annonce déjà comme passées « en
-`build.args` », et que les trois services `frontend-*` du compose leur passent
-effectivement depuis INFRA-05b :
-
-| Argument              | Applications          | Ce qu'il devient                                                    |
-| --------------------- | --------------------- | ------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL` | les trois             | remplacé littéralement dans le bundle envoyé au navigateur          |
-| `API_INTERNAL_URL`    | les trois             | lu par le serveur Next — `http://api:8000` en conteneur             |
-| `SITE_URL`            | `frontend-individual` | `metadataBase`, `robots.txt` et `sitemap.xml`, tous trois prérendus |
-
-> **Piège.** Ces valeurs sont **figées au moment du build**, pas lues au
-> démarrage. Les changer impose de **reconstruire** l'image : un
-> `docker compose restart` ne changera rien.
-
-Un argument non passé reste **absent** de l'environnement du build — et non vide.
-La nuance compte : le repli que chaque application prévoit s'applique alors
-normalement, là où une chaîne vide le contournerait. Construite sans `SITE_URL`,
-`frontend-individual` publie donc un sitemap en `http://localhost:3002` au lieu
-d'échouer sur un `Invalid URL`.
-
-#### L'anatomie de la sortie standalone
-
-`next build` ne recopie dans `.next/standalone` que les modules que son traçage a
-vu importer — c'est tout l'intérêt de l'image. Deux choses lui échappent
-toujours, `.next/static` et `public/`, qu'il suppose servis par un CDN : l'étage
-`builder` les remet en place, faute de quoi la page s'afficherait **sans aucune
-feuille de style**, et sans la moindre erreur.
-
-L'arborescence obtenue est celle du dépôt vue depuis `outputFileTracingRoot`,
-que les trois `next.config.ts` fixent à la racine (FRONT-01) :
-
-```
-/app
-├── node_modules/                        les modules tracés, 38 Mo
-└── frontend/frontend-professional/
-    ├── server.js                        le serveur minimal, lancé par le CMD
-    ├── .next/                           pages compilées, plus static/ et cache/
-    └── package.json
-```
-
-Elle est recopiée **telle quelle** : les `node_modules` qu'elle contient sont un
-arbre de liens symboliques pnpm, que déplacer ou aplatir casserait. C'est aussi
-pourquoi l'image fixe son `WORKDIR` sur le dossier de l'application plutôt que
-d'interpoler `APP_NAME` dans son `CMD` — une forme `exec` de `CMD` n'interpole
-aucune variable, un `WORKDIR`, si.
-
-#### Ce que pèsent les images
-
-| Mesure                                        | frontend (chacune des trois) |
-| --------------------------------------------- | ---------------------------- |
-| Blobs compressés (`docker image inspect`)     | 95 Mo                        |
-| Couches décompressées (`docker history`)      | ≈ 309 Mo                     |
-| Occupation réelle dans le conteneur (`du -s`) | 292 Mo                       |
-| dont image `node:24.19.0-trixie-slim` nue     | 253 Mo                       |
-| dont l'application et ses modules tracés      | 39 Mo                        |
-
-`docker image ls` en annonce 405 Mo, et c'est la même mise en garde qu'à la
-section précédente : ce chiffre est le `DISK USAGE` du magasin containerd, qui
-compte les blobs compressés **et** leur copie décompressée. Les 39 Mo de la
-dernière ligne sont la mesure qui décrit le travail de ce ticket — à comparer aux
-618 Mo du `node_modules` du monorepo, que l'image ne contient pas.
-
-```bash
-docker run --rm juui-frontend-professional:local sh -c 'du -sh /app /app/node_modules'
-```
-
-#### Vérifier une image à la main
-
-```bash
-docker run --rm -p 3001:3000 juui-frontend-professional:local
-```
-
-L'accueil répond alors **200** sur <http://localhost:3001>, servi par l'utilisateur
-non-root `juui` (uid 1001, le même que l'image d'API). Même chose pour
-`frontend-individual` sur 3002.
-
-`frontend-admin`, lui, répond **307 vers `/login`** : son accueil vit dans le
-groupe `(protected)` et `proxy.ts` redirige toute requête sans session
-(FRONT-03). C'est `/login` qui rend 200 — la redirection est le comportement
-attendu, pas une panne.
-
-### Le mode développement
-
-Les commandes vues plus haut démarrent la pile sur les images **servies** :
-l'API sans rechargement, les trois frontends sur leur sortie `standalone`. Rien
-de ce qu'on modifie sur le poste n'y change quoi que ce soit — il faut
-reconstruire. Pour travailler, [`docker/docker-compose.override.yml`](docker/docker-compose.override.yml)
-bascule les cinq services que le dépôt construit lui-même sur leur cible `dev`
-et leur monte le code du poste.
-
-> **Ce fichier n'est pas chargé tout seul, et c'est le piège de la section.**
-> Compose charge d'office un `docker-compose.override.yml` **uniquement**
-> lorsqu'il a découvert le fichier de base lui-même. Dès qu'un `-f` est passé —
-> ce que fait toute commande du dépôt, sans quoi le `.env` de la racine ne
-> serait pas lu — l'override est **silencieusement ignoré**. Il faut donc le
-> nommer, et c'est le seul moyen.
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d --build
-```
-
-Sans ce second `-f`, la pile repart sur les images servies : aucun montage,
-aucun rechargement à chaud, et pas la moindre erreur pour le dire. `make up` et
-`make dev` encapsulent les deux invocations.
-
-Les ports, les URLs et les identifiants ne changent pas d'un mode à l'autre :
-ceux du tableau plus haut valent dans les deux.
-
-#### Ce que chaque service y gagne
-
-| Service      | Cible de base | Cible en développement | Ce qui est monté   |
-| ------------ | ------------- | ---------------------- | ------------------ |
-| `api`        | `prod`        | `dev`                  | `./backend/api`    |
-| `worker`     | `worker`      | `dev`                  | `./backend/api`    |
-| `frontend-*` | `runner`      | `dev`                  | la racine du dépôt |
-
-Les six briques d'infrastructure — `postgres`, `pgadmin`, `redis`,
-`redisinsight`, `minio`, `minio-init` et `mailpit` — n'apparaissent pas dans
-l'override : elles tirent des images publiques et se comportent de la même façon
-dans les deux modes.
-
-Le `worker` est le seul à devoir **redire sa commande**. Sa cible de base
-installe le paquet en `--no-editable` : ses imports passent par `/opt/venv`, et
-lui monter du code n'y changerait rien. Seule la cible `dev` est éditable — mais
-son `CMD` est `uvicorn`. La commande `taskiq worker` est donc réécrite dans
-l'override, seconde source de vérité à côté du `CMD` de la cible `worker`, à
-tenir alignée.
-
-#### Ce que les montages recouvrent — et ce qu'ils masquent
-
-Les trois frontends montent **la racine du dépôt** sur `/app`, et non le seul
-dossier de leur application : c'est ce qui fait traverser le Fast Refresh la
-frontière du monorepo, une modification de `packages/ui` ou du thème de
-`packages/config-tailwind` se voyant au même titre qu'une modification de page.
-
-Trois volumes anonymes masquent alors ce qui ne doit surtout pas venir de
-l'hôte. Un volume anonyme posé sur un chemin que le montage recouvre le **rend à
-l'image** : le conteneur retrouve son propre contenu.
-
-| Chemin masqué                      | Pourquoi                                                                       |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| `/app/node_modules`                | ceux du poste sont construits pour macOS — l'image a les siens, pour Linux     |
-| `/app/frontend/<app>/node_modules` | second niveau de l'arbre pnpm ; n'en masquer qu'un laisse l'autre dans le vide |
-| `/app/frontend/<app>/.next`        | le cache Turbopack du poste porte des chemins absolus de l'hôte                |
-
-Les `node_modules` des **autres** workspaces — `packages/*`, `documentation/` —
-ne sont pas masqués, et n'ont pas à l'être : les liens symboliques que pnpm y
-dépose sont **relatifs** et pointent tous vers `../../node_modules/.pnpm/…`,
-donc, dans le conteneur, vers le volume anonyme du premier niveau. Vérifié :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml exec frontend-professional sh -c 'ls /app/node_modules/.pnpm | grep swc; readlink -f /app/frontend/frontend-professional/node_modules/next'
-```
-
-La commande affiche `@next+swc-linux-arm64-gnu@16.3.2` — et non la variante
-`darwin` qu'a le poste — puis un chemin qui plonge dans `/app/node_modules`.
-
-> **À savoir : en mode développement, l'API relit `backend/api/.env`.**
-> L'installation éditable fait résoudre `config.py` en
-> `/app/src/app/core/config.py`, donc son `_ENV_FILE` en `/app/.env` — fichier
-> absent de l'image, mais ramené par le montage. Sans conséquence,
-> pydantic-settings donnant la priorité aux variables du **processus** sur le
-> dotenv : ce que compose passe l'emporte. Mais une variable oubliée côté
-> compose s'y replierait **en silence**, avec la valeur d'un fichier écrit pour
-> un `uvicorn` lancé hors Docker — où `POSTGRES_HOST` vaut `localhost`.
-
-#### Constater le rechargement à chaud
-
-Côté frontend, modifier un fichier de `frontend/frontend-professional/app/` et
-recharger <http://localhost:3001> : la page change, et `docker compose logs`
-montre une recompilation Turbopack — aucun `docker build` n'est relancé.
-
-Côté API, modifier un fichier de `backend/api/src/` :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml logs api --tail 5
-```
-
-`WARNING:  WatchFiles detected changes in 'src/app/main.py'. Reloading...` suivi
-d'un `Application startup complete.` Le `--reload-dir /app/src` du `CMD` limite
-la surveillance aux sources : sans lui, un passage de Ruff sur le poste
-redémarrerait le serveur.
-
-### Le worker
-
-Le service `worker` exécute la cible du même nom de l'image d'API — la même
-image que le service `api`, avec `taskiq worker` pour commande. Il ne publie
-aucun port, ne porte aucun `container_name` et se met donc à l'échelle :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml up -d --scale worker=2
-```
-
-Depuis **BACK-15**, le module `app.shared.infrastructure.tasks.broker` que
-désigne sa commande existe : le worker démarre, se connecte au broker Redis
-(base 1) et consomme la file. Les journaux en font foi :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml logs worker
-```
-
-```
-[taskiq.worker][INFO   ][MainProcess] Starting 2 worker processes.
-[taskiq.process-manager][INFO   ][MainProcess] Started process worker-0 with pid 15
-```
-
-Le crash-loop d'avant BACK-15 — `worker-0 is dead. Scheduling reload.` en
-boucle sur un `ModuleNotFoundError`, conteneur pourtant `Up` — a disparu, mais
-le réflexe reste bon à garder : le worker n'a pas de healthcheck, **seuls ses
-journaux disent la vérité**. Le fonctionnement, les règles d'écriture d'une
-tâche et les sondes de bout en bout sont au
-[README de l'API](backend/api/README.md#tâches-de-fond).
-
-### Vérifier le stockage objet
-
-MinIO tient lieu d'Amazon S3 sur le poste, et le bucket applicatif — `S3_BUCKET`,
-`juui-dev` par défaut — est créé au démarrage par le service éphémère
-`minio-init`. Celui-ci s'arrête une fois son travail fait : `docker compose ps`
-le montre en `Exited (0)`, ce qui est le résultat attendu et non une panne. Son
-journal dit exactement ce qu'il a fait :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml logs minio-init
-```
-
-La console web s'ouvre sur <http://localhost:9001>, avec `MINIO_ROOT_USER` et
-`MINIO_ROOT_PASSWORD` pour identifiants. Depuis `RELEASE.2025-05-24T17-08-30Z`,
-l'édition communautaire n'y conserve que le **navigateur d'objets** — parcourir
-les buckets, téléverser, télécharger, supprimer. Les écrans d'administration
-(utilisateurs, politiques, clés d'accès) sont passés à l'édition payante ;
-`mc admin` les remplace.
-
-Pour un aller-retour complet sans rien installer sur le poste — le conteneur
-`minio-init` a déjà l'endpoint, les identifiants et le nom du bucket dans son
-environnement :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml run --rm --entrypoint sh minio-init -c 'mc alias set t "$S3_ENDPOINT_URL" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" && echo bonjour | mc pipe "t/$S3_BUCKET/essai.txt" && mc cat "t/$S3_BUCKET/essai.txt" && mc rm "t/$S3_BUCKET/essai.txt"'
-```
-
-Le bucket est **privé** : une requête anonyme sur un objet répond `403`. C'est
-délibéré — l'API sert les fichiers par des **URLs pré-signées**, qui portent leur
-propre autorisation et expirent, plutôt que par un bucket ouvert en lecture.
-
-#### Le même aller-retour, vu depuis l'API
-
-Ce qui précède prouve que MinIO répond ; ceci prouve que le service sait lui
-parler. Depuis `backend/api/`, avec un `.env` local — l'API n'a pas besoin de
-tourner, le stockage n'étant pas une route :
-
-```bash
-uv run python -c "
-import asyncio, subprocess
-from app.core import get_settings
-from app.shared.infrastructure.clients.s3_storage import build_file_storage
-s = build_file_storage(get_settings())
-async def main():
-    print('ping :', await s.ping())
-    await s.upload('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf', b'%PDF-1.4', 'application/pdf')
-    url = s.generate_presigned_url('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf')
-    print('presigne :', subprocess.run(['curl','-s','-o','/dev/null','-w','%{http_code}',url], capture_output=True, text=True).stdout)
-    print('supprime :', await s.delete('essai/00000000-0000-7000-8000-000000000000/bonjour.pdf'))
-asyncio.run(main())
-"
-```
-
-Attendu : `ping : True`, `presigne : 200`, `supprime : True`. La même URL sans sa
-signature — tout ce qui suit le `?` retiré — répond `403` : c'est la signature qui
-autorise, jamais le bucket.
-
-Les six sondes complètes du stockage, l'expiration réelle d'une URL et le
-comportement du service quand MinIO est éteint sont dans le
-[README de `backend/api/`](backend/api/README.md#vérifier-que-le-stockage-tient).
-
-### Vérifier le SMTP de développement
-
-Mailpit tient lieu de fournisseur d'envoi sur le poste : il **accepte** tout et
-n'**expédie** rien. Sans lui, le parcours d'inscription s'arrêtait définitivement
-à l'écran de saisie du code OTP — l'e-mail partait, personne ne le lisait, et le
-compte restait non vérifié.
-
-La boîte de réception s'ouvre sur <http://localhost:8025>, sans identifiants.
-Elle est **vide à chaque démarrage**, et c'est voulu : le service n'a aucun
-volume, donc le dernier message affiché est toujours celui qu'on vient de
-déclencher. `make mail` l'ouvre directement — et sur un poste sans navigateur,
-la cible affiche l'URL au lieu d'échouer.
-
-Pour un aller-retour complet — envoi sur le port SMTP, relecture par l'API HTTP —
-depuis le conteneur `api`, c'est-à-dire par le chemin exact qu'empruntera
-l'adaptateur de BACK-22. `smtplib` et `urllib` sont dans la bibliothèque standard
-de Python : il n'y a rien à installer, et l'image `python:3.14-slim` n'a de toute
-façon ni `curl` ni `wget`.
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml exec api python -c "
-import json, smtplib, urllib.request
-from email.message import EmailMessage
-m = EmailMessage()
-m['From'], m['To'], m['Subject'] = 'no-reply@juui.test', 'essai@juui.test', 'INFRA-07'
-m.set_content('Code de verification : 123456')
-with smtplib.SMTP('mailpit', 1025) as s: s.send_message(m)
-r = json.load(urllib.request.urlopen('http://mailpit:8025/api/v1/messages'))
-print(r['messages'][0]['Subject'], '--', r['messages'][0]['Snippet'])
-"
-```
-
-La commande affiche `INFRA-07 -- Code de verification : 123456`, et le message
-apparaît dans la boîte web. Si le service `api` n'est pas démarré, la même
-vérification tient entièrement dans le conteneur Mailpit, qui embarque un
-`sendmail` et dont l'image Alpine fournit `wget` :
-
-```bash
-docker compose --project-directory . -f docker/docker-compose.yml exec mailpit sh -c 'printf "Subject: INFRA-07\n\nCode : 123456\n" | /mailpit sendmail -f no-reply@juui.test -S 127.0.0.1:1025 essai@juui.test && wget -qO- http://127.0.0.1:8025/api/v1/messages'
-```
-
-**L'API HTTP est la seule manière prévue de récupérer un code OTP dans un test.**
-`GET /api/v1/messages` liste la boîte, `GET /api/v1/message/{id}` rend le corps
-complet, `GET /api/v1/search` filtre par destinataire et `DELETE /api/v1/messages`
-la vide entre deux cas. La documentation interactive est servie par l'instance
-elle-même, sur <http://localhost:8025/api/v1/>.
-
-C'est ce que feront BACK-17 et l'helper de lecture d'e-mails de QA-04 : lire le
-code **réellement émis**, plutôt que d'aller le chercher dans Redis. Un test qui
-lit Redis vérifie ce que le code a écrit ; il passerait au vert avec un envoi
-cassé, une adresse erronée ou un gabarit vide.
-
-> **Note.** Ce ticket ne livre que l'infrastructure — le service, ses variables,
-> sa sonde et cette page. L'adaptateur SMTP qui consommera `SMTP_HOST`,
-> `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` et `MAIL_FROM`
-> appartient à BACK-22, et ces six variables ne sont pas encore passées au
-> service `api` : le fichier compose porte le bloc, en commentaires, à l'endroit
-> où BACK-22 le décommentera.
-
-### Le site de documentation
-
-La documentation technique du dépôt vit dans [`documentation/`](documentation) :
-un site [Docusaurus](https://docusaurus.io/) en TypeScript, workspace pnpm au
-même titre que les trois applications.
-
-```bash
-pnpm --filter documentation dev
-```
-
-Il écoute sur le port 3004 — <http://localhost:3004>. Il n'est pas conteneurisé :
-rien d'autre à démarrer, et le `pnpm dev` de la racine le lance en même temps que
-les trois interfaces.
-
-**La barre de recherche fait exception.** Le plugin de recherche locale ne
-construit son index qu'à la construction du site : sous `dev`, la barre est
-absente. Pour l'essayer, il faut construire puis servir :
-
-```bash
-pnpm --filter documentation build && pnpm --filter documentation start
-```
-
-Six sections attendent leur contenu — `getting-started/`, `architecture/`,
-`backend/`, `frontend/`, `infrastructure/`, `adr/`. Leur ordre de lecture est
-écrit à la main dans [`sidebars.ts`](documentation/sidebars.ts) plutôt que déduit
-de l'arborescence des fichiers ; DOC-02a, DOC-02b et DOC-02c les rempliront.
-
-Deux capacités sont acquises dès maintenant, parce qu'elles décident de la façon
-d'écrire la suite :
-
-- **Recherche locale**, sans service externe : l'index est un fichier du site,
-  aucune requête ne sort du navigateur.
-- **Diagrammes Mermaid** : un schéma d'architecture se versionne en texte et se
-  relit en diff, là où une image binaire ne se relit pas. La page d'accueil du
-  site en porte un.
-
-#### Publication
-
-[`.github/workflows/documentation.yml`](.github/workflows/documentation.yml)
-construit le site à chaque pull request touchant `documentation/` — un renvoi
-mort y fait échouer la CI, `onBrokenLinks` étant réglé sur `throw` — et le publie
-sur GitHub Pages à chaque `push` sur `main`, à l'adresse
-<https://kederiku.github.io/juui/>.
-
-Le workflow **active GitHub Pages lui-même** au premier passage
-(`actions/configure-pages` avec `enablement: true`) : rien à cocher dans les
-réglages du dépôt, et la chaîne se rejoue telle quelle sur un autre dépôt. Si une
-politique d'organisation venait à refuser cette activation par API, elle se fait
-à la main dans _Settings → Pages_, avec « GitHub Actions » comme source.
-
-C'est le premier workflow du dépôt, et sa portée s'arrête à `documentation/` :
-les pipelines de l'API, des frontends et des images reviennent aux tickets QA,
-les règles de protection de branche à QA-08.
-
-### Scripts racine
-
-| Commande            | Effet                                                        |
-| ------------------- | ------------------------------------------------------------ |
-| `pnpm prepare`      | Installe les hooks Git. Lancé seul par `pnpm install`.       |
-| `pnpm dev`          | Démarre en parallèle les serveurs de développement.          |
-| `pnpm build`        | Construit chaque workspace, dans l'ordre de ses dépendances. |
-| `pnpm lint`         | Analyse statique ESLint sur tout le dépôt.                   |
-| `pnpm lint:fix`     | Idem, en appliquant les corrections automatiques.            |
-| `pnpm typecheck`    | Vérification des types TypeScript.                           |
-| `pnpm test`         | Suites de tests des workspaces.                              |
-| `pnpm format`       | Reformate le dépôt avec Prettier.                            |
-| `pnpm format:check` | Vérifie le formatage sans rien réécrire (CI).                |
-
-`prepare` est un script de **cycle de vie** : personne ne le lance à la main,
-pnpm s'en charge après chaque installation.
-
-`dev`, `build`, `typecheck` et `test` délèguent aux workspaces qui définissent le
-script de même nom ; ceux qui ne le définissent pas sont simplement ignorés.
-
-`lint` et `format` fonctionnent autrement : ils parcourent le dépôt en une seule
-passe depuis la racine. Depuis ESLint 10, la recherche de configuration part du
-répertoire du **fichier analysé** et remonte l'arborescence — un `eslint .` lancé
-à la racine applique donc déjà à chaque application sa propre configuration, et
-celle de la racine au reste. Prettier procède de même. Déléguer aux workspaces
-serait un double parcours, et laisserait de côté les fichiers de la racine, que
-`pnpm -r` n'atteint pas.
-
-`lint` s'appuie sur les types depuis SETUP-06, ce qui lui coûte quelques
-secondes : le chiffre avant/après est dans [Configurations
-partagées](#configurations-partagées).
-
-> **Note.** Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
-> siens, décrits dans [`backend/api/README.md`](backend/api/README.md). Les
-> cibles `make` de la racine réunissent les deux chaînes derrière une interface
-> unique — voir [Cibles `make` de la racine](#cibles-make-de-la-racine).
-
-### Cibles `make` de la racine
-
-Le [`Makefile`](Makefile) de la racine (INFRA-06) complète le tableau de la
-section [La pile complète, avec Docker](#la-pile-complète-avec-docker) par les
-cibles de base de données et de qualité :
-
-| Cible                         | Effet                                                         |
-| ----------------------------- | ------------------------------------------------------------- |
-| `make db-migrate m="message"` | Génère une révision Alembic autogénérée — à relire.           |
-| `make db-upgrade`             | Applique les migrations jusqu'à `head`.                       |
-| `make db-downgrade`           | Annule la dernière migration appliquée.                       |
-| `make db-reset`               | Détruit le volume PostgreSQL, recrée la base, migre et seede. |
-| `make seed`                   | Injecte le jeu de données de démonstration (INFRA-08).        |
-| `make lint`                   | Ruff et contrats d'architecture, puis ESLint.                 |
-| `make format`                 | Ruff côté Python, puis Prettier sur tout le dépôt.            |
-| `make typecheck`              | mypy en mode strict, puis TypeScript workspace par workspace. |
-| `make test`                   | Enchaîne `test-back` (BACK-12) et `test-front` (QA-02).       |
-
-Trois règles gouvernent ces cibles, et elles sont écrites en tête du `Makefile` :
-
-- **Les cibles `db-*` tournent sur le poste**, jamais dans un conteneur, par
-  délégation à [`backend/api/Makefile`](backend/api/Makefile) : la génération
-  d'une révision déclenche les hooks Ruff d'Alembic, absents des images
-  servies. Elles supposent `uv`, le port PostgreSQL publié et
-  `backend/api/.env`.
-- **`make db-reset` ne détruit que le volume de PostgreSQL.** Les fichiers de
-  MinIO, le cache Redis et la configuration de pgAdmin survivent ; la cible
-  demande confirmation, `force=1` la saute.
-- **Le `Makefile` ne lit pas le `.env`.** C'est `docker compose` qui le lit, et
-  lui seul : l'importer dans `make` exporterait `POSTGRES_HOST=postgres` vers
-  les cibles `db-*` du poste — et les secrets vers tout sous-processus.
-
-Les cibles `test`, `test-back` et `seed` sont déclarées mais n'exécutent encore
-rien : elles nomment le ticket attendu — BACK-12 pour pytest, QA-02 pour les
-workspaces, INFRA-08 pour le seed — et sortent en succès.
-
-### Écarts assumés avec le ticket SETUP-05
-
-| Écart                                                             | Raison                                                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deux parcours au lieu de la seule séquence `make up`              | Au moment de SETUP-05, `make up` n'existait pas — le Makefile racine relevait d'INFRA-06. **INFRA-06 a levé l'écart** : `make up` existe. Les deux parcours restent documentés, l'un faisant tourner l'API sur le poste, l'autre toute la pile en conteneurs.                |
-| Docker et `make` signalés comme pas encore nécessaires            | Le ticket les liste en prérequis. Les présenter sans réserve ferait installer Docker Desktop à qui veut seulement lancer un `uvicorn`.                                                                                                                                       |
-| `env_prefix` par sous-modèle plutôt que `env_nested_delimiter`    | BACK-03 prévoit `DB__`, `JWT__`… mais `POSTGRES_*`, `MINIO_ROOT_*` et `PGADMIN_DEFAULT_*` sont imposés par les images Docker. Le préfixe simple donne les mêmes sous-modèles sans couche de traduction.                                                                      |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` → `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Pour que le bloc JWT tienne dans un unique `env_prefix`. Seul renommage appliqué à la liste du ticket.                                                                                                                                                                       |
-| `DATABASE_URL` et `REDIS_URL` documentées mais commentées         | Valeurs dérivées : BACK-03 recompose l'URL à partir des composants. Les activer créerait une seconde source de vérité, qui divergerait au premier changement de mot de passe.                                                                                                |
-| `.env.local.example` côté frontend plutôt que `.env.example`      | `.env` est ignoré par le [`.gitignore`](.gitignore) : `.env.local` est le seul fichier que Next.js puisse charger, et la règle « retirer `.example` » reste vraie partout.                                                                                                   |
-| Port de pgAdmin fixé à 5050                                       | Ni SETUP-05 ni INFRA-01 ne le fixent. Un tableau qui doit garantir l'absence de collision ne peut pas laisser de case vide : le choix se fait ici, INFRA-01 en hérite.                                                                                                       |
-| Deux services de plus que la liste du ticket                      | Le tableau ne vaut comme garantie d'absence de collision que s'il est exhaustif. DOC-01 réserve déjà 3004 et INFRA-02 prévoit RedisInsight — les omettre rendrait la garantie fausse.                                                                                        |
-| Variables ajoutées hors de la liste du ticket                     | `CORS_ORIGINS` (BACK-11), `JWT_REFRESH_TOKEN_EXPIRE_DAYS` (BACK-10), `POSTGRES_TEST_DB` (INFRA-01), `REDIS_CACHE_DB` et `REDIS_BROKER_DB` (INFRA-02), `S3_REGION` (boto3), `API_INTERNAL_URL` (INFRA-05), `COMPOSE_PROJECT_NAME` et les `*_HOST_PORT` (INFRA-01 à INFRA-05). |
-| Identifiants nommés par leur variable, jamais recopiés            | INFRA-03 demande de documenter ceux de la console MinIO. Les nommer renvoie à [`.env.example`](.env.example), seule source de vérité.                                                                                                                                        |
-
-### Écarts assumés avec le ticket INFRA-01
-
-| Écart                                                   | Raison                                                                                                                                                                                                                                                |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `postgres:18-alpine` au lieu de la 16 demandée          | Le ticket a été rédigé avant la sortie de la 18. Naître avec deux majeures de retard imposerait une migration avant même la première mise en production. Même arbitrage qu'en BACK-02, où Ruff cible `py314` là où le ticket disait `py312`.          |
-| Volume monté sur `/var/lib/postgresql`                  | Depuis la 18, l'image place `PGDATA` dans `/var/lib/postgresql/18/docker` et déclare son volume sur le dossier parent. Le montage traditionnel sur `…/data` n'échoue pas : il perd les données en silence, ce que le critère de persistance interdit. |
-| Script d'initialisation en `.sh` et non en `.sql`       | Le ticket dit « scripts SQL » ; [`.env.example`](.env.example) promet que `POSTGRES_TEST_DB` reste modifiable sans toucher au script. Un `.sql` déposé dans `/docker-entrypoint-initdb.d` n'interpole aucune variable — le shell, si.                 |
-| `servers.json` inline plutôt que fichier versionné      | Un `.json` ne peut porter aucun commentaire, et il aurait figé `juui` et `5432` en dur à côté du `.env`. Le bloc `configs` du fichier compose interpole `${...}`, donc suit le `.env` sans seconde source de vérité.                                  |
-| `PGPORT` ajouté au service `postgres`                   | Sans lui, `POSTGRES_PORT` ne serait qu'une décoration : le serveur écouterait 5432 quoi qu'il arrive, et la variable mentirait sur ce qu'elle décrit.                                                                                                 |
-| `MASTER_PASSWORD_REQUIRED=False` et un fichier `pgpass` | Le ticket demande d'éviter la saisie manuelle. Sans le premier, pgAdmin réclame un mot de passe maître avant d'afficher quoi que ce soit ; sans le second, il réclame `POSTGRES_PASSWORD` à chaque ouverture de la connexion.                         |
-| `REPLACE_SERVERS_ON_STARTUP=True`                       | Par défaut, la définition de serveur n'est lue qu'à la création du volume `pgadmin_data`. Un changement d'identifiants dans le `.env` n'atteindrait jamais la console sans un `down -v`.                                                              |
-| Volume `pgadmin_data` nommé, `restart: unless-stopped`  | Le ticket demande « un volume » sans le nommer, et ne dit rien du redémarrage. Les deux suivent la convention posée pour `postgres`, que reprendront INFRA-02 à INFRA-05.                                                                             |
-| Chemin monté écrit `./docker/postgres/init`             | `--project-directory .` déplace aussi la résolution des chemins relatifs, qui partent donc de la racine et non de `docker/`. Le fichier compose n'est utilisable que lancé ainsi — c'est écrit en tête de fichier.                                    |
-
-### Écarts assumés avec le ticket INFRA-02
-
-| Écart                                                                                     | Raison                                                                                                                                                                                                                                       |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `redis:8-alpine` au lieu de la 7 demandée                                                 | Même arbitrage qu'en INFRA-01 avec `postgres:18`. Accessoirement une question de licence : la 8 est disponible sous AGPLv3, quand `7-alpine` résout vers la 7.4, passée sous RSALv2/SSPL.                                                    |
-| Redis et RedisInsight publiés sur `127.0.0.1` seulement                                   | Contrairement à `postgres`, cette instance Redis n'a pas de mot de passe, et la console n'a pas de page de connexion. Une publication large les exposerait en écriture à tout le réseau du poste.                                            |
-| Un `docker/redis/redis.conf` versionné plutôt que `--appendonly yes` en ligne de commande | Le ticket le donne pour optionnel. Raisonnement inverse de celui du `servers.json` inline d'INFRA-01 : un `.json` ne peut porter aucun commentaire, un `redis.conf` si — et l'essentiel de ce fichier tient dans ses raisons.                |
-| Le port, lui, reste en ligne de commande                                                  | Un fichier de configuration Redis n'interpole aucune variable d'environnement. Y écrire `6379` créerait une seconde source de vérité à côté de `REDIS_PORT` ; la ligne de commande, elle, suit le `.env`.                                    |
-| `maxmemory` volontairement non défini                                                     | Cache et broker partagent l'instance, et la politique d'éviction ignore les bases. Un `allkeys-*` supprimerait des tâches en attente sans la moindre erreur. Le raisonnement et la seule politique acceptable sont écrits dans `redis.conf`. |
-| RedisInsight épinglé sur `3.8`                                                            | L'image ne publie pas de tag de majeure nue — `3` n'existe pas. La ligne mineure est le plus proche équivalent du `dpage/pgadmin4:9` d'INFRA-01.                                                                                             |
-| Deux connexions pré-remplies dans RedisInsight                                            | Une aurait suffi. Deux font de la convention « base 0 = cache, base 1 = broker » quelque chose qui se voit en ouvrant la console, au lieu d'un commentaire de plus.                                                                          |
-| Sonde de RedisInsight sur `127.0.0.1` et non `localhost`                                  | Le `/etc/hosts` du conteneur fait pointer `localhost` sur `127.0.0.1` **et** sur `::1` ; `wget` tente l'IPv6 d'abord, or la console n'écoute qu'en IPv4. Avec `localhost`, le service reste indéfiniment `unhealthy` tout en répondant.      |
-| `REDIS_PASSWORD` déclarée mais sans effet côté serveur                                    | Variable cliente, consommée par BACK-14 et BACK-15. Lui donner un effet supposerait un `requirepass`, hors de propos pour une instance de développement qui n'est joignable que depuis le poste.                                             |
-
-### Écarts assumés avec le ticket INFRA-03
-
-| Écart                                                               | Raison                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RELEASE.2025-09-07T16-13-09Z` épinglée                             | Convention d'INFRA-01 et INFRA-02, arbitrage inverse : c'est ici la **dernière** image publiée, sur Docker Hub comme sur quay.io — MinIO n'y publie plus depuis septembre 2025. Le correctif de CVE-2025-62506 (octobre 2025) n'existe qu'en binaire ; il vise les comptes de service à politique restreinte, qu'une instance à compte racine unique n'utilise pas.                       |
-| Console réduite au navigateur d'objets                              | `RELEASE.2025-05-24T17-08-30Z` a retiré les écrans d'administration de l'édition communautaire. Le ticket demande de documenter l'URL et les identifiants de développement : c'est fait, en disant ce qu'on y trouve réellement plutôt qu'en promettant une console complète.                                                                                                             |
-| Sonde `/minio/health/live` conservée, en `curl`                     | Les exemples officiels de MinIO ont basculé sur `mc ready local` parce que `curl` avait disparu de l'image fin 2023. Il est **revenu** : vérifié dans le tag épinglé avant d'écrire la ligne, ce qui permet de garder l'endpoint que demande le ticket. À revérifier à tout changement de tag — sans `curl`, la sonde échouerait en boucle et INFRA-04 attendrait un service jamais sain. |
-| `mc anonymous set none` écrit alors que c'est déjà le défaut        | Le ticket dit « applique la policy voulue ». La policy voulue est l'absence d'accès anonyme, puisque BACK-13 passe par des URLs pré-signées. L'écrire referme au démarrage suivant un bucket qu'on aurait ouvert depuis la console.                                                                                                                                                       |
-| Alias `mc` nommé `juui` et non `local`                              | `local` existe déjà dans la configuration par défaut de `mc`, avec le couple `minioadmin/minioadmin`. Le réutiliser donne un « Access Denied » à la création du bucket, sans rapport visible avec sa cause.                                                                                                                                                                               |
-| `restart: 'no'` explicite sur `minio-init`                          | C'est déjà le défaut de Compose, mais les quatre services précédents portent tous `unless-stopped` : recopié par réflexe, il relancerait sans fin un conteneur dont le travail **est** de se terminer.                                                                                                                                                                                    |
-| `MINIO_SITE_REGION` ajoutée au service                              | Sans elle, `S3_REGION` ne décrirait que le client, le serveur acceptant n'importe quelle région annoncée. Même raisonnement que le `PGPORT` d'INFRA-01 : une variable doit décrire ce qu'elle prétend décrire.                                                                                                                                                                            |
-| Script versionné dans `docker/minio/` plutôt qu'`entrypoint` inline | Le ticket place l'amorçage dans `docker/minio/`, et c'est le raisonnement du `redis.conf` d'INFRA-02 : l'essentiel de ces trois commandes tient dans leurs raisons, qu'un fichier peut porter.                                                                                                                                                                                            |
-| Ports publiés sur toutes les interfaces                             | Contrairement à Redis et RedisInsight, MinIO réclame des identifiants et sa console a une page de connexion. La règle du dépôt tient en une phrase : service sans authentification → boucle locale.                                                                                                                                                                                       |
-| Correction de ce que SETUP-05 disait des identifiants racine        | Le README et `.env.example` affirmaient que MinIO, comme PostgreSQL, ne les lit qu'à la première création de son volume. Vérifié : ils sont relus à **chaque** démarrage, les anciens sont refusés aussitôt et les données restent. Le vrai piège est ailleurs — les clés d'accès créées sous l'ancien compte racine deviennent inaccessibles.                                            |
-
-### Écarts assumés avec le ticket INFRA-04
-
-| Écart                                                                                        | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Service `api` déclaré dans le fichier compose                                                | La PORTÉE du ticket ne cite que trois fichiers, mais **aucun ticket** ne revendique ce service : celle d'INFRA-05b ne liste que les trois frontends et le `worker`. Sans lui, `docker compose up` construirait une image que rien ne lance, et les critères d'acceptation ne se vérifieraient qu'à la main.                                                                                                                                                                                                |
-| Contexte de build `backend/api`, entrypoint par contexte **additionnel**                     | Le ticket place le `.dockerignore` dans `backend/api/`, ce qui impose ce contexte — Docker ne lit que `<contexte>/.dockerignore`. `entrypoint.sh` est donc hors contexte, d'où la clé `additional_contexts` du compose et le `--build-context` d'un build à la main. Prendre la racine pour contexte enverrait `node_modules` au démon ; monter l'entrypoint en volume, comme le `redis.conf` d'INFRA-02, rendrait l'image non autonome, or QA-03 la publiera dans un registre.                            |
-| `!README.md` dans le `.dockerignore`                                                         | Le ticket demande d'exclure `*.md`. `pyproject.toml` déclare `readme = "README.md"`, que le backend de build `uv_build` lit pour composer les métadonnées : sans le fichier, `uv sync` échoue au moment d'installer le projet.                                                                                                                                                                                                                                                                             |
-| `.env` exclu en plus de la liste du ticket                                                   | La ligne la plus importante du fichier, et elle n'y figurait pas. `backend/api/.env` existe sur tout poste ; embarqué dans l'image, il serait **lu** par la cible `dev`, dont le `_ENV_FILE` de BACK-03 pointe sur `/app/.env`.                                                                                                                                                                                                                                                                            |
-| Virtualenv dans `/opt/venv`, pas dans `/app/.venv`                                           | La cible `dev` tourne avec le code monté sur `/app` (INFRA-05b) : un `.venv` resté là serait **masqué** par le montage, et le conteneur démarrerait sur un environnement vide — un `ModuleNotFoundError: fastapi` sans rapport visible avec sa cause.                                                                                                                                                                                                                                                      |
-| Un étage `runtime` de plus, et `prod` écrit en **dernier**                                   | Le ticket décrit `builder` + `runtime`. `prod` et `worker` ne différant que par leur `CMD`, l'étage commun leur évite d'être écrits deux fois. Et Docker construit le dernier étage quand aucun `--target` n'est passé : mettre `worker` là ferait produire l'image du worker à un `docker build` nu, en silence.                                                                                                                                                                                          |
-| `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` plutôt que `--workers` et `--forwarded-allow-ips` | Une forme `exec` de `CMD` n'interpole aucune variable ; passer par des arguments imposerait d'envelopper la commande dans un `sh -c`. uvicorn lit lui-même ces deux variables (`uvicorn/config.py`, lignes 352 et 357) : s'appuyer dessus évite ce détour et une seconde source de vérité à côté du `.env`.                                                                                                                                                                                                |
-| Ce que `--proxy-headers` change réellement                                                   | Le ticket présente le drapeau comme le correctif du problème d'IP. Vérifié : il ne fait rien tout seul. Un conteneur voit toujours l'IP de la passerelle (`192.168.65.1` sous Docker Desktop) ; uvicorn ne la remplace que si un intermédiaire pose un `X-Forwarded-For` **et** que cet intermédiaire figure dans `FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement : le réglage ne compte qu'en production, et `*` y serait une faille.                                       |
-| Sonde sur `/openapi.json`, et dans le compose plutôt que dans l'image                        | `/health/live` relevait de BACK-08 et n'existait pas encore : la viser aurait laissé le service indéfiniment `unhealthy` et bloqué les `depends_on` d'INFRA-05b. Quant à l'emplacement, le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. Basculée sur `/health/live` à BACK-08, comme promis ici — d'autant que `/openapi.json` se ferme désormais en production.                                                                                                               |
-| Sonde écrite en `python -c`, pas en `curl` ni `wget`                                         | `python:3.14-slim` n'embarque ni l'un ni l'autre, et en installer un contredirait le « runtime minimal » du ticket. `urlopen` lève sur tout code hors 2xx, l'appel se suffit donc à lui-même. `127.0.0.1` et non `localhost`, même piège IPv6 qu'en INFRA-02 et INFRA-03.                                                                                                                                                                                                                                  |
-| Migrations **sautées** tant qu'`alembic.ini` est absent                                      | Le ticket veut `alembic upgrade head` dans l'entrypoint ; `alembic.ini` et les premières migrations arrivaient tous deux avec BACK-07 — INFRA-04 les attribuait à BACK-05, qui n'a livré que le socle SQLAlchemy. La garde de présence a permis d'écrire l'étape d'avance, et elle s'est activée d'elle-même à la livraison de BACK-07, sans qu'on revienne sur le fichier. La course entre migrateurs concurrents, laissée « à arbitrer », est réglée par le verrou consultatif de l'`env.py` (ADR-0010). |
-| Attente de PostgreSQL en `asyncpg`, pas en `pg_isready`                                      | `pg_isready` demanderait `postgresql-client` dans une image que le ticket veut minimale, pour une commande utilisée une fois. Un simple test TCP ne suffit pas non plus : c'est la leçon déjà inscrite dans le healthcheck `postgres` d'INFRA-01. `asyncpg` est déjà dans le virtualenv.                                                                                                                                                                                                                   |
-| La cible `worker` se construit mais ne s'arrête pas si on la lance                           | Vérifié, et contre-intuitif : sans le module de broker de BACK-15, le gestionnaire de processus de taskiq relance ses workers morts **en boucle**. Le conteneur reste `running` et paraît sain, alors qu'il ne consomme aucune tâche. Seuls les journaux le disent. À savoir pour INFRA-05b.                                                                                                                                                                                                               |
-| `python:3.14-slim-trixie`, distribution nommée                                               | Le `-slim` nu suivrait une bascule de Debian en amont : la libc et les paquets système de l'image changeraient d'un `docker build` à l'autre sans qu'une ligne du dépôt ait bougé. Même esprit que les tags épinglés d'INFRA-01 à INFRA-03.                                                                                                                                                                                                                                                                |
-| Deux variables du compose avec une valeur de repli `${VAR:-…}`                               | `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` naissent avec ce ticket : tout `.env` créé avant lui les ignore. Sans repli, la première donnerait un `int('')` et un conteneur en boucle de redémarrage, la seconde ne ferait plus confiance à personne — en silence. Les cinq autres services s'en passent, leurs variables étant documentées depuis SETUP-05.                                                                                                                                                |
-| « Moins de 400 Mo » : préciser la mesure                                                     | `docker image ls` affiche 402 Mo, mais c'est le `DISK USAGE` du magasin containerd, qui compte les blobs compressés **et** leur copie décompressée. Les mesures qui décrivent l'image valent 91 Mo compressés et ≈ 310 Mo décompressés, pour 293 Mo réellement occupés dans le conteneur. Le détail et les commandes sont plus haut.                                                                                                                                                                       |
-
-### Écarts assumés avec le ticket INFRA-05a
-
-| Écart                                                     | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `frontend/*/next.config.*` inchangés                      | La PORTÉE du ticket cite ces trois fichiers, mais le travail y est **déjà fait** : FRONT-01 à FRONT-03 y ont posé `output: 'standalone'` et `outputFileTracingRoot`, en citant nommément INFRA-05. Il n'y avait pas une ligne à écrire.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `.dockerignore` créé à la **racine**, hors PORTÉE         | Le contexte de build **est** la racine du dépôt — un build pnpm en monorepo a besoin du lockfile, du `pnpm-workspace.yaml` et de tout `packages/`. Docker ne lit que `<contexte>/.dockerignore` : sans lui, 618 Mo de `node_modules` partent au démon à chaque build. Sa ligne la plus importante n'est pas celle-là : `frontend/*/.env.local` existe sur tout poste, Next le charge **au build**, et il est prioritaire sur l'environnement — embarqué dans l'image, il écraserait en silence les `build.args` d'INFRA-05b.                                                                                                                                                                                                                                                                                                                           |
-| `@tailwindcss/postcss` déclaré par les trois applications | **L'écart le plus lourd, et il sort du périmètre du ticket : trois `package.json` et le `pnpm-lock.yaml`.** Sans lui, le build en conteneur échoue sur un `Cannot find module '@tailwindcss/postcss'`. Le paquet n'est déclaré que par `@repo/tailwind-config`, alors que la chaîne PostCSS le nomme depuis l'application : c'est exactement la dépendance fantôme que le `node_modules` strict de pnpm interdit. Vérifié, et c'est ce qui rendait le diagnostic pénible : le même `pnpm --filter … build` **réussit** sur macOS depuis une copie vierge du dépôt et **échoue** dans le conteneur Linux, à `node_modules` identiques. Même arbitrage que `lucide-react` en FRONT-01 et FRONT-03, et même version que le package partagé pour que pnpm n'en installe qu'une — le verrou ne gagne que trois entrées d'`importers`, aucun paquet nouveau. |
-| Cible `dev` ajoutée, non demandée                         | Le ticket ne cite que `deps`, `builder` et `runner`. Précédent d'INFRA-04, dont le Dockerfile porte déjà `dev` et `worker` : le fichier compose ne fait que sélectionner une cible. INFRA-05b n'a ainsi que du compose à écrire, et n'aura pas à rouvrir ce fichier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Six étages pour deux cibles utiles                        | `base` et `toolchain` sont des paliers partagés : pnpm n'est installé qu'une fois, et surtout `runner` descend de `base` et non de `deps` — l'image servie n'hérite donc ni de pnpm, ni des sources, ni des `node_modules` du monorepo.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `npm install -g pnpm@…` plutôt que corepack               | Vérifié dans le Dockerfile amont de `nodejs/docker-node` : l'image officielle **n'embarque pas** corepack. La version vient donc d'un `ARG`, et l'étage `deps` fait échouer le build si elle diverge du champ `packageManager` du `package.json` racine — deux sources de vérité, une garde.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `--offline` ajouté à `pnpm install --frozen-lockfile`     | Le ticket demande `pnpm fetch` puis `pnpm install --frozen-lockfile`. Sans `--offline`, un paquet absent du store serait rattrapé en silence par le registre : le découpage en deux couches ne prouverait plus rien. Vérifié sur un build `--no-cache` complet.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| Store pnpm dans la couche, pas en `--mount=type=cache`    | Contrairement aux montages de cache d'INFRA-04. `pnpm fetch` et `pnpm install` sont deux `RUN` distincts : un cache mount vit sur un autre système de fichiers que la couche en écriture, pnpm y perd le lien physique et recopie tout. Garder le store dans la couche préserve les liens et rend l'étage cachable par Docker sur le seul lockfile.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `HUSKY=0` dans l'image                                    | Le `prepare: husky` de la racine s'exécute à chaque `pnpm install`, celui de l'image compris. Vérifié : husky 9.1.7 se contente d'écrire « .git can't be found » et sort en 0 — la variable dit l'intention, et couvre le jour où `.git` entrerait dans le contexte.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Trois `ARG` de build non cités par le ticket              | `NEXT_PUBLIC_API_URL`, `API_INTERNAL_URL` et `SITE_URL`. Le `.env.example` de la racine et les trois `.env.local.example` **promettent déjà** qu'INFRA-05 les passe en `build.args` ; Next les fige au build. Sans ces `ARG`, INFRA-05b ne pourrait pas tenir cette promesse sans rouvrir ce fichier.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Ces trois `ARG` ne sont **pas** recopiés en `ENV`         | Contre-intuitif, et vérifié : un `ARG` est déjà visible dans l'environnement du `RUN` qui suit, et un `ARG` non passé y est **absent** — là où `ENV SITE_URL=${SITE_URL}` en ferait une chaîne **vide**. La nuance n'est pas théorique : le repli de `app/site-url.ts` (FRONT-02) est un `??`, qui ne rattrape pas la chaîne vide. Avec l'`ENV`, un build sans `SITE_URL` mourait sur un `Invalid URL` dans `new URL(SITE_URL)` ; sans lui, il se replie sur `http://localhost:3002` comme l'application le prévoit.                                                                                                                                                                                                                                                                                                                                   |
-| `.next/static` et `public/` assemblés dans `builder`      | Next ne les recopie **jamais** dans la sortie standalone, les supposant servis par un CDN. Sans ce rattrapage, l'image se construit, le serveur démarre et la page s'affiche sans aucune feuille de style — une panne muette. `public/` est sous garde de présence : aucune des trois applications n'en a un aujourd'hui, et un `cp` de chemin absent ferait échouer le build.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Deux `chown`, et deux seulement                           | Dans `runner`, `.next/cache` est le seul dossier qui appartienne à `juui` : l'optimiseur d'images de Next y écrit, tout le reste est exécuté sans pouvoir être réécrit — choix d'INFRA-04. Dans `dev`, le dossier de l'application entier, parce qu'un serveur de développement Next écrit **dans le code qu'il sert** : `.next/`, puis `next-env.d.ts` qu'il regénère à chaque démarrage. Les deux `EACCES` ont été constatés l'un après l'autre, et ils laissent le conteneur vivant mais muet — seuls les journaux les nomment.                                                                                                                                                                                                                                                                                                                     |
-| `WORKDIR` interpolé plutôt qu'un `CMD` en `sh -c`         | Les `node_modules` de la sortie standalone sont un arbre de liens symboliques pnpm : le dossier de l'application ne peut être ni déplacé ni aplati. Une forme `exec` de `CMD` n'interpole aucune variable, un `WORKDIR`, si — le `sh -c` qu'INFRA-04 s'était refusé n'est donc pas nécessaire ici non plus.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `next dev --port 3000` plutôt que `pnpm dev`              | Le script `dev` du `package.json` fixe le port du **poste** — 3001, 3002 ou 3003. En conteneur les trois applications écoutent sur 3000, comme le pose le tableau des ports : la règle doit valoir dans les deux modes, et le port publié reste seul à les distinguer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Aucun `HEALTHCHECK`                                       | Le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. Celles des trois frontends reviennent donc à INFRA-05b, avec les services.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Deux critères de la checklist non traités                 | « `docker compose up` démarre toute la stack » et « le rechargement à chaud fonctionne » appartiennent à INFRA-05b : la carte porte encore la checklist d'avant la scission d'INFRA-05. Les quatre critères de la checklist **✅ Critères d'acceptation**, elle, sont tous vérifiés.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `--filter "$APP_NAME"` sans les trois points              | `--filter "$APP_NAME..."` construirait aussi les dépendances du workspace. Aucune n'a de script `build` : SHARED-01 publie `@repo/ui` en source TypeScript, que Next transpile lui-même.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-
-> **Note.** Le troisième écart est le seul à toucher des fichiers hors du
-> périmètre du ticket, et il n'était pas évitable : sans lui, le critère
-> « l'image se construit pour les trois valeurs d'`APP_NAME` » ne pouvait pas
-> être tenu. Il corrige un défaut **antérieur** à ce ticket, qu'aucun poste
-> macOS ne pouvait révéler — et que la CI d'images de QA-03 aurait rencontré
-> de toute façon.
-
-### Écarts assumés avec le ticket INFRA-05b
-
-| Écart                                                                                           | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Critère n°5 (« le worker démarre et se connecte à Redis sans erreur ») différé, **levé depuis** | Au moment d'INFRA-05b, le module de broker appartenait à BACK-15 et `taskiq-redis` n'était pas une dépendance — impossible alors, quelle que soit la déclaration du service. **BACK-15 a levé l'écart** : le worker démarre, se connecte au broker Redis et consomme la file — la commande de vérification annoncée a été rejouée, voir [Le worker](#le-worker). Précédent exact d'INFRA-07, qui a différé son propre critère n°5 à BACK-12 et BACK-22.                                                                                |
-| Le worker démarre **par défaut** malgré cela                                                    | Le critère n°1 le nomme parmi les services de `docker compose up`. Le mettre derrière un profil, comme `redisinsight`, aurait rendu la pile silencieuse au prix du critère. Le choix assumé est la fidélité au ticket, plus un paragraphe de README qui dit exactement quoi lire dans les journaux.                                                                                                                                                                                                                                    |
-| « Les 9 services » de la checklist, **11** réellement démarrés                                  | La carte en écrit neuf et en énumère dix ; `minio-init` (INFRA-03) porte le total à onze, `redisinsight` restant derrière son profil `tools` pour un total déclaré de douze. Le tableau des ports fait foi.                                                                                                                                                                                                                                                                                                                            |
-| Ancres YAML `x-…` introduites, bloc `environment` du service `api` scindé                       | Le worker exécute la **même image** que l'API et exige la même configuration ; les trois frontends ne diffèrent que par un nom et un port. Écrits en clair, ils auraient dupliqué une quarantaine de lignes, avec la certitude qu'une correction n'en atteindrait qu'une partie. C'est le raisonnement qui a donné **un seul** Dockerfile de frontend en INFRA-05a. Le bloc `environment` d'INFRA-04 est donc coupé en deux : ce que `get_settings()` exige part dans l'ancre partagée, ce qui relève du serveur HTTP reste sur `api`. |
-| `JWT_*` passées au `worker`, qui ne signe aucun jeton                                           | Contre-intuitif mais contraint : `JWT_SECRET_KEY` n'a **pas** de valeur par défaut, et `Settings` (BACK-03) construit ses cinq sous-modèles d'un bloc. Un worker privé de cette variable s'arrêterait sur une `ConfigurationError` avant d'avoir consommé la moindre tâche. Même raison pour les trois variables `S3_*`.                                                                                                                                                                                                               |
-| Bloc SMTP en commentaires **déplacé** vers l'ancre partagée                                     | INFRA-07 l'avait laissé sur le service `api`. Ce qui envoie un courriel est une **tâche de fond** (BACK-17, BACK-22), donc le worker : c'est lui qui en aura besoin le premier. Toujours en commentaires, et pour la raison inchangée — ces six variables naissent après les `.env` déjà créés sur les postes.                                                                                                                                                                                                                         |
-| L'override n'est **jamais** chargé automatiquement                                              | Conséquence du `-f` de la commande canonique, et non un choix : Compose ignore silencieusement `docker-compose.override.yml` dès qu'un fichier lui est nommé. La réponse est un second `-f`, écrit en tête des deux fichiers compose et dans le README, plutôt qu'un `COMPOSE_FILE` glissé dans le `.env` — qui rendrait le mode de démarrage invisible à la lecture de la commande.                                                                                                                                                   |
-| Un `mkdir` ajouté au `Dockerfile` des frontends, **hors portée**                                | La PORTÉE du ticket cite deux fichiers compose. Le troisième masque décrit ci-dessous ne peut pas fonctionner sans lui : Docker n'initialise un volume qu'à partir de ce que l'**image** porte au point de montage, et crée sinon le dossier en `root` — le serveur non-root boucle alors sur `EACCES: permission denied, mkdir .next/dev`. Constaté exactement ainsi. Une ligne, dans le `RUN` qui faisait déjà le `chown`.                                                                                                           |
-| Troisième masque sur `.next`, non annoncé par INFRA-05a                                         | Le Dockerfile n'en annonçait que deux, sur les `node_modules`. Le `.next` du poste existe dès le premier `pnpm dev` et porte des chemins absolus de l'hôte et des artefacts SWC `darwin` ; laissé visible, il ferait repartir `next dev` sur un cache fabriqué ailleurs — et le conteneur réécrirait au passage celui du poste.                                                                                                                                                                                                        |
-| `command` du `worker` redite dans l'override                                                    | La cible `worker` installe le paquet en `--no-editable` : lui monter du code n'y changerait rien. Seule la cible `dev` est éditable, et son `CMD` est `uvicorn`. L'alternative — un étage `worker-dev` — aurait rouvert plus largement le `Dockerfile` d'INFRA-04.                                                                                                                                                                                                                                                                     |
-| `next dev` et non `pnpm dev`, contrairement au libellé du ticket                                | Arbitrage déjà rendu par INFRA-05a, dont la cible `dev` porte le `CMD` : le script `dev` du `package.json` fixe le port du **poste** (3001, 3002, 3003), là où les trois conteneurs écoutent tous sur 3000. L'override n'a donc aucune `command` à écrire pour les frontends.                                                                                                                                                                                                                                                          |
-| Sonde des frontends en `node -e`, avec un seuil `< 500`                                         | Ni `curl` ni `wget` ne sont garantis dans `node:*-slim` — même situation que la `python:3.14-slim` de l'API, dont la sonde est déjà en `python -c`. Le seuil, lui, n'est pas un relâchement : `frontend-admin` répond **307 vers `/login`** sur `/` (FRONT-03), et une sonde exigeant 200 le laisserait indéfiniment `unhealthy`.                                                                                                                                                                                                      |
-| `args: !override` dans le fichier de développement                                              | La cible `dev` ne déclare pas les trois `ARG` de Next — ils vivent dans `builder`. Sans ce marqueur, BuildKit avertirait à chaque construction que deux arguments n'ont pas été consommés. Les valeurs sont reprises en `environment:`, `next dev` lisant `process.env` à l'exécution là où `next build` les fige.                                                                                                                                                                                                                     |
-| `depends_on: api` en `service_healthy` et non `service_started`                                 | La sonde de l'API existe depuis INFRA-04, autant s'en servir : un frontend qui répond avant que l'API accepte une requête afficherait des erreurs de rendu serveur pendant les trente premières secondes de chaque `up`.                                                                                                                                                                                                                                                                                                               |
-| `.env.example` inchangé                                                                         | Les six variables nécessaires — les trois `FRONTEND_*_HOST_PORT`, `FRONTEND_INDIVIDUAL_SITE_URL`, `NEXT_PUBLIC_API_URL` et `API_INTERNAL_URL` — y sont depuis SETUP-05 et annoncent déjà, mot pour mot, qu'INFRA-05 les passera « en `build.args` ». Aucune valeur de repli `${VAR:-…}` non plus : la règle du dépôt réserve ce mécanisme aux variables nées **après** les `.env` déjà créés sur les postes.                                                                                                                           |
-
-### Écarts assumés avec le ticket INFRA-06
-
-| Écart                                                      | Raison                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Une cible `dev` en plus de la liste du ticket              | Le ticket ne nomme que `up`. Le README et l'en-tête de `docker-compose.override.yml` promettent **deux cibles distinctes** pour les deux invocations de compose : `up` reste, mot pour mot, la commande servie du README ; `dev` porte le second `-f`, sans lequel l'override est silencieusement ignoré.                                                                                                     |
-| Deux scripts seulement dans `scripts/`                     | Le ticket impose le dossier, pas son remplissage. Toute recette qui tient en une ligne reste dans le `Makefile`, où elle se lit. Seules deux cibles n'y tiennent pas : `mail` (choix de l'ouvreur du système, lecture d'une variable) et `db-reset` (confirmation, valeurs passées d'une commande à l'autre) — `make` 3.81 n'a pas de `.ONESHELL`, chaque ligne de recette étant un shell distinct.           |
-| `db-reset` ne détruit **que** le volume de PostgreSQL      | `docker compose down -v` emporterait aussi MinIO — donc les fichiers déposés dans le bucket —, Redis, RedisInsight et pgAdmin. La cible s'appelle `db-reset`. Le nom du volume est **demandé à Docker** (`docker inspect` sur le conteneur), jamais reconstruit à partir de `COMPOSE_PROJECT_NAME`, qui n'est qu'une valeur du `.env`.                                                                        |
-| `db-reset` demande confirmation (`force=1` pour la sauter) | La cible détruit des données sans retour possible. Aucun autre geste du dépôt n'est destructif sans le dire, et une entrée non interactive échoue explicitement plutôt que de détruire en silence.                                                                                                                                                                                                            |
-| Les cibles `db-*` tournent sur l'hôte                      | `alembic revision --autogenerate` déclenche les `post_write_hooks` Ruff (BACK-07), que les images `prod` et `worker` n'embarquent pas. Elles délèguent donc à `backend/api/Makefile`, écrit pour ça. Prérequis : `uv`, le port PostgreSQL publié, et `backend/api/.env` qui pointe `localhost`.                                                                                                               |
-| Le `Makefile` ne lit pas le `.env`                         | `include` puis `export` mettrait `POSTGRES_HOST=postgres` dans l'environnement de chaque recette et casserait les cibles `db-*` de l'hôte — pydantic-settings donne la priorité au processus sur le dotenv —, en exportant au passage les mots de passe dans tout sous-processus, `pnpm` compris. `docker compose` lit ce fichier lui-même ; `make mail` lit sa seule variable dans son script.               |
-| `test`, `test-back` et `seed` déclarées sans rien exécuter | pytest arrive avec BACK-12, les tests des workspaces avec QA-02, le seed avec INFRA-08 — dont la carte demande précisément que `make seed` soit « déclaré sans être fourni ». Les cibles sortent en 0 avec un message qui nomme le ticket attendu, comme l'entrypoint d'INFRA-04 annonce ses migrations sautées. `test-front` appelle le vrai `pnpm test`, muet tant qu'aucun workspace ne définit le script. |
-| `logs` exige `service=` et valide le nom                   | Le ticket écrit `make logs service=api`. La garde reprend celle du `m=` de `backend/api/Makefile`. La validation n'est pas du zèle : `docker compose logs --follow` sur un service inconnu n'affiche rien et sort en 0 — un écran vide à regarder indéfiniment.                                                                                                                                               |
-| `restart` ne relit pas le `.env`                           | `docker compose restart` relance les conteneurs sans les recréer : c'est le sens du mot, et la cible s'y tient. Après un changement de configuration, c'est `make up` ou `make dev` qu'il faut — ils recréent ce qui a changé. Le `Makefile` le dit en commentaire.                                                                                                                                           |
-| `up` refuse de démarrer sans `.env`, sans le créer         | Sans `.env`, Compose substitue la chaîne vide dans chaque `${...}` **sans erreur** — postgres sans mot de passe, ports invalides. La cible échoue en donnant la commande à taper plutôt que de copier le gabarit en douce : la séquence d'installation documentée reste la seule source de vérité.                                                                                                            |
-| `.dockerignore` complété, **hors portée**                  | Le contexte de build des trois frontends est la racine du dépôt. Sans deux motifs, le `Makefile` et `scripts/` entreraient dans le `COPY . .` de l'étage `deps` — en amont du `pnpm install` : toute modification du `Makefile` invaliderait le cache de construction des trois images. Deux lignes, dans le fichier dont c'est exactement l'objet.                                                           |
-| Trois commentaires corrigés hors portée                    | `docker/docker-compose.yml`, `docker/docker-compose.override.yml` et `.env.example` annonçaient au futur ce que ce ticket livre (« et plus tard de `make up` », « INFRA-06 encapsulera »). Les laisser rendrait faux, le jour de la livraison, trois fichiers que le dépôt tient à jour ligne à ligne.                                                                                                        |
-
-### Écarts assumés avec le ticket INFRA-07
-
-| Écart                                                           | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `axllent/mailpit:v1.31`, ligne mineure                          | L'image ne publie **aucun** tag de majeure nue — `v1` n'existe pas. Même arbitrage que le `redis/redisinsight:3.8` d'INFRA-02 : on épingle le plus large des tags qui existe réellement.                                                                                                                                                                                                                                                                                                                                                                             |
-| Sonde `/mailpit readyz` plutôt qu'un `wget` sur l'interface web | C'est **bien** l'endpoint de l'interface web que demande le ticket — `/readyz` — appelé par la sous-commande que l'image embarque dans son propre `HEALTHCHECK`. Elle relit `MP_UI_BIND_ADDR`, donc suit un changement de `MAILPIT_WEB_PORT` toute seule, et évite le piège `localhost`/IPv6 qui a déjà coûté trois commentaires au fichier compose.                                                                                                                                                                                                                 |
-| Les deux ports publiés sur `127.0.0.1` seulement                | Le ticket ne le demande pas ; la règle du dépôt, si. Mailpit n'a ni authentification SMTP ni page de connexion web, et son relais accepte n'importe quel message. Une publication large offrirait au réseau du poste un relais ouvert en écriture et la lecture en clair des codes OTP déjà émis.                                                                                                                                                                                                                                                                    |
-| `MP_SMTP_BIND_ADDR` et `MP_UI_BIND_ADDR` déclarées              | Sans elles, `SMTP_PORT` et `MAILPIT_WEB_PORT` ne seraient qu'une décoration à droite des mappings : le serveur écouterait 1025 et 8025 quoi qu'il arrive. Même raisonnement que le `PGPORT` d'INFRA-01 et le `MINIO_SITE_REGION` d'INFRA-03 — une variable doit décrire ce qu'elle prétend décrire.                                                                                                                                                                                                                                                                  |
-| `SMTP_PORT` plutôt que `MAILPIT_SMTP_PORT`                      | Nom côté application, fixé par SETUP-08 : l'adaptateur de BACK-22 n'a pas à savoir quel conteneur lui répond. La variable sert **aussi** de port d'écoute, comme `POSTGRES_PORT`, d'où la seule entorse à la convention `<SERVICE>_PORT` du `.env.example`.                                                                                                                                                                                                                                                                                                          |
-| Variables SMTP non passées au service `api`                     | Hors de la portée du ticket, qui s'arrête au service `mailpit` et à `.env.example`. Surtout : ces six variables naissent **après** les `.env` déjà créés sur les postes, et les référencer produirait six avertissements `variable is not set` à chaque `up` pour des variables qu'aucune ligne de code ne lit. Le bloc attend, en commentaires, à sa place exacte.                                                                                                                                                                                                  |
-| Critère n°5 livré en commande documentée, pas en test pytest    | `backend/api/tests/` n'existe pas — `pyproject.toml` l'écrit noir sur blanc, il arrive avec BACK-12 — et il n'y a ni configuration pytest, ni adaptateur SMTP (BACK-22), ni parcours OTP (BACK-17). Amorcer un harnais de test ici empiéterait sur BACK-12 et contredirait la frontière que le ticket pose lui-même. Précédent exact d'INFRA-03, qui a documenté l'aller-retour MinIO au lieu de le tester. L'aller-retour livré passe bien par l'API HTTP, ce que le critère vise ; le test pytest revient à BACK-12 et BACK-22, l'helper de lecture d'OTP à QA-04. |
-| Cible `make mail` non livrée, **levée depuis**                  | Le ticket la renvoyait explicitement à INFRA-06, qui l'a livrée : `make mail` ouvre la boîte via `scripts/open-mailbox.sh`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| `MP_MAX_MESSAGES` laissé à son défaut de 500                    | Le ticket n'en dit rien. Sans volume, la boîte repart vide à chaque redémarrage : le plafond ne se rencontre pas sur un poste de développement, et l'écrire n'ajouterait qu'une variable à maintenir.                                                                                                                                                                                                                                                                                                                                                                |
-
-### Écarts assumés avec le ticket DOC-01
-
-| Écart                                                                 | Raison                                                                                                                                                                                                                                                                                                                                                             |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `"type": "module"` absent du `package.json` du site                   | Tous les autres workspaces le déclarent ; ici il **casse le build**. Le bundle serveur de Docusaurus est du CommonJS : chargé comme module ES, il sort sur `require.resolveWeak is not a function`. Vérifié dans les deux sens, et le gabarit officiel de Docusaurus ne le déclare pas non plus.                                                                   |
-| Documentation servie à la racine du site, `blog: false`               | Le ticket demande un site de documentation technique, ni blog ni vitrine. Une page d'accueil marketing serait un fichier de plus à tenir pour un lecteur qui cherche une réponse, et un segment `/docs/` de plus dans chaque URL.                                                                                                                                  |
-| `@repo/typescript-config/base.json` plutôt que `@docusaurus/tsconfig` | Le tsconfig de Docusaurus pose `baseUrl`, que TypeScript 6 déclare déprécié (TS5101) ; son gabarit s'en tire avec `ignoreDeprecations: "6.0"`, ce que [`packages/ui`](packages/ui/tsconfig.json) a déjà refusé de faire. Ses quatre réglages utiles sont recopiés dans le tsconfig du site, avec le renvoi qui va bien.                                            |
-| `@docusaurus/plugin-content-docs` en dépendance de développement      | `sidebars.ts` importe son type `SidebarsConfig`. Le gabarit officiel ne la déclare pas — npm aplatit son arbre et la rend visible quand même. Le `node_modules` strict de pnpm, lui, n'expose que ce qu'un package déclare.                                                                                                                                        |
-| `@easyops-cn/docusaurus-search-local` retenu                          | Le ticket demande un plugin hors ligne sans en nommer un. C'est le seul encore maintenu : `docusaurus-lunr-search` n'a pas publié depuis janvier 2025, et `@cmfcmf/docusaurus-search-local` est l'original dont celui-ci est la réécriture. Sa fonctionnalité « Ask AI » reste éteinte — le paquet qui la porte est une peer **optionnelle**, que rien n'installe. |
-| Recherche indisponible sous `pnpm dev`                                | Limite du plugin, pas un réglage : l'index n'est produit qu'au build. Le critère se vérifie donc sur un `build` suivi d'un `start`, et la page d'accueil du site le dit à son lecteur.                                                                                                                                                                             |
-| `documentation/i18n/fr/code.json` ajouté                              | Le plugin de recherche ne livre que les traductions `en`, `de`, `vi` et `zh-CN` : sans ce fichier, une interface par ailleurs française afficherait « Search ». Seules ses dix chaînes y figurent — recopier les 92 clés qu'écrit `docusaurus write-translations` figerait dans le dépôt des traductions que `@docusaurus/theme-translations` tient déjà à jour.   |
-| Job `build` déclenché aussi par les pull requests                     | Le critère ne parle que de la publication depuis `main`. Sans ce garde-fou, un renvoi mort ou un diagramme invalide ne se verrait qu'après le merge, sur le site en ligne. Le chevauchement avec QA-02 est borné à `documentation/**`.                                                                                                                             |
-| `actions/configure-pages` avec `enablement: true`                     | GitHub Pages n'était pas activé sur le dépôt, et le ticket veut une publication « opérationnelle ». Un clic dans les réglages ne se versionne pas, ne se relit pas et ne se rejoue pas ailleurs.                                                                                                                                                                   |
-| `documentation/tsconfig.json` ajouté au résolveur d'imports d'ESLint  | Hors du périmètre littéral du ticket, dans [`packages/config-eslint`](packages/config-eslint/base.js). Sans lui, `import-x/no-unresolved` n'a aucun projet TypeScript à opposer aux fichiers du site.                                                                                                                                                              |
-| `core-js` refusé dans `allowBuilds`                                   | Dépendance transitive de Docusaurus, dont pnpm 11 bloque le script d'installation et attend un arbitrage. Son `postinstall` ne compile rien : il affiche une bannière Open Collective, et rien d'autre — vérifié dans son `postinstall.js`.                                                                                                                        |
-| Barre latérale plate, six documents                                   | Six catégories d'une seule page afficheraient des sections qui ne se déplient pas. Chaque entrée devient une `category` le jour où DOC-02 lui ajoute une deuxième page ; la forme est écrite en commentaire dans `sidebars.ts`.                                                                                                                                    |
-| Ni service Compose, ni variable `.env`, ni cible `make`               | Le ticket s'arrête au workspace pnpm. Le port 3004 est donc porté par le script `dev` du site, là où les services conteneurisés tiennent le leur d'une variable `*_HOST_PORT`.                                                                                                                                                                                     |
-| Ni favicon, ni logo, ni feuille de style propre                       | Aucun habillage n'est demandé. Le thème par défaut suffit à lire, et `src/css/custom.css` viendra le jour où il y aura quelque chose à y écrire.                                                                                                                                                                                                                   |
-| Le site alourdit l'étage `deps` des images de frontend                | [`docker/frontend/Dockerfile`](docker/frontend/Dockerfile) installe tout le monorepo. Conséquence anticipée par le `.dockerignore` d'INFRA-05a, qui garde les sources du site dans le contexte de build pour cette raison exacte ; restreindre l'installation relèverait de ce ticket-là. L'étage a été reconstruit avec le site en place, il passe.               |
-
-### Écarts assumés avec le ticket DOC-02b
-
-| Écart                                                                | Raison                                                                                                                                                                                                                                                                                                                                                         |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `numberPrefixParser: false` ajouté à `docusaurus.config.ts`          | Hors de la portée littérale, qui s'arrête à `documentation/docs/adr/`. Par défaut Docusaurus **retire** le préfixe numérique d'un nom de fichier (`0001-monorepo.md` → id `monorepo`) : il le lit comme un artifice de tri. Pour un ADR, ce numéro est l'identité de la décision — sans ce réglage, « ADR-0001 » ne serait citable ni en URL ni dans un lien.  |
-| Numérotation chronologique, pas l'ordre de la carte                  | La carte liste le monolithe en premier ; le registre numérote dans l'ordre des tickets fondateurs (SETUP-01 → BACK-15). Les ADR se référencent entre eux — la tenance s'appuie sur le monolithe modulaire, l'appartenance datée sur la tenance — et un renvoi qui pointe toujours vers un numéro **inférieur** se lit sans aller-retour.                       |
-| Gabarit enrichi d'un tableau de tête et d'une section « Références » | Les cinq sections demandées y sont. Le statut devient un tableau — statut, date de consignation, tickets — pour que le critère « chaque ADR renvoie aux tickets qui l'appliquent » ait une place fixe et vérifiable d'un coup d'œil ; « Références » pointe les fichiers du dépôt qui portent la décision, au lieu d'en paraphraser le contenu qui périmerait. |
+Une fois la pile debout :
+
+| Service                         | URL                          |
+| ------------------------------- | ---------------------------- |
+| API — documentation interactive | <http://localhost:8000/docs> |
+| Interface professionnelle       | <http://localhost:3001>      |
+| Interface des particuliers      | <http://localhost:3002>      |
+| Back-office                     | <http://localhost:3003>      |
+| Documentation                   | <http://localhost:3004>      |
+| pgAdmin                         | <http://localhost:5050>      |
+| MinIO — console web             | <http://localhost:9001>      |
+| Mailpit — boîte de réception    | <http://localhost:8025>      |
+
+Le reste — les deux parcours pas à pas, l'allocation complète des ports et leurs identifiants,
+le mode développement, la remise à zéro de la base (`make db-reset`) — est sur les pages
+[Démarrage](https://kederiku.github.io/juui/getting-started/demarrage) et
+[Ports et URLs des services](https://kederiku.github.io/juui/infrastructure/ports-et-services).
 
 ## Conventions
 

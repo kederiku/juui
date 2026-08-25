@@ -253,7 +253,7 @@ services:
   # ---------------------------------------------------------------------------
   postgres:
     # Le ticket demande une 16 ; on lit une 18. Voir « Ecarts assumes avec le
-    # ticket INFRA-01 » dans le README.
+    # ticket INFRA-01 » au registre des ecarts du site de documentation.
     image: postgres:18-alpine
 
     environment:
@@ -407,7 +407,7 @@ services:
   # plus bas la rend visible.
   redis:
     # Le ticket demande une 7 ; on lit une 8. Voir « Ecarts assumes avec le
-    # ticket INFRA-02 » dans le README.
+    # ticket INFRA-02 » au registre des ecarts du site de documentation.
     image: redis:8-alpine
 
     # Deux arguments, deux natures. Le fichier porte les reglages statiques et
@@ -543,8 +543,8 @@ services:
     # Derniere image publiee, sur Docker Hub comme sur quay.io : MinIO n'y
     # publie plus rien depuis septembre 2025. Le correctif de CVE-2025-62506
     # (octobre 2025) n'existe donc qu'en binaire -- voir « Ecarts assumes avec
-    # le ticket INFRA-03 » dans le README, qui dit pourquoi il ne concerne pas
-    # cette instance.
+    # le ticket INFRA-03 » au registre des ecarts du site de documentation, qui
+    # dit pourquoi il ne concerne pas cette instance.
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
 
     # `server /data` : un seul disque, ce qui suffit a un poste. Sans
@@ -901,7 +901,8 @@ services:
     #   docker compose --project-directory . -f docker/docker-compose.yml up -d --scale worker=2
     #
     # Un worker n'ecoute rien de toute facon -- il tire ses taches de Redis --,
-    # d'ou son absence du tableau des ports du README.
+    # d'ou son absence du tableau des ports (page « Ports et URLs des
+    # services » du site de documentation).
     #
     # PAS DE HEALTHCHECK non plus : il n'expose aucune sonde a interroger. Ce
     # serait a BACK-15 d'en fournir une si le besoin s'en faisait sentir.
@@ -917,8 +918,8 @@ services:
   # port publie, et le SITE_URL que seul `frontend-individual` consomme.
   #
   # LES TROIS ECOUTENT SUR 3000 A L'INTERIEUR DU RESEAU. C'est la publication qui
-  # les distingue, et c'est une regle du depot -- le tableau des ports du README
-  # la pose, le CMD de la cible `dev` d'INFRA-05a la tient aussi. Rien ne publie
+  # les distingue, et c'est une regle du depot -- le tableau des ports du site
+  # de documentation la pose, le CMD de la cible `dev` d'INFRA-05a la tient aussi. Rien ne publie
   # 3000 : c'est le port le plus dispute d'un poste de developpement.
   frontend-professional:
     build:
