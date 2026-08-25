@@ -106,7 +106,7 @@ _MAX_ATTEMPTS: Final = 3
 #
 # Constante de module et non variable d'environnement, meme arbitrage qu'en
 # BACK-05 et BACK-14 : chaque variable coute deux gabarits, une ligne de compose
-# et une ligne de README, et l'appelant peut deja passer `expires_in`.
+# et une ligne de documentation, et l'appelant peut deja passer `expires_in`.
 _DEFAULT_PRESIGNED_EXPIRE_SECONDS: Final = 15 * 60
 
 # Plafond de la signature V4, impose par le protocole et non par ce service : sept

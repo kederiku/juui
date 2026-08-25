@@ -59,7 +59,7 @@ REQUEST_ID_LABEL: Final = "request_id"
 #
 # Des constantes de module et non des reglages, comme dans `redis_cache.py` :
 # chaque variable de configuration coute deux gabarits `.env.example`, une
-# ligne de compose et une ligne de README.
+# ligne de compose et une ligne de documentation.
 DEFAULT_MAX_RETRIES: Final = 3
 BASE_RETRY_DELAY_SECONDS: Final = 1.0
 RETRY_BACKOFF_FACTOR: Final = 2.0

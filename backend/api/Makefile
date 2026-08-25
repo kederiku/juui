@@ -56,7 +56,8 @@ migrate: ## Applique les migrations jusqu'a head
 	uv run alembic upgrade head
 
 # Un cran a la fois, jamais `base` : revenir a zero est un geste de
-# verification qui s'ecrit en toutes lettres (voir le README).
+# verification qui s'ecrit en toutes lettres (voir la page Migrations du site
+# de documentation).
 downgrade: ## Annule la derniere migration appliquee
 	uv run alembic downgrade -1
 
