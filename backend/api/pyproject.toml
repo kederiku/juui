@@ -207,8 +207,9 @@ convention = "google"
 classmethod-decorators = ["pydantic.field_validator", "pydantic.model_validator"]
 
 [tool.ruff.lint.per-file-ignores]
-# tests/ n'existe pas encore -- il arrive avec BACK-12. La regle est posee
-# d'avance pour que la suite de tests naisse conforme.
+# La regle a ete posee avant tests/ pour que la suite de tests naisse conforme ;
+# BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 apportera le
+# harnais complet.
 #
 # S101 : `assert` est la maniere normale d'ecrire un test, pas une faille.
 # D1   : un test se nomme, il ne se documente pas.
@@ -272,6 +273,21 @@ init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
+
+# Configuration MINIMALE de pytest, tiree en avant par BACK-06b pour ses tests
+# d'isolation -- ecart consigne au registre. Le harnais complet appartient a
+# BACK-12 : les marqueurs unit/integration/slow, --strict-markers, la
+# couverture et les fixtures generales s'ajouteront ici.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Mode auto : chaque test async tourne sans decorateur, decision anticipee sur
+# BACK-12 -- necessaire pour ecrire le premier test asynchrone.
+asyncio_mode = "auto"
+# Fige le defaut actuel de pytest-asyncio et fait taire son avertissement.
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "tenant_isolation: tests d'isolation multi-tenant (BACK-06b)",
+]
 
 # ---------------------------------------------------------------------------
 # Garde-fous d'architecture (BACK-04b)

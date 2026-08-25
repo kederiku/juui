@@ -43,6 +43,9 @@ techniques du noyau partagé sont livrés — [cache](./cache.md) (BACK-14),
 générique (BACK-06a), `TokenService` restant à BACK-10a —, la
 [surface HTTP](./surface-http.md) versionnée et ses sondes sont en place (BACK-08),
 les [tâches de fond](./taches-de-fond.md) ont leur broker, leur worker et leur
-politique de reprise (BACK-15), Ruff et Mypy sont configurés (BACK-02). Ce qui
+politique de reprise (BACK-15), le filtrage multi-tenant est mécanique et prouvé
+par les premiers tests du service — la suite `tenant_isolation`, `make test` —
+(BACK-06b, [ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md)), Ruff et
+Mypy sont configurés (BACK-02). Ce qui
 n'est pas encore là est listé dans le
 [README du service](https://github.com/kederiku/juui/blob/main/backend/api/README.md#ce-qui-nest-pas-encore-là).

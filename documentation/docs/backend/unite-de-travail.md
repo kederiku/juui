@@ -121,6 +121,24 @@ Quatre comportements valent d'être nommés, parce qu'ils se décident ici pour 
   chronologique et déterministe sans colonne de tri — et la sortie est **sans borne**, la
   pagination étant une convention de BACK-24, pas un choix à figer ici en douce.
 
+## La variante tenant : deux coutures, une classe mère
+
+Depuis BACK-06b, le dépôt générique expose deux points d'extension que toutes ses opérations
+empruntent : `_select()`, point de départ de **toute** requête SELECT — `list` comme les finders
+maison, `find_by_email` en tête —, et `_load()`, le chargement par identifiant que `get`, `save`
+et `delete` partagent. Dans la classe de base, les deux sont neutres : elle reste **vierge de
+tenance**.
+
+`TenantSqlAlchemyRepository` les surcharge, et c'est tout ce qu'elle fait : le dépôt d'un agrégat
+déclarant `TenantMixin` en hérite, et ses cinq opérations comme ses finders sont restreints au
+groupe actif — une ligne d'un autre groupe répond par l'erreur d'**absence** du module,
+indistincte d'un identifiant inexistant. L'insertion est estampillée par le socle, jamais par le
+mapping du module, et une garde le vérifie. Le choix tenant ou non se lit donc en une ligne : la
+classe mère du dépôt. Mécanique, alternatives écartées et échappatoire `use_all_groups` sont
+consignées dans l'[ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md) ; la convention qui
+en découle pour tout dépôt, tenant ou non : un finder part de `self._select()`, jamais d'un
+`select(...)` importé.
+
 ## `get_identity_uow` : une instance par requête
 
 La dépendance FastAPI vit à la racine du module, à côté de l'implémentation qu'elle assemble,

@@ -78,8 +78,10 @@ typé `UUID` part en chaîne et le receiver le retype à l'arrivée.
 
 **Le groupe actif ne traverse pas la file tout seul.** Toute tâche liée à un tenant prend
 `group_id` en premier argument et ouvre son corps par `with use_group(group_id):` — sinon la
-composition des clés de cache `TENANT`, et le futur filtre de persistance (BACK-06b), lèvent
-`MissingTenantContextError` au lieu d'écrire hors groupe. Le patron est `demo.record_ping`.
+composition des clés de cache `TENANT` et le filtre de persistance (BACK-06b) lèvent
+`MissingTenantContextError` au lieu d'écrire hors groupe. Le patron est `demo.record_ping`, et
+le contrat est prouvé contre le vrai filtre par le test
+`test_background_task_pattern_reapplies_the_filter` de la suite `tenant_isolation`.
 
 **Toute tâche est rejouable.** La politique de reprise rejoue les échecs, et un stream
 représente un message dont l'acquittement s'est perdu : une tâche doit pouvoir s'exécuter deux

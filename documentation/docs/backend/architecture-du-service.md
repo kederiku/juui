@@ -127,7 +127,6 @@ ranger, et quel ticket l'apporte.
 | ---------------------------------- | ------------------------------------------------------------------- | ------------------------- |
 | `shared/domain/ports/`             | `TokenService`                                                      | BACK-10a                  |
 | `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                   |
-| `shared/infrastructure/db/`        | le filtre de tenance, dans `repositories/`                          | BACK-06b                  |
 | `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11          |
 | `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31 |
 | `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                   |

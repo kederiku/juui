@@ -44,6 +44,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [BACK-04b](./back.md#écarts-assumés-avec-le-ticket-back-04b)     | Les contrats d'architecture Import Linter              |
 | [BACK-05](./back.md#écarts-assumés-avec-le-ticket-back-05)       | Le socle SQLAlchemy et le pool                         |
 | [BACK-06a](./back.md#écarts-assumés-avec-le-ticket-back-06a)     | L'unité de travail et le dépôt générique               |
+| [BACK-06b](./back.md#écarts-assumés-avec-le-ticket-back-06b)     | Le filtrage multi-tenant et les tests d'isolation      |
 | [BACK-07](./back.md#écarts-assumés-avec-le-ticket-back-07)       | Alembic et la première migration                       |
 | [BACK-08](./back.md#écarts-assumés-avec-le-ticket-back-08)       | La sonde de santé et les métadonnées OpenAPI           |
 | [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)       | Le port de stockage objet                              |

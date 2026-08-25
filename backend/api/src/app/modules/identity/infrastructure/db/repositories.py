@@ -21,12 +21,12 @@ CONTRAT du port, lui, n'a pas bouge. `list` et `delete` existent sur la classe
 sans entrer au port : le port ne s'elargit pas parce que la classe sait faire
 plus.
 
-CE QUE BACK-06B AJOUTERA
-Le filtrage automatique par groupe. Il ne concernera PAS ce depot : `Account` ne
-declare pas `TenantMixin` (voir `models.py`).
+CE QUE BACK-06B A CHANGE ICI
+Rien, et c'est le point : `Account` ne declare pas `TenantMixin` (voir
+`models.py`), le depot herite donc de `SqlAlchemyRepository` et non du depot
+tenant. Seule la convention commune s'applique : `find_by_email` part de
+`self._select()`, la couture que le filtre surcharge chez les depots tenant.
 """
-
-from sqlalchemy import select
 
 from app.modules.identity.domain.entities import Account, AccountStatus, AccountType
 from app.modules.identity.domain.exceptions import AccountNotFoundError
@@ -89,6 +89,6 @@ class SqlAlchemyAccountRepository(SqlAlchemyRepository[Account, AccountModel], A
         Returns:
             Le compte, ou None si l'adresse est libre.
         """
-        statement = select(AccountModel).where(AccountModel.email == email)
+        statement = self._select().where(AccountModel.email == email)
         model = (await self._session.execute(statement)).scalar_one_or_none()
         return None if model is None else self._to_entity(model)

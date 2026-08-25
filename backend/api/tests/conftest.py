@@ -1,0 +1,121 @@
+"""Fixtures minimales des tests d'isolation de tenance (BACK-06b).
+
+HARNAIS TIRE EN AVANT SUR BACK-12
+Le harnais complet -- fixtures generales, fabrique de jetons, client HTTP,
+migrations appliquees a la base de test -- appartient a BACK-12. Ce conftest ne
+porte que le strict necessaire aux tests d'isolation : un moteur NullPool vers
+la base de test, les deux tables stubs, une session par test annulee en sortie.
+Chaque emprunt sur BACK-12 est consigne au registre des ecarts.
+
+LA BASE DE TEST, SANS TOUCHER `DatabaseSettings`
+L'URL derive de la configuration reelle en remplacant le nom de la base par
+`POSTGRES_TEST_DB` (defaut `app_test`, creee par INFRA-01 au premier demarrage
+du cluster docker). Le champ dedie de `DatabaseSettings` et la decommentation
+de `.env.example` restent a BACK-12 -- meme geste que `alembic/env.py`, qui
+construit son moteur sans passer par `build_engine`.
+
+POURQUOI NullPool
+Le moteur nait sur la boucle d'evenements de la session pytest et sert des
+tests qui tournent chacun sur la leur : un pool ordinaire lierait sa file a la
+premiere boucle venue. NullPool ouvre une connexion par emprunt et la ferme a
+la restitution -- la raison meme pour laquelle `engine.py` promet ce parametre
+aux fixtures de BACK-12.
+
+ISOLATION ENTRE TESTS PAR ROLLBACK
+Les tests ne committent jamais : semis et ecritures restent dans la
+transaction de LEUR session, que le teardown annule. Ni savepoints ni
+truncate -- cette machinerie appartient a BACK-12.
+"""
+
+import os
+from collections.abc import AsyncIterator, Iterator
+from uuid import UUID, uuid4
+
+import pytest
+import pytest_asyncio
+from sqlalchemy import URL, make_url
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
+
+from app.core.config import DatabaseSettings
+from app.shared.infrastructure.db.base import Base
+from app.shared.infrastructure.db.session import build_sessionmaker
+from app.shared.infrastructure.tenancy import current_group_id
+from tests.shared.tenancy_stubs import PlainNoteModel, TenantNoteModel
+
+# Les deux seules tables que ces tests creent et detruisent : jamais un
+# create_all/drop_all sans cible, qui toucherait aux tables sous migrations.
+_STUB_TABLES = [TenantNoteModel.__table__, PlainNoteModel.__table__]
+
+
+def _test_database_url() -> URL:
+    """Compose l'URL de la base de test a partir de la configuration reelle."""
+    settings = DatabaseSettings()
+    test_db = os.environ.get("POSTGRES_TEST_DB", "app_test")
+    if test_db == settings.db:
+        message = (
+            f"La base de test « {test_db} » est la base applicative : les tests "
+            "creent et detruisent des tables, ils ne tournent jamais contre elle. "
+            "Renseigner POSTGRES_TEST_DB avec une base dediee."
+        )
+        pytest.exit(message)
+    return make_url(settings.sqlalchemy_url).set(database=test_db)
+
+
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def engine() -> AsyncIterator[AsyncEngine]:
+    """Moteur vers la base de test, tables stubs creees puis detruites."""
+    test_engine = create_async_engine(
+        _test_database_url(),
+        poolclass=NullPool,
+        connect_args={"timeout": 10, "server_settings": {"application_name": "juui-tests"}},
+    )
+    try:
+        async with test_engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all, tables=_STUB_TABLES)
+    except (OSError, SQLAlchemyError) as error:
+        await test_engine.dispose()
+        message = (
+            f"Connexion a la base de test impossible : {error}\n"
+            "PostgreSQL docker doit tourner (`make dev` a la racine) et la base "
+            "`app_test` exister -- elle nait au premier demarrage du volume "
+            "postgres (INFRA-01) ; un volume anterieur se recree par "
+            "`docker compose down -v` puis `make dev`."
+        )
+        pytest.exit(message)
+    yield test_engine
+    async with test_engine.begin() as connection:
+        await connection.run_sync(Base.metadata.drop_all, tables=_STUB_TABLES)
+    await test_engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    """Session neuve par test, annulee puis fermee en sortie."""
+    test_session = build_sessionmaker(engine)()
+    try:
+        yield test_session
+    finally:
+        await test_session.rollback()
+        await test_session.close()
+
+
+@pytest.fixture
+def group_a() -> UUID:
+    """Premier groupe de la paire concurrente."""
+    return uuid4()
+
+
+@pytest.fixture
+def group_b() -> UUID:
+    """Second groupe de la paire concurrente."""
+    return uuid4()
+
+
+@pytest.fixture(autouse=True)
+def _ensure_clean_tenant_context() -> Iterator[None]:
+    """Refuse un contexte de groupe qui fuirait d'un test vers le suivant."""
+    assert current_group_id.get() is None, "Un contexte de tenance precede le test."
+    yield
+    assert current_group_id.get() is None, "Le test a laisse fuir son contexte de tenance."

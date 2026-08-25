@@ -31,20 +31,21 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 
 ## Le registre
 
-| ADR                                                | Décision                                                         | Statut  |
-| -------------------------------------------------- | ---------------------------------------------------------------- | ------- |
-| [ADR-0001](./0001-monorepo.md)                     | Un monorepo pour tout le produit, deux chaînes d'outils          | Accepté |
-| [ADR-0002](./0002-uv-outillage-python.md)          | uv comme outillage Python unique, épinglé partout                | Accepté |
-| [ADR-0003](./0003-monolithe-modulaire.md)          | Un monolithe modulaire découpé en modules métier                 | Accepté |
-| [ADR-0004](./0004-tenance-par-groupe.md)           | Le groupe de cliniques est la frontière de tenance               | Accepté |
-| [ADR-0005](./0005-appartenance-datee.md)           | L'appartenance à un groupe est une relation N:M datée            | Accepté |
-| [ADR-0006](./0006-dossier-medical-animal.md)       | Le dossier médical appartient à l'animal, la détention est datée | Accepté |
-| [ADR-0007](./0007-client-api-genere-orval.md)      | Le client d'API des frontends est généré par Orval               | Accepté |
-| [ADR-0008](./0008-taskiq-taches-de-fond.md)        | TaskIQ exécute les tâches de fond                                | Accepté |
-| [ADR-0009](./0009-unite-de-travail-par-module.md)  | Une unité de travail par module, jamais globale                  | Accepté |
-| [ADR-0010](./0010-migrations-alembic.md)           | Migrations Alembic pilotées par Settings, un migrateur à la fois | Accepté |
-| [ADR-0011](./0011-routage-versionne-par-module.md) | Un routeur par module, monté sous /api/v1                        | Accepté |
-| [ADR-0012](./0012-perimetre-de-requete.md)         | Le groupe actif vit dans le jeton, la clinique dans X-Clinic-Id  | Accepté |
+| ADR                                                   | Décision                                                          | Statut  |
+| ----------------------------------------------------- | ----------------------------------------------------------------- | ------- |
+| [ADR-0001](./0001-monorepo.md)                        | Un monorepo pour tout le produit, deux chaînes d'outils           | Accepté |
+| [ADR-0002](./0002-uv-outillage-python.md)             | uv comme outillage Python unique, épinglé partout                 | Accepté |
+| [ADR-0003](./0003-monolithe-modulaire.md)             | Un monolithe modulaire découpé en modules métier                  | Accepté |
+| [ADR-0004](./0004-tenance-par-groupe.md)              | Le groupe de cliniques est la frontière de tenance                | Accepté |
+| [ADR-0005](./0005-appartenance-datee.md)              | L'appartenance à un groupe est une relation N:M datée             | Accepté |
+| [ADR-0006](./0006-dossier-medical-animal.md)          | Le dossier médical appartient à l'animal, la détention est datée  | Accepté |
+| [ADR-0007](./0007-client-api-genere-orval.md)         | Le client d'API des frontends est généré par Orval                | Accepté |
+| [ADR-0008](./0008-taskiq-taches-de-fond.md)           | TaskIQ exécute les tâches de fond                                 | Accepté |
+| [ADR-0009](./0009-unite-de-travail-par-module.md)     | Une unité de travail par module, jamais globale                   | Accepté |
+| [ADR-0010](./0010-migrations-alembic.md)              | Migrations Alembic pilotées par Settings, un migrateur à la fois  | Accepté |
+| [ADR-0011](./0011-routage-versionne-par-module.md)    | Un routeur par module, monté sous /api/v1                         | Accepté |
+| [ADR-0012](./0012-perimetre-de-requete.md)            | Le groupe actif vit dans le jeton, la clinique dans X-Clinic-Id   | Accepté |
+| [ADR-0013](./0013-filtre-de-tenance-dans-le-depot.md) | Le filtre de tenance vit dans le dépôt, l'échappatoire se déclare | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

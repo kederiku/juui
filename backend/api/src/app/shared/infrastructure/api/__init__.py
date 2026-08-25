@@ -18,5 +18,6 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `dependencies/audit.py`    | tracage des acces aux donnees personnelles     | BACK-27 |
 
 Le contexte de tenance, lui, est pose par la dependance d'authentification
-(BACK-10c) dans la contextvar de BACK-06b : il se lit cote persistance, pas ici.
+(BACK-10c) dans la contextvar de `tenancy.py` : le filtre de BACK-06b le lit
+cote persistance, pas ici.
 """

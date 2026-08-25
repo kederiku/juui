@@ -12,7 +12,7 @@
 # `help` doit rester la premiere cible declaree : c'est ce que `make` nu lance.
 .DEFAULT_GOAL := help
 
-.PHONY: help lint lint-fix imports format format-check typecheck check \
+.PHONY: help lint lint-fix imports format format-check typecheck check test \
 	migration migrate downgrade history migrate-check
 
 help: ## Affiche cette aide
@@ -44,6 +44,13 @@ format-check: ## Verifie le formatage sans rien reecrire
 
 typecheck: ## Verifie le typage en mode strict
 	uv run mypy src alembic
+
+# Une seule cible pour l'instant (BACK-06b) : le decoupage par niveaux
+# (unit/integration/slow) arrive avec BACK-12. PostgreSQL docker doit tourner
+# (`make dev` a la racine) : les tests d'isolation travaillent sur la base
+# `app_test` d'INFRA-01.
+test: ## Lance la suite de tests (PostgreSQL docker demarre)
+	uv run pytest
 
 # Migrations Alembic (BACK-07). Le message devient le slug du fichier ET la
 # premiere ligne de sa docstring : francais sans accents, sans point final,
