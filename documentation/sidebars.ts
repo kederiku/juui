@@ -15,15 +15,14 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
  * pour la meme raison : une seule source de verite, et l'ordre de lecture se
  * relit d'un coup d'oeil.
  *
- * UNE ENTREE PLATE PAR SECTION tant qu'une section n'a qu'une page. Des que
- * DOC-02a, DOC-02b ou DOC-02c en ajoutent une seconde, l'entree concernee
- * devient une `category` dont le `link` reste la page d'index actuelle :
+ * UNE ENTREE PLATE PAR SECTION tant qu'une section n'a qu'une page ; des
+ * qu'elle en gagne une seconde, l'entree devient une `category` dont le `link`
+ * reste la page d'index. Les ADR (DOC-02b) suivent cette forme ci-dessous ;
+ * Architecture (DOC-02a) et les pages de DOC-02c l'adopteront a leur tour --
+ * une categorie livree vide afficherait une section qui ne se deplie pas.
  *
- *   { type: 'category', label: 'Architecture', link: { type: 'doc', id: 'architecture/index' },
- *     items: ['architecture/modeles', 'architecture/carte-de-contexte'] }
- *
- * Une categorie livree vide des maintenant afficherait six sections qui ne se
- * deplient pas.
+ * Les libelles des items d'une categorie restent courts : le numero et le
+ * titre complet d'un ADR vivent dans la page, l'ordre du registre suffit ici.
  */
 const sidebars: SidebarsConfig = {
   documentation: [
@@ -32,7 +31,25 @@ const sidebars: SidebarsConfig = {
     { type: 'doc', id: 'backend/index', label: 'Backend' },
     { type: 'doc', id: 'frontend/index', label: 'Frontend' },
     { type: 'doc', id: 'infrastructure/index', label: 'Infrastructure' },
-    { type: 'doc', id: 'adr/index', label: 'Décisions (ADR)' },
+    {
+      type: 'category',
+      label: 'Décisions (ADR)',
+      link: { type: 'doc', id: 'adr/index' },
+      items: [
+        { type: 'doc', id: 'adr/0001-monorepo', label: 'Monorepo' },
+        { type: 'doc', id: 'adr/0002-uv-outillage-python', label: 'Outillage Python (uv)' },
+        { type: 'doc', id: 'adr/0003-monolithe-modulaire', label: 'Monolithe modulaire' },
+        { type: 'doc', id: 'adr/0004-tenance-par-groupe', label: 'Tenance par groupe' },
+        { type: 'doc', id: 'adr/0005-appartenance-datee', label: 'Appartenance datée' },
+        { type: 'doc', id: 'adr/0006-dossier-medical-animal', label: 'Dossier de l’animal' },
+        {
+          type: 'doc',
+          id: 'adr/0007-client-api-genere-orval',
+          label: 'Client d’API généré (Orval)',
+        },
+        { type: 'doc', id: 'adr/0008-taskiq-taches-de-fond', label: 'Tâches de fond (TaskIQ)' },
+      ],
+    },
   ],
 };
 

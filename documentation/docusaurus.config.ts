@@ -114,6 +114,12 @@ const config: Config = {
           // c'est l'ordre de lecture qui prime, pas l'ordre alphabetique des
           // dossiers.
           sidebarPath: './sidebars.ts',
+          // Par defaut Docusaurus retire un prefixe numerique du nom de
+          // fichier (`0001-monorepo.md` -> id `monorepo`) : il le lit comme
+          // un simple artifice de tri. Pour les ADR (DOC-02b), ce numero EST
+          // l'identifiant de la decision -- il doit survivre dans l'id, l'URL
+          // et les liens, sinon « ADR-0001 » ne serait citable nulle part.
+          numberPrefixParser: false,
           editUrl: 'https://github.com/kederiku/juui/tree/main/documentation/',
         },
         blog: false,

@@ -30,9 +30,10 @@ versionnée dès maintenant : chacun sera rempli par le ticket qui lui correspon
 - **Infrastructure** — Docker, Redis (broker et cache), MinIO en développement et
   Amazon S3 en production, TaskIQ pour les tâches de fond.
 
-Le détail des choix et de leur justification se trouve dans le document
-[Stack Technique et Architecture](https://docs.google.com/document/d/1m_16LSQk7WWyykR0nsbySHtD1M0HP3OTmc_KoB09bj0/edit).
-Il sera repris et enrichi dans le site `documentation/`.
+Les choix structurants et leurs motifs — monorepo, uv, monolithe modulaire,
+tenance, Orval, TaskIQ… — sont consignés dans les
+[ADR](documentation/docs/adr/index.md), publiés sur le
+[site de documentation](https://kederiku.github.io/juui/adr).
 
 ## Démarrage rapide
 
@@ -55,8 +56,8 @@ Pour le parcours qui fonctionne aujourd'hui :
   télécharge lui-même l'interpréteur Python attendu : rien d'autre à installer.
   La version attendue est déclarée par `required-version` dans
   [`backend/api/pyproject.toml`](backend/api/pyproject.toml), et fait foi pour
-  le poste comme pour la CI et l'image Docker : un `uv` hors de cette plage
-  s'arrête en le disant, plutôt que de travailler différemment en silence.
+  le poste comme pour la CI et l'image Docker
+  ([ADR-0002](documentation/docs/adr/0002-uv-outillage-python.md)).
   `brew upgrade uv` suffit à s'y aligner.
 
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
@@ -108,7 +109,8 @@ poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 > n'est d'ailleurs pas nécessaire pour démarrer : les deux variables qu'il porte
 > désignent l'API, que l'interface n'appelle pas encore (SHARED-03).
 
-Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre.
+Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre
+([ADR-0001](documentation/docs/adr/0001-monorepo.md)).
 
 Côté JavaScript, les workspaces pnpm — `frontend/*`, `packages/*` et
 `documentation`, déclarés dans [`pnpm-workspace.yaml`](pnpm-workspace.yaml) :
@@ -120,8 +122,8 @@ pnpm install
 Cette commande installe aussi les **hooks Git** — voir
 [Hooks de pre-commit](#hooks-de-pre-commit).
 
-Côté Python, le seul service `backend/api`, volontairement absent de ces
-workspaces et piloté par `uv` :
+Côté Python, le seul service `backend/api`, absent de ces workspaces et piloté
+par `uv` :
 
 ```bash
 cd backend/api && uv sync
@@ -1075,6 +1077,14 @@ partagées](#configurations-partagées).
 | Ni service Compose, ni variable `.env`, ni cible `make`               | Le ticket s'arrête au workspace pnpm. Le port 3004 est donc porté par le script `dev` du site, là où les services conteneurisés tiennent le leur d'une variable `*_HOST_PORT`.                                                                                                                                                                                     |
 | Ni favicon, ni logo, ni feuille de style propre                       | Aucun habillage n'est demandé. Le thème par défaut suffit à lire, et `src/css/custom.css` viendra le jour où il y aura quelque chose à y écrire.                                                                                                                                                                                                                   |
 | Le site alourdit l'étage `deps` des images de frontend                | [`docker/frontend/Dockerfile`](docker/frontend/Dockerfile) installe tout le monorepo. Conséquence anticipée par le `.dockerignore` d'INFRA-05a, qui garde les sources du site dans le contexte de build pour cette raison exacte ; restreindre l'installation relèverait de ce ticket-là. L'étage a été reconstruit avec le site en place, il passe.               |
+
+### Écarts assumés avec le ticket DOC-02b
+
+| Écart                                                                | Raison                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numberPrefixParser: false` ajouté à `docusaurus.config.ts`          | Hors de la portée littérale, qui s'arrête à `documentation/docs/adr/`. Par défaut Docusaurus **retire** le préfixe numérique d'un nom de fichier (`0001-monorepo.md` → id `monorepo`) : il le lit comme un artifice de tri. Pour un ADR, ce numéro est l'identité de la décision — sans ce réglage, « ADR-0001 » ne serait citable ni en URL ni dans un lien.  |
+| Numérotation chronologique, pas l'ordre de la carte                  | La carte liste le monolithe en premier ; le registre numérote dans l'ordre des tickets fondateurs (SETUP-01 → BACK-15). Les ADR se référencent entre eux — la tenance s'appuie sur le monolithe modulaire, l'appartenance datée sur la tenance — et un renvoi qui pointe toujours vers un numéro **inférieur** se lit sans aller-retour.                       |
+| Gabarit enrichi d'un tableau de tête et d'une section « Références » | Les cinq sections demandées y sont. Le statut devient un tableau — statut, date de consignation, tickets — pour que le critère « chaque ADR renvoie aux tickets qui l'appliquent » ait une place fixe et vérifiable d'un coup d'œil ; « Références » pointe les fichiers du dépôt qui portent la décision, au lieu d'en paraphraser le contenu qui périmerait. |
 
 ## Conventions
 

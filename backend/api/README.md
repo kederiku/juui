@@ -137,14 +137,13 @@ Le module d'assemblage, et rien d'autre : aucune logique métier n'y a sa place.
 
 ## Architecture
 
-Hexagonale — ports et adaptateurs — **à l'intérieur de modules métier**, et non un domaine plat.
-Le découpage par couche seule finit par produire un `domain/entities/` où quarante entités
-s'empilent sans qu'aucune frontière ne dise laquelle répond à quelle question. Ici, c'est le
-**module** qui porte la frontière ; la couche ne décrit que le sens des dépendances.
+Hexagonale — ports et adaptateurs — **à l'intérieur de modules métier**, et non un domaine plat :
+c'est le **module** qui porte la frontière, la couche ne décrit que le sens des dépendances. Le
+pourquoi de ce découpage, et les alternatives écartées, sont consignés dans
+l'[ADR-0003](../../documentation/docs/adr/0003-monolithe-modulaire.md).
 
-Les règles ci-dessous deviendront **mécaniques** avec les contrats import-linter de BACK-04b :
-une violation échouera en CI plutôt que de se découvrir six mois plus tard en revue de code. En
-attendant, [quatre sondes](#vérifier-que-les-règles-tiennent) en tiennent lieu.
+Les règles ci-dessous sont **mécaniques** depuis BACK-04b : les contrats
+d'[Import Linter](#import-linter) font échouer la CI sur toute violation.
 
 ### Les trois espaces
 
@@ -155,9 +154,8 @@ attendant, [quatre sondes](#vérifier-que-les-règles-tiennent) en tiennent lieu
 | `modules/` | les **contextes métier**, étanches les uns aux autres                                    | `core/`, `shared/` |
 
 La relation entre les deux derniers est à sens unique : `modules/` → `shared/` est autorisé,
-`shared/` → `modules/` ne l'est jamais. Un noyau partagé qui connaîtrait un contexte métier en
-connaîtrait bientôt un deuxième, et deviendrait le fourre-tout dont plus personne ne peut rien
-retirer.
+`shared/` → `modules/` ne l'est jamais — c'est le contrat `service-spaces`
+d'[Import Linter](#import-linter) qui le tient.
 
 `core/` **reste en place** et n'a pas été fondu dans `shared/` : ce qu'il contient règle le
 processus, pas l'architecture.
@@ -229,37 +227,24 @@ Deux détails du trajet valent d'être signalés, parce qu'ils illustrent où se
 Un module n'importe **jamais** l'intérieur d'un autre : ni son entité, ni son dépôt, ni son
 modèle de persistance, ni une jointure sur ses tables. Les échanges passent par les cas d'usage
 publics du module cible — c'est-à-dire par la surface qu'il a choisi d'exposer, et qu'il peut
-donc tenir dans le temps.
-
-L'arbitrage est déjà pris ailleurs sur le board : la liste d'administration des comptes
-particuliers (BACK-26) affiche un nombre d'animaux, et ce compteur vient du cas d'usage public de
-`medical_records` (BACK-30), jamais d'un `JOIN` sur ses tables.
+donc tenir dans le temps. Ce que cette étanchéité coûte, et l'entorse assumée de la `Base`
+déclarative partagée, sont consignés dans les conséquences de
+l'[ADR-0003](../../documentation/docs/adr/0003-monolithe-modulaire.md).
 
 Depuis BACK-04b, la règle n'est plus seulement écrite : le contrat
 [`module-independence`](#import-linter) la fait respecter, dans les deux sens et **même
 indirectement**.
 
-Une seule chose est partagée entre modules côté persistance : la `Base` déclarative. Ce n'est pas
-une entorse — les modules ne s'importent pas, mais ils écrivent dans la **même base**, donc dans
-le même registre de métadonnées. Deux `Base` distinctes donneraient deux jeux de métadonnées, et
-Alembic (BACK-07) n'en verrait qu'un à la fois.
-
-**Le piège à éviter** : ne pas calquer les modules sur les trois frontends.
-`frontend-professional`, `frontend-individual` et `frontend-admin` sont des canaux de livraison,
-pas des contextes métier — le cœur d'authentification (hachage, OTP, 2FA, session, révocation) y
-est identique, et serait triplé à l'identique. Le type de compte est une _propriété_ portée par
-`identity` ; c'est l'audience du jeton (BACK-10a) qui sépare les trois applications.
+**Le piège à éviter** : ne pas calquer les modules sur les trois frontends — ce sont des canaux
+de livraison, pas des contextes métier. L'alternative est instruite et écartée dans
+l'[ADR-0003](../../documentation/docs/adr/0003-monolithe-modulaire.md).
 
 ### Les modules prévus
 
-| Module            | Question à laquelle il répond                   | Ticket  |
-| ----------------- | ----------------------------------------------- | ------- |
-| `identity`        | peux-tu prouver qui tu es                       | BACK-04 |
-| `organization`    | dans quelle structure travailles-tu, affecté où | BACK-16 |
-| `medical_records` | de quels animaux s'agit-il                      | BACK-19 |
-| `scheduling`      | quand, avec qui, pour quel acte                 | BACK-21 |
-| `notifications`   | qui prévenir, par quel canal                    | BACK-22 |
-| `profile`         | où habite ce particulier                        | BACK-32 |
+Six modules, chacun répondant à une question. Leur tableau vit dans
+l'[ADR-0003](../../documentation/docs/adr/0003-monolithe-modulaire.md) ; la docstring de
+[`src/app/modules/__init__.py`](src/app/modules/__init__.py) le porte aussi, au plus près du
+code.
 
 ### Ce que la structure attend encore
 
@@ -731,12 +716,13 @@ déclenche pas. `server_onupdate` ne réglerait rien, il est purement informatif
 ### La tenance est opt-in, et la garde est mécanique
 
 `TenantMixin` ne se déclare que sur les agrégats **produits par un groupe et conservés sous sa
-garde**. Les deux contre-exemples valent règle : une `Consultation` le porte, un `Animal` non —
-l'animal est créé à l'inscription d'un particulier, avant qu'un groupe existe dans sa vie. Un
-compte non plus : l'appartenance à un groupe est une relation N:M **datée**, portée par le
-module `organization` (BACK-16), parce qu'un vétérinaire remplaçant intervient dans plusieurs
-groupes avec un seul compte. Le filtre correspondant ne sera **jamais** appliqué globalement
-dans le dépôt de base : c'est BACK-06b qui l'appliquera, aux seuls agrégats déclarant le mixin.
+garde** — les contre-exemples qui valent règle (`Consultation` le porte, `Animal` et le compte
+non) et leurs motifs sont consignés dans les ADR
+[0004](../../documentation/docs/adr/0004-tenance-par-groupe.md),
+[0005](../../documentation/docs/adr/0005-appartenance-datee.md) et
+[0006](../../documentation/docs/adr/0006-dossier-medical-animal.md). Le filtre correspondant ne
+sera **jamais** appliqué globalement dans le dépôt de base : c'est BACK-06b qui l'appliquera,
+aux seuls agrégats déclarant le mixin.
 
 Déclarer le mixin **oblige** la table à porter un index — ou une contrainte d'unicité, que
 PostgreSQL sert par un index — dont la première colonne est `group_id`. Le contrôle vit dans
@@ -752,9 +738,9 @@ le jour où un client a des données. Ce genre d'oubli ne se rattrape pas à la 
 `group_id` ne porte **pas** de clé étrangère vers `groups`. La table n'existe pas avant
 BACK-16, et une `ForeignKey` posée d'avance casserait `metadata.sorted_tables` — donc
 `alembic revision --autogenerate` pour tout le projet — dès le premier modèle adoptant le mixin.
-S'y ajoute une raison d'architecture : une clé étrangère partant de `shared/` vers une table
-d'`organization` rendrait tous les modules structurellement dépendants de celui-là. La dette est
-assumée et nommée : BACK-16 posera la contrainte table par table, quand `groups` existera.
+La dette est assumée dans
+l'[ADR-0004](../../documentation/docs/adr/0004-tenance-par-groupe.md) : BACK-16 posera la
+contrainte table par table, quand `groups` existera.
 
 ### Ce que la session promet, et ce qu'elle coûte
 
@@ -975,11 +961,10 @@ la tient. La traduction passe par un `match` avec `assert_never` — le jour où
 environnement s'ajoute au `Literal` d'`AppSettings`, **Mypy échoue ici** plutôt que de laisser le
 service produire des clés `None:shared:…`.
 
-Le segment de groupe n'est pas une précaution d'affichage. Un vétérinaire remplaçant qui bascule de
-structure change de segment ; sans lui, il relirait les données mises en cache par la structure
-précédente — sur des données médicales entre groupes distincts, c'est une fuite. Le corollaire vaut
-pour l'invalidation : `invalidate_pattern("*")` purge le groupe actif et **lui seul**, et une purge
-inter-groupes n'est pas exprimable.
+Le segment de groupe est le cloisonnement de
+l'[ADR-0004](../../documentation/docs/adr/0004-tenance-par-groupe.md) appliqué au cache. Le
+corollaire vaut pour l'invalidation : `invalidate_pattern("*")` purge le groupe actif et
+**lui seul**, et une purge inter-groupes n'est pas exprimable.
 
 Une entrée non tenant porte un `shared` **écrit**, jamais l'absence de segment. Si l'oubli de
 périmètre produisait une clé d'apparence normale, il passerait inaperçu ; il produit une clé
@@ -991,10 +976,9 @@ Le groupe actif est porté par `current_group_id`, dans `shared/infrastructure/t
 choses, et rien de plus : lire, exiger (`require_current_group_id()`), et poser le temps d'un bloc
 (`use_group()`).
 
-`require_current_group_id()` **lève** au lieu de dégrader. La dégradation gracieuse porte sur Redis
-absent, pas sur un appelant qui ignore de quel groupe il parle : se rabattre en silence sur « pas de
-groupe » produirait des clés partagées entre structures, c'est-à-dire la fuite même que le
-cloisonnement cherche à rendre impossible.
+`require_current_group_id()` **lève** au lieu de dégrader — le motif est consigné dans
+l'[ADR-0004](../../documentation/docs/adr/0004-tenance-par-groupe.md). La dégradation gracieuse
+porte sur Redis absent, pas sur un appelant qui ignore de quel groupe il parle.
 
 BACK-06b y ajoutera l'intergiciel qui alimente la contextvar depuis l'authentification (BACK-10c),
 et le filtre SQLAlchemy dans `db/`. Un piège l'attend, écrit dans la docstring : `BaseHTTPMiddleware`
@@ -1876,11 +1860,9 @@ convention : un `uv` hors de la plage déclarée s'arrête net —
 error: Required uv version `>=0.12.5, <0.13` does not match the running version `0.11.7`
 ```
 
-— au lieu de réussir en le murmurant dans un log. Une plage, et non un `==`,
-pour qu'une montée de patch côté Homebrew n'arrête pas le poste : ce qui doit
-se voir, c'est le saut de mineur. C'est le même arbitrage que les contrats
-d'[Import Linter](#import-linter) — une règle qu'aucun mécanisme ne tient
-n'est pas une règle.
+— au lieu de réussir en le murmurant dans un log. Une plage, et non un `==` :
+l'arbitrage est consigné dans
+l'[ADR-0002](../../documentation/docs/adr/0002-uv-outillage-python.md).
 
 **La borne haute du backend de build est passée de `<0.12.0` à `<0.13.0`.** Elle
 ne venait d'aucune décision : c'était la sortie littérale d'`uv init` sous uv
@@ -1907,9 +1889,8 @@ relever rendrait la déclaration fausse pour les roues déjà produites.
 > lesquelles cette roue est _vérifiée_.
 
 Les deux bornes s'arrêtent à 0.13 — celle d'`uv_build` et celle de
-`required-version`. C'est délibéré : uv monte son numéro mineur pour ses
-ruptures, et les deux doivent donc être rediscutées ensemble, une fois, plutôt
-que de céder l'une après l'autre.
+`required-version` — et se rediscutent ensemble, comme le consigne
+l'[ADR-0002](../../documentation/docs/adr/0002-uv-outillage-python.md).
 
 `uv.lock` n'entre pas dans l'affaire : uv ne verrouille pas les dépendances de
 build, le fichier ne contient aucune entrée `uv-build`, et changer cette borne
