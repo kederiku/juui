@@ -81,12 +81,17 @@ backend/api/
     │   ├── domain/
     │   │   ├── exceptions.py   `DomainError`, racine des erreurs métier
     │   │   └── ports/          ports techniques : cache, stockage, jetons
+    │   │       └── cache.py        port `Cache` et décorateur `@cached` (BACK-14)
     │   └── infrastructure/
+    │       ├── tenancy.py      contextvar du groupe actif (BACK-14)
     │       ├── db/             socle de persistance (BACK-05)
     │       │   ├── base.py         `Base`, convention de nommage, `check_schema`
     │       │   ├── mixins.py       identité, horodatage, tenance opt-in
     │       │   ├── engine.py       moteur asyncpg et pool de connexions
     │       │   └── session.py      fabrique de sessions et accès à `app.state`
+    │       ├── clients/        adaptateurs des ports techniques (BACK-14)
+    │       │   ├── cache_keys.py   composition des clés physiques
+    │       │   └── redis_cache.py  adaptateur Redis du port `Cache`
     │       └── api/            socle HTTP : handlers d'erreur, intergiciels
     └── modules/            contextes métier, étanches les uns aux autres
         ├── identity/       module pilote — le seul complet à ce stade
@@ -118,10 +123,10 @@ Le module d'assemblage, et rien d'autre : aucune logique métier n'y a sa place.
 - **`lifespan`** est le point d'accroche des ressources de longue durée. Il pose
   la règle que toutes devront suivre : rien ne s'ouvre à l'import du module, tout
   passe par lui, et l'ordre de fermeture est l'inverse exact de l'ordre
-  d'ouverture. Deux occupants à ce jour — la validation de la configuration
+  d'ouverture. Trois occupants à ce jour — la validation de la configuration
   (BACK-03), qui précède par construction toute ouverture de ressource, puis le
-  [moteur PostgreSQL](#persistance) (BACK-05). Le client Redis (BACK-14) et le
-  broker TaskIQ (BACK-15) suivront.
+  [moteur PostgreSQL](#persistance) (BACK-05), puis le [cache Redis](#cache)
+  (BACK-14), fermé avant lui. Le broker TaskIQ (BACK-15) suivra.
 
 ## Architecture
 
@@ -254,15 +259,15 @@ est identique, et serait triplé à l'identique. Le type de compte est une _prop
 Les dossiers vides ne le sont pas par oubli : chacun porte une docstring qui dit ce qui vient s'y
 ranger, et quel ticket l'apporte.
 
-| Emplacement                        | Ce qui manque                                                       | Ticket                               |
-| ---------------------------------- | ------------------------------------------------------------------- | ------------------------------------ |
-| `shared/domain/ports/`             | `Cache`, `FileStorage`, `TokenService`, l'unité de travail          | BACK-14, BACK-13, BACK-10a, BACK-06a |
-| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                              |
-| `shared/infrastructure/db/`        | dépôt générique, unité de travail, contexte de tenance              | BACK-06a, BACK-06b                   |
-| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11                     |
-| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                             |
-| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31            |
-| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                              |
+| Emplacement                        | Ce qui manque                                                       | Ticket                      |
+| ---------------------------------- | ------------------------------------------------------------------- | --------------------------- |
+| `shared/domain/ports/`             | `FileStorage`, `TokenService`, l'unité de travail                   | BACK-13, BACK-10a, BACK-06a |
+| `shared/domain/exceptions.py`      | la hiérarchie complète et les codes `<module>.<ressource>.<erreur>` | BACK-09                     |
+| `shared/infrastructure/db/`        | dépôt générique, unité de travail, filtre de tenance                | BACK-06a, BACK-06b          |
+| `shared/infrastructure/api/`       | handlers d'erreur, intergiciels, identifiant de requête             | BACK-09, BACK-11            |
+| `modules/identity/unit_of_work.py` | l'unité de travail du module                                        | BACK-06a                    |
+| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe            | BACK-28, BACK-29, BACK-31   |
+| `modules/organization/`            | groupes, cliniques, appartenances, affectations                     | BACK-16                     |
 
 ### Vérifier que les règles tiennent
 
@@ -919,6 +924,466 @@ et `nom annonce : juui-api/development`.
 | `DatabaseUnavailableError` distincte de `ConfigurationError`       | Une base injoignable est une configuration **valide** et une panne d'exécution. Les confondre enverrait l'exploitant relire un fichier correct pendant que le serveur finit de démarrer.                                                                                                         |
 | Le premier `[[tool.mypy.overrides]]` du projet                     | `asyncpg` ne livre pas de `py.typed`, et `engine.py` doit nommer ses exceptions : SQLAlchemy n'enveloppe pas les échecs survenus **dans** `asyncpg.connect()`. La dérogation est par module, comme BACK-02 l'avait prévu — il pariait seulement qu'elle n'arriverait jamais.                     |
 | Aucun test automatisé, mais des sondes documentées                 | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03 et BACK-04.                                                                                                                                                                                |
+
+## Cache
+
+Redis sert de cache applicatif sur la **base 0** ; la base 1 appartient au broker TaskIQ
+(BACK-15), et la séparation est une exigence d'INFRA-02 — purger le cache ne doit jamais vider la
+file de tâches.
+
+Le domaine ne connaît que le port `Cache`. L'adaptateur Redis, la composition des clés et la
+configuration vivent dans `shared/infrastructure/` : le contrat `domain-purity` interdit au domaine
+d'importer une dépendance applicative, et il refuse aussi les chaînes **indirectes** — un port ne
+peut donc pas même importer `app.core`, qui importe pydantic. C'est cette contrainte, et non un
+choix de style, qui explique la forme du port.
+
+### Le port, et ce qu'il promet
+
+Cinq opérations, toutes asynchrones : `get`, `set`, `delete`, `exists`, `invalidate_pattern`. Trois
+règles les accompagnent, écrites dans la docstring de `Cache` parce que tout le reste en dépend.
+
+**1. Les clés reçues sont logiques.** L'appelant écrit `dossier:42` ; l'adaptateur, et lui seul, y
+appose l'environnement et le périmètre. Un appelant ne _peut_ donc pas oublier le groupe — composer
+le segment de tenance n'est pas son travail. C'est ce qui rend le cloisonnement structurel plutôt
+que conventionnel.
+
+**2. Toute entrée expire.** `ttl=None` signifie « la durée par défaut configurée »
+(`REDIS_CACHE_TTL_SECONDS`, 300 s), jamais « pas d'expiration », et un TTL nul ou négatif lève une
+`ValueError`. La raison est écrite dans `docker/redis/redis.conf` : l'instance est partagée avec la
+file de tâches, et la seule politique d'éviction acceptable pour elle — `volatile-lru` — ne libère
+que les clés portant un TTL. Une entrée éternelle la rendrait inopérante en silence.
+
+**3. Aucune implémentation ne lève quand son stockage est injoignable.** Voir plus bas.
+
+### La clé porte l'environnement et le groupe
+
+```
+{environnement}:g-{group_id}:{clé logique}     — CacheScope.TENANT
+{environnement}:shared:{clé logique}           — CacheScope.SHARED
+```
+
+`ENVIRONMENT=development` donne `dev`, `staging` donne `staging`, `production` donne `prod` : c'est
+la promesse que les deux `.env.example` publient depuis SETUP-05, et `_environment_slug` est ce qui
+la tient. La traduction passe par un `match` avec `assert_never` — le jour où un quatrième
+environnement s'ajoute au `Literal` d'`AppSettings`, **Mypy échoue ici** plutôt que de laisser le
+service produire des clés `None:shared:…`.
+
+Le segment de groupe n'est pas une précaution d'affichage. Un vétérinaire remplaçant qui bascule de
+structure change de segment ; sans lui, il relirait les données mises en cache par la structure
+précédente — sur des données médicales entre groupes distincts, c'est une fuite. Le corollaire vaut
+pour l'invalidation : `invalidate_pattern("*")` purge le groupe actif et **lui seul**, et une purge
+inter-groupes n'est pas exprimable.
+
+Une entrée non tenant porte un `shared` **écrit**, jamais l'absence de segment. Si l'oubli de
+périmètre produisait une clé d'apparence normale, il passerait inaperçu ; il produit une clé
+visiblement partagée.
+
+### Le contexte de tenance
+
+Le groupe actif est porté par `current_group_id`, dans `shared/infrastructure/tenancy.py`. Trois
+choses, et rien de plus : lire, exiger (`require_current_group_id()`), et poser le temps d'un bloc
+(`use_group()`).
+
+`require_current_group_id()` **lève** au lieu de dégrader. La dégradation gracieuse porte sur Redis
+absent, pas sur un appelant qui ignore de quel groupe il parle : se rabattre en silence sur « pas de
+groupe » produirait des clés partagées entre structures, c'est-à-dire la fuite même que le
+cloisonnement cherche à rendre impossible.
+
+BACK-06b y ajoutera l'intergiciel qui alimente la contextvar depuis l'authentification (BACK-10c),
+et le filtre SQLAlchemy dans `db/`. Un piège l'attend, écrit dans la docstring : `BaseHTTPMiddleware`
+exécute l'aval de la chaîne dans une **tâche distincte**, donc un `set()` fait dans son `dispatch()`
+n'atteindrait pas l'endpoint.
+
+### Ce que la dégradation gracieuse promet — et ce qu'elle ne promet pas
+
+Redis injoignable : `get` rend `MISSING`, `set` et `delete` restent sans effet, `exists` rend
+`False`, `invalidate_pattern` rend `0`. Un avertissement part **une seule fois** à la chute, un
+autre à la reprise — un avertissement par appel noierait le journal pendant une coupure de dix
+minutes, et un journal noyé est un journal que personne ne lit.
+
+L'application **démarre** sans Redis, contrairement à ce qu'elle fait sans PostgreSQL. L'asymétrie
+est le sujet, pas un oubli : sans base, aucune route ne peut répondre juste et échouer vite est
+correct ; sans cache, toutes répondent, plus lentement. Il n'existe donc ni `verify_connectivity`
+bloquant, ni `CacheUnavailableError` — cette classe n'aurait aucun endroit où être levée.
+`RedisCache.ping()` sonde quand même au démarrage et journalise, pour que l'exploitant voie la panne
+dans la ligne de démarrage plutôt qu'à la première requête.
+
+> **Ce contrat convient à un cache, et à rien d'autre.** Une décision de sécurité lue ici s'ouvrirait
+> toute seule le jour où Redis tombe : « ce jeton est-il révoqué ? » (BACK-10d) répondrait « non »,
+> « cet OTP a-t-il été consommé ? » (BACK-17) répondrait « non ». Ces deux tickets doivent traiter
+> l'indisponibilité explicitement — échouer fermé — et non l'hériter d'ici.
+
+`MISSING` est une sentinelle, distincte de `None`. Sans elle, un cas d'usage qui retourne
+légitimement `None` — « ce dossier n'existe pas » — ne serait **jamais** servi depuis le cache : sa
+valeur serait relue comme une absence et recalculée à chaque appel. Un défaut de rendement que rien
+ne signale.
+
+### Le décorateur `@cached`
+
+À poser sur une méthode de lecture d'un cas d'usage. Jamais sur une écriture : le résultat serait
+mémorisé, et l'effet de bord rejoué ou sauté selon l'état du cache.
+
+```python
+class LireLeDossier:
+    def __init__(self, cache: Cache) -> None:
+        self.cache = cache
+
+    @cached(ttl=60, namespace="medical_records.dossier")
+    async def execute(self, animal_id: UUID) -> dict[str, JsonValue]: ...
+```
+
+Le cache vient de `self.cache`, jamais d'un registre global : la borne `S: CacheHolder` fait
+**échouer le typage à la définition** si la classe décorée n'expose pas de cache. La question « où le
+décorateur trouve-t-il son cache, sans requête HTTP ? » est donc tranchée à la compilation, et non
+par une convention que quelqu'un oubliera. Décorer une classe qui n'en a pas donne :
+
+```
+error: Value of type variable "S" of function cannot be "SansCache"  [type-var]
+```
+
+Et le type de retour garde sa précision — `dict[str, JsonValue]` reste `dict[str, JsonValue]`, il
+n'est pas élargi à `JsonValue`.
+
+Le groupe n'apparaît pas dans la signature, et c'est voulu : le décorateur vit dans le domaine, la
+contextvar dans l'infrastructure, où l'architecture lui interdit d'aller la chercher. C'est
+l'adaptateur qui lit le groupe au moment de composer la clé physique — le décorateur ne peut donc pas
+se tromper de groupe, puisqu'il n'en manipule aucun.
+
+La clé est `namespace` (ou `module:qualname` à défaut) suivi d'une **empreinte SHA-256** des
+arguments. Une empreinte et non les arguments en clair : une clé Redis se lit dans `MONITOR`, dans le
+`SLOWLOG` et dans la console d'inspection, et `…:lire_le_dossier:marie.dupont@exemple.fr` y
+déverserait une donnée personnelle. Limite à connaître : l'empreinte vaut ce que vaut le `repr` des
+arguments — un objet sans `__repr__` propre y met son adresse mémoire, et le cache manquerait alors
+systématiquement, en silence.
+
+Ce que le décorateur ne fait pas : il ne protège pas de l'avalanche, et il n'invalide rien.
+L'invalidation est du côté écriture, par `invalidate_pattern`.
+
+### Vérifier que le cache tient
+
+Cinq sondes. Les deux premières ne demandent **aucun** conteneur.
+
+**1. Les cinq opérations, le TTL, le décorateur et la bascule de groupe — sans Redis.** La doublure
+est définie _dans la sonde_ et non dans `src/` (les doublures de production appartiennent à
+BACK-06c), mais elle compose ses clés avec le **vrai** `build_key_builder` : c'est ce qui fait que la
+sonde prouve le préfixage de production, et non le sien.
+
+```bash
+uv run python - <<'PY'
+import asyncio, fnmatch, time
+from uuid import UUID
+
+from app.core import get_settings
+from app.shared.domain.ports.cache import MISSING, Cache, CacheScope, JsonValue, Missing, cached
+from app.shared.infrastructure.clients.cache_keys import build_key_builder
+from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
+
+A = UUID("01931f2a-0000-7000-8000-00000000000a")
+B = UUID("01931f2a-0000-7000-8000-00000000000b")
+
+
+class InMemoryCache(Cache):
+    """Doublure du port, adossee au VRAI compositeur de cles."""
+
+    def __init__(self, settings, default_ttl_seconds=300):
+        self._keys = build_key_builder(settings)
+        self._default_ttl_seconds = default_ttl_seconds
+        self._entries: dict[str, tuple[JsonValue, float]] = {}
+
+    def physical_keys(self):
+        maintenant = time.monotonic()
+        return sorted(k for k, (_, fin) in self._entries.items() if fin > maintenant)
+
+    async def get(self, key, *, scope=CacheScope.TENANT) -> JsonValue | Missing:
+        physique = self._keys.key(key, scope)
+        entree = self._entries.get(physique)
+        if entree is None:
+            return MISSING
+        if entree[1] <= time.monotonic():
+            del self._entries[physique]
+            return MISSING
+        return entree[0]
+
+    async def set(self, key, value, *, ttl=None, scope=CacheScope.TENANT) -> None:
+        secondes = self._default_ttl_seconds if ttl is None else ttl
+        if secondes <= 0:
+            raise ValueError("Un TTL de cache doit etre strictement positif.")
+        self._entries[self._keys.key(key, scope)] = (value, time.monotonic() + secondes)
+
+    async def delete(self, key, *, scope=CacheScope.TENANT) -> bool:
+        return self._entries.pop(self._keys.key(key, scope), None) is not None
+
+    async def exists(self, key, *, scope=CacheScope.TENANT) -> bool:
+        return await self.get(key, scope=scope) is not MISSING
+
+    async def invalidate_pattern(self, pattern, *, scope=CacheScope.TENANT) -> int:
+        motif = self._keys.pattern(pattern, scope)
+        vises = [k for k in self.physical_keys() if fnmatch.fnmatchcase(k, motif)]
+        for cle in vises:
+            del self._entries[cle]
+        return len(vises)
+
+
+class LireLeDossier:
+    def __init__(self, cache):
+        self.cache = cache
+        self.appels = 0
+
+    @cached(ttl=60, namespace="sonde.dossier")
+    async def execute(self, animal_id: str) -> dict[str, JsonValue]:
+        self.appels += 1
+        return {"animal": animal_id, "appels": self.appels}
+
+
+async def main() -> None:
+    cache = InMemoryCache(get_settings(), default_ttl_seconds=1)
+
+    with use_group(A):
+        await cache.set("dossier:42", {"note": "vu par le groupe A"}, ttl=60)
+        print("1. set (ttl=60) puis get:", await cache.get("dossier:42"))
+        print("2. exists               :", await cache.exists("dossier:42"))
+        await cache.set("liste:1", 1, ttl=60)
+        await cache.set("liste:2", 2, ttl=60)
+        print("3. invalidate_pattern   :", await cache.invalidate_pattern("liste:*"))
+        await cache.set("ephemere", "x")
+        await asyncio.sleep(1.2)
+        print("4. TTL par defaut expire:", await cache.get("ephemere") is MISSING)
+        cas = LireLeDossier(cache)
+        await cas.execute("rex")
+        await cas.execute("rex")
+        print("5. @cached, deux appels :", cas.appels, "execution(s) reelle(s)")
+
+    with use_group(B):
+        print("6. le groupe B ne lit rien du groupe A :", await cache.get("dossier:42") is MISSING)
+        await cache.set("dossier:42", {"note": "vu par le groupe B"}, ttl=60)
+
+    with use_group(A):
+        print("7. le groupe A relit la sienne        :", await cache.get("dossier:42"))
+        print("8. delete                             :", await cache.delete("dossier:42"))
+
+    await cache.set("otp:0612345678", "123456", ttl=60, scope=CacheScope.SHARED)
+    try:
+        await cache.set("dossier:1", "x")
+    except MissingTenantContextError as erreur:
+        print("9. hors contexte de groupe            :", type(erreur).__name__)
+
+    print("10. cles physiques :")
+    for cle in cache.physical_keys():
+        print("      ", cle)
+
+
+asyncio.run(main())
+PY
+```
+
+Attendu — la ligne 6 est le critère de bascule de groupe, la ligne 7 sa contrepartie (l'écriture du
+groupe B n'a pas écrasé celle du groupe A) :
+
+```
+1. set (ttl=60) puis get: {'note': 'vu par le groupe A'}
+2. exists               : True
+3. invalidate_pattern   : 2
+4. TTL par defaut expire: True
+5. @cached, deux appels : 1 execution(s) reelle(s)
+6. le groupe B ne lit rien du groupe A : True
+7. le groupe A relit la sienne        : {'note': 'vu par le groupe A'}
+8. delete                             : True
+9. hors contexte de groupe            : MissingTenantContextError
+10. cles physiques :
+       dev:g-01931f2a-0000-7000-8000-00000000000a:sonde.dossier:0459e6e24fb37678a201e3cbeeacfaa9
+       dev:g-01931f2a-0000-7000-8000-00000000000b:dossier:42
+       dev:shared:otp:0612345678
+```
+
+**2. Le préfixe suit l'environnement.** La même commande, précédée d'une variable — les variables du
+processus passent devant le fichier `.env` :
+
+```bash
+ENVIRONMENT=staging uv run python - <<'PY'
+...  # la meme sonde qu'au point 1
+PY
+```
+
+Attendu : les trois mêmes clés, préfixées `staging:` au lieu de `dev:`.
+
+**3. Aller-retour réel, expiration réelle, séparation des bases.** Pile levée.
+
+```bash
+uv run python - <<'PY'
+import asyncio
+from uuid import UUID
+
+from app.core import get_settings
+from app.shared.domain.ports.cache import CacheScope
+from app.shared.infrastructure.clients.redis_cache import build_cache
+from app.shared.infrastructure.tenancy import use_group
+
+A = UUID("01931f2a-0000-7000-8000-00000000000a")
+B = UUID("01931f2a-0000-7000-8000-00000000000b")
+
+
+async def main() -> None:
+    settings = get_settings()
+    cache = build_cache(settings)
+    try:
+        print("0. ping                  :", await cache.ping(), "sur", cache.target)
+        with use_group(A):
+            await cache.set("sonde:dossier", {"valeur": 42}, ttl=60)
+            print("1. relu depuis Redis     :", await cache.get("sonde:dossier"))
+            await cache.set("sonde:liste:1", 1, ttl=60)
+            await cache.set("sonde:liste:2", 2, ttl=60)
+            print("2. invalidate_pattern    :", await cache.invalidate_pattern("sonde:liste:*"))
+            await cache.set("sonde:ephemere", "x", ttl=2)
+            await asyncio.sleep(2.5)
+            print("3. TTL expire cote Redis :", await cache.exists("sonde:ephemere") is False)
+        with use_group(B):
+            await cache.set("sonde:dossier", {"valeur": 99}, ttl=60)
+        await cache.set("sonde:partagee", "x", ttl=60, scope=CacheScope.SHARED)
+        print("4. bases                 : cache", settings.redis.cache_db,
+              "/ broker", settings.redis.broker_db, "(BACK-15)")
+    finally:
+        await cache.aclose()
+
+
+asyncio.run(main())
+PY
+```
+
+Puis, **depuis la racine du dépôt**, la vérification qui compte — chaque entrée porte-t-elle un TTL,
+et le cache a-t-il touché la base du broker ?
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec -T redis \
+  sh -c "redis-cli -n 0 --scan --pattern 'dev:*sonde*' | while read c; do echo \"\$(redis-cli -n 0 ttl \"\$c\")s  \$c\"; done" | sort -k2
+```
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec -T redis \
+  redis-cli -n 1 --scan --pattern 'dev:*' | wc -l
+```
+
+Attendu : trois clés, **toutes** porteuses d'un TTL positif — c'est la promesse faite à
+`redis.conf` —, la même clé logique déclinée sous deux groupes, et `0` clé de cache en base 1. Le
+décompte de secondes ci-dessous dépend évidemment du moment de la lecture ; c'est sa positivité qui
+se vérifie, pas sa valeur.
+
+```
+51s  dev:g-01931f2a-0000-7000-8000-00000000000a:sonde:dossier
+53s  dev:g-01931f2a-0000-7000-8000-00000000000b:sonde:dossier
+53s  dev:shared:sonde:partagee
+```
+
+Nettoyer ensuite : `redis-cli -n 0 --scan --pattern 'dev:*sonde*' | xargs -r redis-cli -n 0 unlink`.
+
+**4. Redis coupé : un avertissement, puis on continue.** Le port hors service passe par une variable,
+comme la sonde de BACK-05 — inutile d'arrêter le conteneur.
+
+```bash
+REDIS_PORT=6399 uv run python - <<'PY'
+import asyncio
+
+from app.core import get_settings
+from app.shared.domain.ports.cache import MISSING, CacheScope, JsonValue, cached
+from app.shared.infrastructure.clients.redis_cache import build_cache
+
+
+class LireLeDossier:
+    def __init__(self, cache):
+        self.cache = cache
+        self.appels = 0
+
+    @cached(ttl=60, namespace="sonde.degradee", scope=CacheScope.SHARED)
+    async def execute(self, animal_id: str) -> dict[str, JsonValue]:
+        self.appels += 1
+        return {"animal": animal_id}
+
+
+async def main() -> None:
+    cache = build_cache(get_settings())
+    try:
+        print("0. ping             :", await cache.ping())
+        print("1. get              :", await cache.get("x", scope=CacheScope.SHARED) is MISSING)
+        print("2. set              :", await cache.set("x", 1, scope=CacheScope.SHARED))
+        print("3. exists           :", await cache.exists("x", scope=CacheScope.SHARED))
+        print("4. invalidate       :", await cache.invalidate_pattern("*", scope=CacheScope.SHARED))
+        print("5. delete           :", await cache.delete("x", scope=CacheScope.SHARED))
+        cas = LireLeDossier(cache)
+        await cas.execute("rex")
+        await cas.execute("rex")
+        print("6. @cached, 2 appels:", cas.appels, "execution(s) reelle(s), aucune exception")
+    finally:
+        await cache.aclose()
+
+
+asyncio.run(main())
+PY
+echo "code de sortie : $?"
+```
+
+Attendu : **un seul** avertissement sur la sortie d'erreur malgré huit opérations, toutes les valeurs
+dégradées, et un code de sortie `0`. La queue du message vient de la bibliothèque et dépend de
+l'ordre de résolution IPv4/IPv6 du poste — c'est le préfixe qui compte, pas elle.
+
+```
+Cache Redis injoignable sur localhost:6399 (base 0) (demarrage) : le service continue SANS cache. Error 61 connecting to localhost:6399. Connection refused.
+0. ping             : False
+1. get              : True
+2. set              : None
+3. exists           : False
+4. invalidate       : 0
+5. delete           : False
+6. @cached, 2 appels: 2 execution(s) reelle(s), aucune exception
+code de sortie : 0
+```
+
+L'avertissement paraît alors qu'**aucune journalisation n'est configurée** : le `lastResort` de la
+bibliothèque standard sert les `WARNING` sur `stderr`. BACK-11 n'aura donc rien à défaire ici — mais
+c'est aussi pourquoi le message `INFO` de `ping()` réussi reste invisible d'ici là.
+
+**5. L'application démarre et répond sans Redis, et le pool meurt avec le processus.**
+
+```bash
+REDIS_PORT=6399 uv run uvicorn app.main:app --port 8001
+```
+
+Attendu : l'avertissement, **puis** `Application startup complete.` — à comparer avec
+`POSTGRES_PORT=5999`, qui donne `Application startup failed. Exiting.` et un code de sortie 3. Dans
+un autre terminal, `curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8001/openapi.json`
+rend `200`.
+
+Puis, la pile levée et l'API relancée sans la variable, depuis la racine :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml exec -T redis \
+  redis-cli client list | grep "name=juui-api-cache"
+```
+
+Attendu : une ligne portant `name=juui-api-cache/development` et `db=0` — c'est le pendant exact de
+la sonde `pg_stat_activity` de BACK-05. Après un `Ctrl-C` sur uvicorn, la même commande ne rend plus
+rien : le `finally` du `lifespan` a bien fermé le client **et** le pool.
+
+### Écarts assumés avec le ticket BACK-14
+
+| Écart                                                                                    | Raison                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| La contextvar `current_group_id` est créée ici, dans `infrastructure/` et non sous `db/` | Le ticket exige le groupe actif dans la clé, et rien ne le portait — `tenant_context.py` appartient à BACK-06b. La surface livrée est réduite à lire, exiger et poser. Elle est montée d'un cran par rapport à ce que BACK-04 annonçait : le cache n'a aucune raison d'importer le socle de persistance pour nommer une clé. BACK-06b y ajoutera l'intergiciel et gardera le filtre dans `db/`. |
+| `InMemoryCache` défini dans la sonde, pas dans `src/`                                    | Le ticket l'attribue explicitement à BACK-06c. Même arbitrage qu'en BACK-04 pour `InMemoryAccountRepository`. La doublure compose ses clés avec le vrai `build_key_builder`, ce qui lui fait prouver le préfixage de production et non le sien.                                                                                                                                                 |
+| `logging.getLogger(__name__)` nu, sans BACK-11                                           | L'avertissement de dégradation est un critère d'acceptation ; l'attendre reviendrait à renoncer à le vérifier. Un logger nommé n'a rien à reprendre le jour venu : BACK-11 configurera la racine, ces appels en hériteront. Aucun `basicConfig()` n'est appelé, précisément pour ne pas se battre avec cette future configuration.                                                              |
+| Ni `verify_connectivity` bloquant, ni `CacheUnavailableError`                            | Asymétrie délibérée avec BACK-05 : une base injoignable doit arrêter le processus, un cache injoignable ne doit pas — sans quoi le critère « si Redis est arrêté, l'application continue de répondre » serait inatteignable. La classe d'erreur n'aurait aucun endroit où être levée. `ping()` sonde et journalise.                                                                             |
+| Les clés sont préfixées par l'adaptateur, jamais par l'appelant                          | La seule forme qui rende la fuite structurellement impossible plutôt que conventionnellement évitée. Corollaire gratuit : aucun motif d'invalidation ne peut viser un autre groupe que le sien.                                                                                                                                                                                                 |
+| `MISSING` plutôt que `None` pour l'absence                                               | Sans sentinelle, un cas d'usage qui retourne légitimement `None` ne serait jamais servi depuis le cache : un défaut de rendement invisible, que rien ne signalerait. Le motif enum est celui que Mypy sait affiner.                                                                                                                                                                             |
+| `require_current_group_id()` lève au lieu de dégrader                                    | La dégradation porte sur Redis absent, pas sur un appelant qui ignore de quel groupe il parle. Contourner en silence cacherait précisément le défaut que le ticket qualifie de fuite et non de défaut d'affichage.                                                                                                                                                                              |
+| `cache_keys.py`, hors de la portée nommée                                                | La convention de nommage est partagée par l'adaptateur Redis et par toute doublure du port. L'enfermer dans `redis_cache.py` obligerait une doublure en mémoire à importer le client Redis pour savoir nommer une clé.                                                                                                                                                                          |
+| `retry=Retry(NoBackoff(), retries=0)` épinglé explicitement                              | Vérifié dans redis 8.1 : un pool construit à la main hérite déjà de ce réglage, mais `Redis(host=…)` hérite de dix tentatives avec repli exponentiel — plusieurs secondes par appel pendant une panne. L'épinglage rend le comportement indépendant du constructeur employé.                                                                                                                    |
+| `decode_responses=False`, et `SCAN` plutôt que `KEYS`                                    | Le sérialiseur possède l'encodage : décoder côté client réduirait le « point d'extension pour d'autres formats » aux seuls formats texte, or msgpack et le JSON compressé sont les candidats réels. Et Redis est mono-thread : un `KEYS` lancé pour invalider un dossier suspendrait la distribution des tâches de fond, cache et broker partageant le processus.                               |
+| Aucun `default=` sur `json.dumps`                                                        | Un `default=str` ferait entrer un `UUID` et ressortir une `str`. L'écart n'apparaîtrait qu'au premier **succès** de cache : en production, sous charge, et jamais dans une sonde. Une valeur non sérialisable échoue donc à l'écriture, là où le défaut se corrige.                                                                                                                             |
+| `client_name` posé sur le pool, non demandé                                              | Pendant de l'`application_name` de BACK-05. C'est lui qui rend le critère « pool créé et fermé dans le lifespan » **observable** par un `CLIENT LIST`, au lieu de reposer sur une lecture de code.                                                                                                                                                                                              |
+| `REDIS_CACHE_TTL_SECONDS` ajoutée, et `docker-compose.yml` modifié                       | Le ticket demande un TTL par défaut « configurable » sans nommer de variable. La liste `environment:` du service `api` est explicite : sans cette ligne, le réglage serait inatteignable en conteneur. Le `:-` lui donne un défaut, comme les quatre `POSTGRES_*` de BACK-05.                                                                                                                   |
+| Délais et tailles de lot en constantes de module, non configurables                      | Même arbitrage que `_CONNECT_TIMEOUT_SECONDS` en BACK-05. Chaque variable coûte deux gabarits, une ligne de compose et une ligne de README ; aucune n'a de consommateur qui demanderait à en changer.                                                                                                                                                                                           |
+| Pas de fenêtre de circuit ouvert                                                         | Non demandée, et le drapeau suffit à ne pas noyer le journal. Limite assumée : chaque appel retente sa connexion pendant la panne. Sur un refus l'échec est immédiat ; sur un hôte qui absorbe les paquets, chaque appel paie les deux secondes de `_CONNECT_TIMEOUT_SECONDS`. Le service répond toujours, mais plus lentement.                                                                 |
+| `@cached` livré sans consommateur                                                        | Aucun cas d'usage de lecture n'existe avant BACK-19. La sonde 1 en démontre le fonctionnement, bascule de groupe comprise. Le paramètre de projection d'objet (un codec `T ↔ JsonValue`) n'est pas écrit pour la même raison : il doublerait la signature sans appelant.                                                                                                                        |
+| `main.py` modifié, hors de la portée déclarée                                            | La portée le nomme (« init lifespan »), et le critère d'acceptation parle du pool créé et fermé dans le `lifespan`. Même arbitrage qu'en BACK-03 et BACK-05.                                                                                                                                                                                                                                    |
+| Aucun test automatisé, mais des sondes documentées                                       | `tests/` et la configuration de pytest appartiennent à BACK-12. Même arbitrage qu'en BACK-02, BACK-03, BACK-04 et BACK-05. L'expiration se démontre deux fois : par une horloge monotone en mémoire, et par un TTL relu dans Redis.                                                                                                                                                             |
 
 ## Dépendances
 

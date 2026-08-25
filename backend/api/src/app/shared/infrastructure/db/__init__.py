@@ -20,7 +20,13 @@ application ne voie jamais une `AsyncSession` -- publier la dependance ici
 suffirait a rendre la promesse intenable.
 
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-BACK-06a : `unit_of_work.py` et `repositories/base.py`. Puis BACK-06b :
-`tenant_context.py`, la contextvar `current_group_id` et le filtre applique aux
-seuls agregats declarant `TenantMixin`.
+BACK-06a : `unit_of_work.py` et `repositories/base.py`. Puis BACK-06b : le filtre
+applique aux seuls agregats declarant `TenantMixin`.
+
+CORRECTION DE CE QUE BACK-04 ANNONCAIT ICI
+La contextvar `current_group_id` ne vit PAS dans ce paquet : elle est montee d'un
+cran, dans `../tenancy.py`, parce que BACK-14 en a eu besoin le premier. Le cache
+n'a aucune raison d'importer le socle de persistance pour savoir nommer une cle,
+et l'appartenance a un groupe n'est pas une notion de persistance -- c'est une
+notion de requete, que la persistance et le cache lisent tous deux.
 """

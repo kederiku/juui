@@ -20,8 +20,15 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `unit_of_work.py`   | `AbstractUnitOfWork`          | BACK-06a |
 | `repository.py`     | protocole generique de depot  | BACK-06a |
 
-Le paquet est vide a dessein : BACK-04 pose la place et le sens, chaque ticket
-apporte son contrat. Le module pilote `identity` montre a quoi ressemble un port
-en attendant -- le sien, `AccountRepository`, est METIER et vit donc dans son
-propre domaine.
+BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. BACK-14 a
+livre le premier, `cache.py` ; les quatre autres lignes du tableau restent des
+places reservees. Le module pilote `identity` montre un port METIER, le sien --
+`AccountRepository` vit dans son propre domaine, et non ici.
+
+CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
+Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard
+SEULE. La contrainte n'est pas de style : le contrat `domain-purity` de BACK-04b
+refuse aussi les chaines INDIRECTES, donc un port ne peut pas non plus importer
+`app.core` -- qui importe pydantic. Un port ne lit donc jamais la configuration,
+et tout ce qui en depend appartient a l'adaptateur.
 """
