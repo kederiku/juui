@@ -54,7 +54,7 @@ CACHE_STATE_KEY: Final = "cache"
 #
 # Des constantes de module et non des reglages, comme `_CONNECT_TIMEOUT_SECONDS`
 # dans `db/engine.py` : chaque variable de configuration coute deux gabarits
-# `.env.example`, une ligne de compose et une ligne de README.
+# `.env.example`, une ligne de compose et une ligne de documentation.
 _CONNECT_TIMEOUT_SECONDS: Final = 2.0
 _COMMAND_TIMEOUT_SECONDS: Final = 2.0
 

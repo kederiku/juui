@@ -276,7 +276,8 @@ warn_untyped_fields = true
 # ---------------------------------------------------------------------------
 # Garde-fous d'architecture (BACK-04b)
 # ---------------------------------------------------------------------------
-# BACK-04 a pose les regles ; les docstrings et le README les enoncent, et
+# BACK-04 a pose les regles ; les docstrings et la page « Architecture du
+# service » du site de documentation les enoncent, et
 # Import Linter les rend MECANIQUES : `lint-imports` lit le graphe d'imports
 # reel du paquet `app` et refuse ce qui ne respecte pas les contrats
 # ci-dessous. Une violation echoue donc en CI, elle ne se decouvre plus six

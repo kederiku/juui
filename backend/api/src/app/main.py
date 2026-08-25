@@ -205,7 +205,8 @@ def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
     settings = AppSettings() if app_settings is None else app_settings
 
     # En production la surface de documentation se ferme ENTIEREMENT : /docs et
-    # /redoc (le ticket), et aussi /openapi.json -- ecart assume au README. Le
+    # /redoc (le ticket), et aussi /openapi.json -- ecart assume au registre des
+    # ecarts du site de documentation. Le
     # healthcheck du conteneur vise desormais /health/live et Orval (SHARED-03)
     # genere depuis un poste de developpement : plus aucun consommateur
     # legitime, et un plan complet de l'API servi sans authentification est de

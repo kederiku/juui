@@ -100,8 +100,8 @@ la fois.
 
 ## Références
 
-- `backend/api/README.md`, section « Architecture » — les trois espaces, la règle des 3 modèles,
-  le trajet complet sur le module pilote `identity`.
+- [Architecture du service](../backend/architecture-du-service.md) — les trois espaces, la règle
+  des 3 modèles, le trajet complet sur le module pilote `identity`.
 - `backend/api/src/app/modules/__init__.py` — le tableau des modules et le piège du découpage par
   frontend.
 - `backend/api/pyproject.toml`, section `[tool.importlinter]` — les cinq contrats et leurs

@@ -25,8 +25,10 @@ agent puissent produire du code conforme sans avoir à deviner les conventions.
 ## En attendant
 
 L'ossature décrite ici existe déjà dans le dépôt : `backend/api/src/app/` porte la structure
-modulaire et hexagonale, avec `identity` en module de référence. Les commentaires de ces fichiers
-font foi tant que cette section n'est pas écrite.
+modulaire et hexagonale, avec `identity` en module de référence. L'existant est décrit dans la
+section Backend — [Structure du service](../backend/structure.md) et
+[Architecture du service](../backend/architecture-du-service.md) — et les commentaires des
+fichiers font foi tant que cette section normative n'est pas écrite.
 
 :::note Apportée par DOC-02a
 Le contenu de cette section dépend de plusieurs tickets backend encore à faire. Les décisions déjà

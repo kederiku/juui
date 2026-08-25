@@ -43,7 +43,7 @@ partagées](https://github.com/kederiku/juui#configurations-partagées).
 
 :::note Portée des scripts pnpm
 Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
-siens, décrits dans `backend/api/README.md`. Les
+siens, décrits dans la [section Backend](../backend/index.md). Les
 cibles `make` de la racine réunissent les deux chaînes derrière une interface
 unique — voir [Cibles `make` de la racine](#cibles-make-de-la-racine).
 :::

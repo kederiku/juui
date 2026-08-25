@@ -35,8 +35,19 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [INFRA-05b](./infra.md#écarts-assumés-avec-le-ticket-infra-05b) | La pile compose complète                               |
 | [INFRA-06](./infra.md#écarts-assumés-avec-le-ticket-infra-06)   | Le Makefile de la racine                               |
 | [INFRA-07](./infra.md#écarts-assumés-avec-le-ticket-infra-07)   | Mailpit, le SMTP de développement                      |
+| [BACK-02](./back.md#écarts-assumés-avec-le-ticket-back-02)      | L'outillage qualité Python (Ruff, Mypy)                |
+| [BACK-03](./back.md#écarts-assumés-avec-le-ticket-back-03)      | La configuration validée au démarrage                  |
+| [BACK-04](./back.md#écarts-assumés-avec-le-ticket-back-04)      | Le socle hexagonal et le module pilote                 |
+| [BACK-04b](./back.md#écarts-assumés-avec-le-ticket-back-04b)    | Les contrats d'architecture Import Linter              |
+| [BACK-05](./back.md#écarts-assumés-avec-le-ticket-back-05)      | Le socle SQLAlchemy et le pool                         |
+| [BACK-06a](./back.md#écarts-assumés-avec-le-ticket-back-06a)    | L'unité de travail et le dépôt générique               |
+| [BACK-07](./back.md#écarts-assumés-avec-le-ticket-back-07)      | Alembic et la première migration                       |
+| [BACK-08](./back.md#écarts-assumés-avec-le-ticket-back-08)      | La sonde de santé et les métadonnées OpenAPI           |
+| [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)      | Le port de stockage objet                              |
+| [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)      | Le port de cache Redis                                 |
+| [BACK-15](./back.md#écarts-assumés-avec-le-ticket-back-15)      | Le broker TaskIQ et la tâche de démonstration          |
 | [DOC-01](./doc.md#écarts-assumés-avec-le-ticket-doc-01)         | Le site de documentation Docusaurus                    |
 | [DOC-02b](./doc.md#écarts-assumés-avec-le-ticket-doc-02b)       | Le registre des ADR                                    |
 
-Les familles BACK, SHARED et FRONT — et les tickets SETUP restants — rejoindront ce registre avec
-la migration des README restants.
+Les familles SHARED et FRONT — et les tickets SETUP restants — rejoindront ce registre avec la
+migration du README restant.
