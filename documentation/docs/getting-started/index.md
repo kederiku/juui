@@ -10,10 +10,12 @@ Juui est une plateforme SaaS B2B2C de prise de rendez-vous et de gestion pour cl
 vétérinaires : agenda et gestion du cabinet côté professionnels, carnet de santé numérique et
 réservation en ligne côté propriétaires d'animaux, back-office d'administration côté plateforme.
 
-Ce site rassemble la documentation **technique** du dépôt. Il répond au « pourquoi » — pourquoi
-cette frontière entre modules, pourquoi cet outil plutôt qu'un autre — là où le
-[README de la racine](https://github.com/kederiku/juui#readme) répond au « comment » : prérequis,
-installation, ports, commandes. Les deux sont complémentaires et ne se recopient pas.
+Ce site rassemble la documentation **technique** du dépôt, et il en porte le **détail** : chaque
+sujet — une image Docker, un port applicatif, une convention, une décision — y a sa page, et n'en
+a qu'une. Les README du dépôt gardent l'**entrée en matière et le démarrage express** : de quoi
+cloner, créer les `.env` et lancer la pile sans quitter le
+[README de la racine](https://github.com/kederiku/juui#readme), puis un renvoi ici pour tout le
+reste. Quand une information existe aux deux endroits, le site fait foi.
 
 ## Le monorepo en un coup d'œil
 
@@ -46,7 +48,8 @@ pnpm --filter documentation dev
 ```
 
 Il écoute sur le port **3004** — [http://localhost:3004](http://localhost:3004) — réservé pour lui
-dans le tableau des ports du README, et donc à l'abri des trois applications.
+dans [l'allocation des ports du dépôt](../infrastructure/ports-et-services.md), et donc à l'abri
+des trois applications.
 
 La **barre de recherche fait exception** : son index n'est produit qu'à la construction du site.
 Sous `dev`, elle est absente. Pour l'essayer, il faut construire puis servir :
@@ -57,13 +60,16 @@ pnpm --filter documentation build && pnpm --filter documentation start
 
 ## Ce que contient chaque section
 
-| Section                                      | Ce qu'on y trouve                                                     | Apportée par        |
-| -------------------------------------------- | --------------------------------------------------------------------- | ------------------- |
-| [Architecture](../architecture/index.md)     | Règles hexagonales, carte de contexte, sens des dépendances.          | DOC-02a             |
-| [Backend](../backend/index.md)               | Le service d'API : modules, persistance, tâches de fond.              | tickets BACK        |
-| [Frontend](../frontend/index.md)             | Les trois applications, la bibliothèque partagée, le client généré.   | tickets FRONT       |
-| [Infrastructure](../infrastructure/index.md) | Conteneurs, services de développement, intégration continue.          | tickets INFRA et QA |
-| [Décisions (ADR)](../adr/index.md)           | Les décisions structurantes, leur motif et les alternatives écartées. | DOC-02b             |
+| Section                                      | Ce qu'on y trouve                                                     | Apportée par       |
+| -------------------------------------------- | --------------------------------------------------------------------- | ------------------ |
+| [Démarrer](./installation.md)                | Installer le poste, démarrer la pile, les conventions du dépôt.       | livrée             |
+| [Architecture](../architecture/index.md)     | Règles hexagonales, carte de contexte, sens des dépendances.          | DOC-02a            |
+| [Backend](../backend/index.md)               | Le service d'API : modules, persistance, tâches de fond.              | tickets BACK       |
+| [Frontend](../frontend/index.md)             | Les trois applications, la bibliothèque partagée, le client généré.   | tickets FRONT      |
+| [Infrastructure](../infrastructure/index.md) | Ports, images Docker, mode développement, services de développement.  | livrée             |
+| [Décisions (ADR)](../adr/index.md)           | Les décisions structurantes, leur motif et les alternatives écartées. | DOC-02b — livrée   |
+| [Écarts assumés](../ecarts/index.md)         | Les écarts entre chaque ticket et son livrable, avec leur raison.     | au fil des tickets |
 
-Les pages de ces sections sont aujourd'hui des **pages d'attente** : DOC-01 pose le site, son
-arborescence et son outillage ; le contenu arrive avec les tickets nommés ci-dessus.
+La section Architecture est une **page d'attente** : DOC-02a la remplira. Le contenu détaillé des
+sections Backend et Frontend vit encore dans les README du dépôt ; il rejoint le site au fil de la
+migration en cours.

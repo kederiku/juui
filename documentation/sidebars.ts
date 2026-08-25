@@ -17,20 +17,47 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
  *
  * UNE ENTREE PLATE PAR SECTION tant qu'une section n'a qu'une page ; des
  * qu'elle en gagne une seconde, l'entree devient une `category` dont le `link`
- * reste la page d'index. Les ADR (DOC-02b) suivent cette forme ci-dessous ;
- * Architecture (DOC-02a) et les pages de DOC-02c l'adopteront a leur tour --
- * une categorie livree vide afficherait une section qui ne se deplie pas.
+ * reste la page d'index. Demarrer, Infrastructure, les ADR (DOC-02b) et les
+ * Ecarts assumes suivent cette forme ci-dessous ; Architecture (DOC-02a) et
+ * les pages de DOC-02c l'adopteront a leur tour -- une categorie livree vide
+ * afficherait une section qui ne se deplie pas.
  *
  * Les libelles des items d'une categorie restent courts : le numero et le
  * titre complet d'un ADR vivent dans la page, l'ordre du registre suffit ici.
  */
 const sidebars: SidebarsConfig = {
   documentation: [
-    { type: 'doc', id: 'getting-started/index', label: 'Démarrer' },
+    {
+      type: 'category',
+      label: 'Démarrer',
+      link: { type: 'doc', id: 'getting-started/index' },
+      items: [
+        { type: 'doc', id: 'getting-started/installation', label: 'Installation' },
+        { type: 'doc', id: 'getting-started/demarrage', label: 'Démarrage' },
+      ],
+    },
     { type: 'doc', id: 'architecture/index', label: 'Architecture' },
     { type: 'doc', id: 'backend/index', label: 'Backend' },
     { type: 'doc', id: 'frontend/index', label: 'Frontend' },
-    { type: 'doc', id: 'infrastructure/index', label: 'Infrastructure' },
+    {
+      type: 'category',
+      label: 'Infrastructure',
+      link: { type: 'doc', id: 'infrastructure/index' },
+      items: [
+        { type: 'doc', id: 'infrastructure/ports-et-services', label: 'Ports et URLs' },
+        { type: 'doc', id: 'infrastructure/image-api', label: 'Image de l’API' },
+        { type: 'doc', id: 'infrastructure/image-frontends', label: 'Image des frontends' },
+        { type: 'doc', id: 'infrastructure/mode-developpement', label: 'Mode développement' },
+        { type: 'doc', id: 'infrastructure/minio', label: 'MinIO' },
+        { type: 'doc', id: 'infrastructure/mailpit', label: 'Mailpit' },
+        {
+          type: 'doc',
+          id: 'infrastructure/site-de-documentation',
+          label: 'Site de documentation',
+        },
+        { type: 'doc', id: 'infrastructure/makefile-et-scripts', label: 'Makefile et scripts' },
+      ],
+    },
     {
       type: 'category',
       label: 'Décisions (ADR)',
@@ -60,6 +87,16 @@ const sidebars: SidebarsConfig = {
           label: 'Routage par module (/api/v1)',
         },
         { type: 'doc', id: 'adr/0012-perimetre-de-requete', label: 'Périmètre de requête' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Écarts assumés',
+      link: { type: 'doc', id: 'ecarts/index' },
+      items: [
+        { type: 'doc', id: 'ecarts/setup', label: 'SETUP' },
+        { type: 'doc', id: 'ecarts/infra', label: 'INFRA' },
+        { type: 'doc', id: 'ecarts/doc', label: 'DOC' },
       ],
     },
   ],
