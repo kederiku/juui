@@ -36,13 +36,12 @@ Il sera repris et enrichi dans le site `documentation/`.
 
 ## Démarrage rapide
 
-Une partie seulement de la pile démarre aujourd'hui : le service d'API, depuis
-les tickets INFRA la base PostgreSQL avec sa console pgAdmin, Redis et le
-stockage objet MinIO, et depuis FRONT-01 à FRONT-03 les trois interfaces —
-professionnelle, grand public et back-office, et depuis DOC-01 le site de
-documentation. Cette section décrit donc **deux parcours** — celui qui fonctionne
-maintenant, puis la cible conteneurisée — et l'allocation de ports que cette
-cible devra respecter.
+La pile entière démarre depuis INFRA-05b : l'API et son worker, les trois
+interfaces — professionnelle, grand public et back-office —, PostgreSQL avec sa
+console pgAdmin, Redis, le stockage objet MinIO et le serveur SMTP Mailpit. Le
+site de documentation (DOC-01) reste seul en dehors, faute d'être conteneurisé.
+Cette section décrit donc **deux parcours** — sur le poste, puis en conteneurs —
+et l'allocation de ports qu'ils partagent.
 
 ### Prérequis
 
@@ -68,8 +67,9 @@ Pour le parcours qui fonctionne aujourd'hui :
   pas. C'est bien `docker compose`, sous-commande du client, qui est attendue —
   pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
 
-Un outil de plus pour le parcours conteneurisé complet. **Rien ne le réclame
-encore** ; l'installer maintenant évite seulement d'avoir à revenir ici :
+Un outil de plus pour le parcours conteneurisé. **Rien ne le réclame encore** —
+le `Makefile` de la racine relève d'INFRA-06 ; l'installer maintenant évite
+seulement d'avoir à revenir ici :
 
 - **`make`** — sur macOS, il vient des Command Line Tools :
   `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est déjà
@@ -195,17 +195,18 @@ pnpm --filter frontend-individual run dev
 
 ### La pile complète, avec Docker
 
-> **Note.** Cette séquence n'est **pas encore complète**.
-> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte depuis INFRA-07
-> `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`, `minio-init`, `api` et
-> `mailpit` : le service d'API démarre réellement en conteneur, et le courrier
-> sortant est capté sur le poste au lieu de se perdre. Depuis
-> INFRA-05a, l'**image** des trois frontends se construit elle aussi — mais
-> aucun service ne la lance encore : leur déclaration dans le fichier compose,
-> avec celle du `worker`, revient à INFRA-05b. Manquent donc les quatre services
-> et le `Makefile` de la racine (INFRA-06) — `make up` répondrait aujourd'hui
-> `No rule to make target 'up'`. La commande compose complète, elle, fonctionne :
-> elle est juste en dessous. À relire une fois INFRA-06 livré.
+> **Note.** La pile est **complète** depuis INFRA-05b.
+> [`docker/docker-compose.yml`](docker/docker-compose.yml) porte les douze
+> services du dépôt : `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`,
+> `minio-init`, `mailpit`, `api`, `worker` et les trois frontends. Onze démarrent
+> avec un `up` nu — `redisinsight` attend son profil `tools`. Il ne manque plus
+> que le `Makefile` de la racine (INFRA-06) : `make up` répondrait aujourd'hui
+> `No rule to make target 'up'`, et les commandes `docker compose` ci-dessous
+> sont donc encore à taper en entier. À relire une fois INFRA-06 livré.
+>
+> Un seul service ne **fait** rien encore : le `worker` démarre, mais le module
+> de broker qu'il exécute appartient à BACK-15 — voir
+> [Le worker et son état d'aujourd'hui](#le-worker-et-son-état-daujourdhui).
 
 Une fois la pile conteneurisée en place, l'installation se réduira à trois
 commandes :
@@ -235,6 +236,11 @@ n'en trouverait pas : c'est cette commande que `make up` encapsulera.
 ```bash
 docker compose --project-directory . -f docker/docker-compose.yml up -d
 ```
+
+Elle démarre la pile sur les images **servies** : l'API sans rechargement, les
+frontends sur leur sortie `standalone`. Pour travailler sur le code, c'est la
+variante à deux fichiers qu'il faut — voir
+[Le mode développement](#le-mode-développement).
 
 Ajouter `--profile tools` pour démarrer en plus les consoles d'inspection
 optionnelles — aujourd'hui RedisInsight, qui s'ouvre déjà raccordée aux deux
@@ -270,12 +276,12 @@ Un port par service, réservé une fois pour toutes ici afin qu'aucun ticket n'a
 | MinIO — console web           | 9001      | 9001         | disponible  |
 | Mailpit — SMTP                | 1025      | 1025         | disponible  |
 | Mailpit — boîte de réception  | 8025      | 8025         | disponible  |
-| Worker TaskIQ                 | aucun     | —            | BACK-15     |
+| Worker TaskIQ                 | aucun     | —            | disponible  |
 
 Quelques choix méritent leur explication :
 
-- **3000 n'apparaît pas.** C'est le port d'écoute interne des conteneurs
-  Next.js, jamais publié : INFRA-05 le mappe sur 3001, 3002 et 3003 côté hôte.
+- **3000 n'apparaît pas.** C'est le port d'écoute interne des trois conteneurs
+  Next.js, jamais publié : INFRA-05b le mappe sur 3001, 3002 et 3003 côté hôte.
   Ce sont donc les mêmes ports qu'en développement local — d'où la règle : ne
   pas lancer `pnpm dev` et `make up` en même temps.
 - **pgAdmin sur 5050.** Ni SETUP-05 ni INFRA-01 ne fixaient ce port, et un
@@ -297,7 +303,11 @@ Quelques choix méritent leur explication :
   dépôt tient en une phrase — service sans authentification, boucle locale. Rien
   ne change à l'usage, les URLs et les commandes restent celles de ce tableau.
 - **Le worker n'écoute rien.** Il consomme la file Redis et n'ouvre aucun port
-  entrant : rien à publier, rien à réserver.
+  entrant : rien à publier, rien à réserver. `docker compose ps` affiche
+  pourtant `8000/tcp` en face de lui — c'est l'`EXPOSE` hérité de l'étage
+  `runtime` qu'il partage avec l'API, une métadonnée d'image et rien d'autre :
+  aucun port n'est publié, et aucun processus n'écoute. C'est aussi son absence
+  de `ports:` qui rend `--scale worker=2` possible.
 
 Les ports publiés sur le poste sont tous **configurables** par une variable
 `*_HOST_PORT` du `.env` : un PostgreSQL ou un Redis déjà installé localement se
@@ -336,11 +346,11 @@ Le service `api` est le premier de la pile à se **construire depuis le dépôt*
 les cinq autres tirent une image publique. Son Dockerfile vit dans
 [`docker/api/`](docker/api/Dockerfile) et expose trois cibles utiles :
 
-| Cible    | Ce qu'elle fait                                                                         | Qui l'utilise                        |
-| -------- | --------------------------------------------------------------------------------------- | ------------------------------------ |
-| `prod`   | uvicorn sans rechargement, `WEB_CONCURRENCY` processus, dépendances applicatives seules | le service `api` du compose          |
-| `dev`    | `uvicorn --reload`, groupe `dev` installé (Ruff, Mypy, Pytest), installation éditable   | INFRA-05b, via le fichier d'override |
-| `worker` | même image que `prod`, commande `taskiq worker`                                         | INFRA-05b, service `worker`          |
+| Cible    | Ce qu'elle fait                                                                         | Qui l'utilise                  |
+| -------- | --------------------------------------------------------------------------------------- | ------------------------------ |
+| `prod`   | uvicorn sans rechargement, `WEB_CONCURRENCY` processus, dépendances applicatives seules | le service `api` du compose    |
+| `dev`    | `uvicorn --reload`, groupe `dev` installé (Ruff, Mypy, Pytest), installation éditable   | `docker-compose.override.yml`  |
+| `worker` | même image que `prod`, commande `taskiq worker`                                         | le service `worker` du compose |
 
 `docker compose up` construit la cible `prod`. Pour construire une cible à la
 main, hors compose :
@@ -453,10 +463,10 @@ Les trois applications Next.js se construisent depuis **un seul** Dockerfile,
 `next.config.ts` à leurs commentaires près : trois fichiers auraient triplé
 chaque correction à venir.
 
-| Cible    | Ce qu'elle fait                                                                           | Qui l'utilise                                    |
-| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------ |
-| `runner` | Sortie `standalone` servie par `node server.js`, sans pnpm ni `node_modules` complet      | les services `frontend-*` du compose (INFRA-05b) |
-| `dev`    | `next dev` sur le port 3000, pnpm et les `node_modules` du monorepo, code monté en volume | INFRA-05b, via le fichier d'override             |
+| Cible    | Ce qu'elle fait                                                                           | Qui l'utilise                              |
+| -------- | ----------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `runner` | Sortie `standalone` servie par `node server.js`, sans pnpm ni `node_modules` complet      | les trois services `frontend-*` du compose |
+| `dev`    | `next dev` sur le port 3000, pnpm et les `node_modules` du monorepo, code monté en volume | `docker-compose.override.yml`              |
 
 Un `docker build` sans `--target` construit `runner` : c'est le dernier étage du
 fichier, et sa position est délibérée.
@@ -476,7 +486,8 @@ docker build --build-arg APP_NAME=frontend-professional -t juui-frontend-profess
 #### Les trois valeurs figées au build
 
 Ce sont celles que [`.env.example`](.env.example) annonce déjà comme passées « en
-`build.args` » — INFRA-05b les câblera au fichier compose :
+`build.args` », et que les trois services `frontend-*` du compose leur passent
+effectivement depuis INFRA-05b :
 
 | Argument              | Applications          | Ce qu'il devient                                                    |
 | --------------------- | --------------------- | ------------------------------------------------------------------- |
@@ -554,6 +565,142 @@ non-root `juui` (uid 1001, le même que l'image d'API). Même chose pour
 groupe `(protected)` et `proxy.ts` redirige toute requête sans session
 (FRONT-03). C'est `/login` qui rend 200 — la redirection est le comportement
 attendu, pas une panne.
+
+### Le mode développement
+
+Les commandes vues plus haut démarrent la pile sur les images **servies** :
+l'API sans rechargement, les trois frontends sur leur sortie `standalone`. Rien
+de ce qu'on modifie sur le poste n'y change quoi que ce soit — il faut
+reconstruire. Pour travailler, [`docker/docker-compose.override.yml`](docker/docker-compose.override.yml)
+bascule les cinq services que le dépôt construit lui-même sur leur cible `dev`
+et leur monte le code du poste.
+
+> **Ce fichier n'est pas chargé tout seul, et c'est le piège de la section.**
+> Compose charge d'office un `docker-compose.override.yml` **uniquement**
+> lorsqu'il a découvert le fichier de base lui-même. Dès qu'un `-f` est passé —
+> ce que fait toute commande du dépôt, sans quoi le `.env` de la racine ne
+> serait pas lu — l'override est **silencieusement ignoré**. Il faut donc le
+> nommer, et c'est le seul moyen.
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d --build
+```
+
+Sans ce second `-f`, la pile repart sur les images servies : aucun montage,
+aucun rechargement à chaud, et pas la moindre erreur pour le dire. INFRA-06
+encapsulera les deux invocations dans deux cibles distinctes du `Makefile`.
+
+Les ports, les URLs et les identifiants ne changent pas d'un mode à l'autre :
+ceux du tableau plus haut valent dans les deux.
+
+#### Ce que chaque service y gagne
+
+| Service      | Cible de base | Cible en développement | Ce qui est monté   |
+| ------------ | ------------- | ---------------------- | ------------------ |
+| `api`        | `prod`        | `dev`                  | `./backend/api`    |
+| `worker`     | `worker`      | `dev`                  | `./backend/api`    |
+| `frontend-*` | `runner`      | `dev`                  | la racine du dépôt |
+
+Les six briques d'infrastructure — `postgres`, `pgadmin`, `redis`,
+`redisinsight`, `minio`, `minio-init` et `mailpit` — n'apparaissent pas dans
+l'override : elles tirent des images publiques et se comportent de la même façon
+dans les deux modes.
+
+Le `worker` est le seul à devoir **redire sa commande**. Sa cible de base
+installe le paquet en `--no-editable` : ses imports passent par `/opt/venv`, et
+lui monter du code n'y changerait rien. Seule la cible `dev` est éditable — mais
+son `CMD` est `uvicorn`. La commande `taskiq worker` est donc réécrite dans
+l'override, seconde source de vérité à côté du `CMD` de la cible `worker`, à
+tenir alignée.
+
+#### Ce que les montages recouvrent — et ce qu'ils masquent
+
+Les trois frontends montent **la racine du dépôt** sur `/app`, et non le seul
+dossier de leur application : c'est ce qui fait traverser le Fast Refresh la
+frontière du monorepo, une modification de `packages/ui` ou du thème de
+`packages/config-tailwind` se voyant au même titre qu'une modification de page.
+
+Trois volumes anonymes masquent alors ce qui ne doit surtout pas venir de
+l'hôte. Un volume anonyme posé sur un chemin que le montage recouvre le **rend à
+l'image** : le conteneur retrouve son propre contenu.
+
+| Chemin masqué                      | Pourquoi                                                                       |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| `/app/node_modules`                | ceux du poste sont construits pour macOS — l'image a les siens, pour Linux     |
+| `/app/frontend/<app>/node_modules` | second niveau de l'arbre pnpm ; n'en masquer qu'un laisse l'autre dans le vide |
+| `/app/frontend/<app>/.next`        | le cache Turbopack du poste porte des chemins absolus de l'hôte                |
+
+Les `node_modules` des **autres** workspaces — `packages/*`, `documentation/` —
+ne sont pas masqués, et n'ont pas à l'être : les liens symboliques que pnpm y
+dépose sont **relatifs** et pointent tous vers `../../node_modules/.pnpm/…`,
+donc, dans le conteneur, vers le volume anonyme du premier niveau. Vérifié :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml exec frontend-professional sh -c 'ls /app/node_modules/.pnpm | grep swc; readlink -f /app/frontend/frontend-professional/node_modules/next'
+```
+
+La commande affiche `@next+swc-linux-arm64-gnu@16.3.2` — et non la variante
+`darwin` qu'a le poste — puis un chemin qui plonge dans `/app/node_modules`.
+
+> **À savoir : en mode développement, l'API relit `backend/api/.env`.**
+> L'installation éditable fait résoudre `config.py` en
+> `/app/src/app/core/config.py`, donc son `_ENV_FILE` en `/app/.env` — fichier
+> absent de l'image, mais ramené par le montage. Sans conséquence,
+> pydantic-settings donnant la priorité aux variables du **processus** sur le
+> dotenv : ce que compose passe l'emporte. Mais une variable oubliée côté
+> compose s'y replierait **en silence**, avec la valeur d'un fichier écrit pour
+> un `uvicorn` lancé hors Docker — où `POSTGRES_HOST` vaut `localhost`.
+
+#### Constater le rechargement à chaud
+
+Côté frontend, modifier un fichier de `frontend/frontend-professional/app/` et
+recharger <http://localhost:3001> : la page change, et `docker compose logs`
+montre une recompilation Turbopack — aucun `docker build` n'est relancé.
+
+Côté API, modifier un fichier de `backend/api/src/` :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml -f docker/docker-compose.override.yml logs api --tail 5
+```
+
+`WARNING:  WatchFiles detected changes in 'src/app/main.py'. Reloading...` suivi
+d'un `Application startup complete.` Le `--reload-dir /app/src` du `CMD` limite
+la surveillance aux sources : sans lui, un passage de Ruff sur le poste
+redémarrerait le serveur.
+
+### Le worker et son état d'aujourd'hui
+
+Le service `worker` exécute la cible du même nom de l'image d'API — la même
+image que le service `api`, avec `taskiq worker` pour commande. Il ne publie
+aucun port, ne porte aucun `container_name` et se met donc à l'échelle :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml up -d --scale worker=2
+```
+
+> **Il démarre, mais il ne consomme rien.** Le module
+> `app.shared.infrastructure.tasks.broker` que désigne sa commande arrive avec
+> **BACK-15**, et `taskiq-redis` n'est pas encore une dépendance du projet. La
+> frontière est celle que pose la carte INFRA-05b : ce ticket est propriétaire
+> de la **déclaration** du service, BACK-15 n'écrit que le code.
+
+Le symptôme est contre-intuitif, et il vaut mieux le connaître : **le conteneur
+ne s'arrête pas**. Le gestionnaire de processus de taskiq voit ses workers mourir
+sur un `ModuleNotFoundError` et les relance en boucle, si bien que
+`docker compose ps` le montre `Up` alors qu'il ne fait rien. Seuls les journaux
+disent la vérité :
+
+```bash
+docker compose --project-directory . -f docker/docker-compose.yml logs worker
+```
+
+```
+ModuleNotFoundError: No module named 'app.shared.infrastructure.tasks'
+[taskiq.process-manager][INFO][MainProcess] worker-0 is dead. Scheduling reload.
+```
+
+C'est cette même commande qui vaudra vérification une fois BACK-15 livré : elle
+devra alors montrer une connexion au broker Redis, et plus aucune trace.
 
 ### Vérifier le stockage objet
 
@@ -874,6 +1021,26 @@ partagées](#configurations-partagées).
 > être tenu. Il corrige un défaut **antérieur** à ce ticket, qu'aucun poste
 > macOS ne pouvait révéler — et que la CI d'images de QA-03 aurait rencontré
 > de toute façon.
+
+### Écarts assumés avec le ticket INFRA-05b
+
+| Écart                                                                                  | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Critère n°5 (« le worker démarre et se connecte à Redis sans erreur ») **non vérifié** | Le module de broker appartient à BACK-15, et `taskiq-redis` n'est même pas une dépendance du projet — impossible aujourd'hui, quelle que soit la déclaration du service. INFRA-04 avait déjà constaté que le conteneur reste `Up` en relançant un `ModuleNotFoundError` en boucle ; c'est reproduit ici, documenté, et la commande de vérification est donnée telle qu'elle sera à rejouer. Précédent exact d'INFRA-07, qui a différé son propre critère n°5 à BACK-12 et BACK-22.                                                     |
+| Le worker démarre **par défaut** malgré cela                                           | Le critère n°1 le nomme parmi les services de `docker compose up`. Le mettre derrière un profil, comme `redisinsight`, aurait rendu la pile silencieuse au prix du critère. Le choix assumé est la fidélité au ticket, plus un paragraphe de README qui dit exactement quoi lire dans les journaux.                                                                                                                                                                                                                                    |
+| « Les 9 services » de la checklist, **11** réellement démarrés                         | La carte en écrit neuf et en énumère dix ; `minio-init` (INFRA-03) porte le total à onze, `redisinsight` restant derrière son profil `tools` pour un total déclaré de douze. Le tableau des ports fait foi.                                                                                                                                                                                                                                                                                                                            |
+| Ancres YAML `x-…` introduites, bloc `environment` du service `api` scindé              | Le worker exécute la **même image** que l'API et exige la même configuration ; les trois frontends ne diffèrent que par un nom et un port. Écrits en clair, ils auraient dupliqué une quarantaine de lignes, avec la certitude qu'une correction n'en atteindrait qu'une partie. C'est le raisonnement qui a donné **un seul** Dockerfile de frontend en INFRA-05a. Le bloc `environment` d'INFRA-04 est donc coupé en deux : ce que `get_settings()` exige part dans l'ancre partagée, ce qui relève du serveur HTTP reste sur `api`. |
+| `JWT_*` passées au `worker`, qui ne signe aucun jeton                                  | Contre-intuitif mais contraint : `JWT_SECRET_KEY` n'a **pas** de valeur par défaut, et `Settings` (BACK-03) construit ses cinq sous-modèles d'un bloc. Un worker privé de cette variable s'arrêterait sur une `ConfigurationError` avant d'avoir consommé la moindre tâche. Même raison pour les trois variables `S3_*`.                                                                                                                                                                                                               |
+| Bloc SMTP en commentaires **déplacé** vers l'ancre partagée                            | INFRA-07 l'avait laissé sur le service `api`. Ce qui envoie un courriel est une **tâche de fond** (BACK-17, BACK-22), donc le worker : c'est lui qui en aura besoin le premier. Toujours en commentaires, et pour la raison inchangée — ces six variables naissent après les `.env` déjà créés sur les postes.                                                                                                                                                                                                                         |
+| L'override n'est **jamais** chargé automatiquement                                     | Conséquence du `-f` de la commande canonique, et non un choix : Compose ignore silencieusement `docker-compose.override.yml` dès qu'un fichier lui est nommé. La réponse est un second `-f`, écrit en tête des deux fichiers compose et dans le README, plutôt qu'un `COMPOSE_FILE` glissé dans le `.env` — qui rendrait le mode de démarrage invisible à la lecture de la commande.                                                                                                                                                   |
+| Un `mkdir` ajouté au `Dockerfile` des frontends, **hors portée**                       | La PORTÉE du ticket cite deux fichiers compose. Le troisième masque décrit ci-dessous ne peut pas fonctionner sans lui : Docker n'initialise un volume qu'à partir de ce que l'**image** porte au point de montage, et crée sinon le dossier en `root` — le serveur non-root boucle alors sur `EACCES: permission denied, mkdir .next/dev`. Constaté exactement ainsi. Une ligne, dans le `RUN` qui faisait déjà le `chown`.                                                                                                           |
+| Troisième masque sur `.next`, non annoncé par INFRA-05a                                | Le Dockerfile n'en annonçait que deux, sur les `node_modules`. Le `.next` du poste existe dès le premier `pnpm dev` et porte des chemins absolus de l'hôte et des artefacts SWC `darwin` ; laissé visible, il ferait repartir `next dev` sur un cache fabriqué ailleurs — et le conteneur réécrirait au passage celui du poste.                                                                                                                                                                                                        |
+| `command` du `worker` redite dans l'override                                           | La cible `worker` installe le paquet en `--no-editable` : lui monter du code n'y changerait rien. Seule la cible `dev` est éditable, et son `CMD` est `uvicorn`. L'alternative — un étage `worker-dev` — aurait rouvert plus largement le `Dockerfile` d'INFRA-04.                                                                                                                                                                                                                                                                     |
+| `next dev` et non `pnpm dev`, contrairement au libellé du ticket                       | Arbitrage déjà rendu par INFRA-05a, dont la cible `dev` porte le `CMD` : le script `dev` du `package.json` fixe le port du **poste** (3001, 3002, 3003), là où les trois conteneurs écoutent tous sur 3000. L'override n'a donc aucune `command` à écrire pour les frontends.                                                                                                                                                                                                                                                          |
+| Sonde des frontends en `node -e`, avec un seuil `< 500`                                | Ni `curl` ni `wget` ne sont garantis dans `node:*-slim` — même situation que la `python:3.14-slim` de l'API, dont la sonde est déjà en `python -c`. Le seuil, lui, n'est pas un relâchement : `frontend-admin` répond **307 vers `/login`** sur `/` (FRONT-03), et une sonde exigeant 200 le laisserait indéfiniment `unhealthy`.                                                                                                                                                                                                      |
+| `args: !override` dans le fichier de développement                                     | La cible `dev` ne déclare pas les trois `ARG` de Next — ils vivent dans `builder`. Sans ce marqueur, BuildKit avertirait à chaque construction que deux arguments n'ont pas été consommés. Les valeurs sont reprises en `environment:`, `next dev` lisant `process.env` à l'exécution là où `next build` les fige.                                                                                                                                                                                                                     |
+| `depends_on: api` en `service_healthy` et non `service_started`                        | La sonde de l'API existe depuis INFRA-04, autant s'en servir : un frontend qui répond avant que l'API accepte une requête afficherait des erreurs de rendu serveur pendant les trente premières secondes de chaque `up`.                                                                                                                                                                                                                                                                                                               |
+| `.env.example` inchangé                                                                | Les six variables nécessaires — les trois `FRONTEND_*_HOST_PORT`, `FRONTEND_INDIVIDUAL_SITE_URL`, `NEXT_PUBLIC_API_URL` et `API_INTERNAL_URL` — y sont depuis SETUP-05 et annoncent déjà, mot pour mot, qu'INFRA-05 les passera « en `build.args` ». Aucune valeur de repli `${VAR:-…}` non plus : la règle du dépôt réserve ce mécanisme aux variables nées **après** les `.env` déjà créés sur les postes.                                                                                                                           |
 
 ### Écarts assumés avec le ticket INFRA-07
 

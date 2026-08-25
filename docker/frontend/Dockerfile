@@ -250,7 +250,18 @@ RUN test -n "${APP_NAME}" \
 # l'HOTE qui en fixe le proprietaire et ce chown ne vaut plus. Sous Docker
 # Desktop le montage se presente sous l'uid qui l'ouvre, donc rien a faire ; sous
 # Linux, un uid d'hote different de 1001 redonnera les memes EACCES.
-RUN chown -R juui:juui "/app/frontend/${APP_NAME}"
+#
+# LE `mkdir` A ETE AJOUTE PAR INFRA-05b, ET IL N'EST PAS DECORATIF. Son fichier
+# d'override masque `.next` par un volume anonyme, pour que le cache Turbopack du
+# poste -- chemins absolus de l'hote, artefacts SWC darwin -- n'entre pas dans le
+# conteneur. Or Docker n'initialise un volume qu'a partir de ce que l'IMAGE porte
+# au point de montage : si le dossier n'y existe pas, il le cree lui-meme, en
+# root, et le serveur non-root ne peut plus rien y ecrire. Constate exactement
+# ainsi -- « EACCES: permission denied, mkdir .next/dev », en boucle de
+# redemarrage. Creer le dossier ici, avant le chown, donne au volume le
+# proprietaire qu'il faut.
+RUN mkdir -p "/app/frontend/${APP_NAME}/.next" \
+    && chown -R juui:juui "/app/frontend/${APP_NAME}"
 
 # Le repertoire de travail EST la parametrisation : une forme `exec` de CMD
 # n'interpole aucune variable, mais WORKDIR, si. C'est ce qui evite d'envelopper

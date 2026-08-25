@@ -1,0 +1,238 @@
+# Surcharges de DEVELOPPEMENT de la pile conteneurisee (INFRA-05b).
+#
+# Ce fichier ne declare aucun service : il ne fait que reprendre, un par un, les
+# cinq services que le depot CONSTRUIT lui-meme -- `api`, `worker` et les trois
+# frontends -- pour les faire tourner sur le code du POSTE plutot que sur celui
+# fige dans l'image. Les six briques d'infrastructure (postgres, pgadmin, redis,
+# redisinsight, minio, minio-init, mailpit) n'ont rien a surcharger : elles
+# tirent des images publiques et se comportent de la meme facon dans les deux
+# modes.
+#
+# IL N'EST PAS CHARGE TOUT SEUL, ET C'EST LE PIEGE PRINCIPAL DE CE FICHIER
+# Compose charge d'office un `docker-compose.override.yml` UNIQUEMENT lorsqu'il
+# a DECOUVERT le fichier de base lui-meme. Des qu'un `-f` est passe -- ce que
+# fait toute commande du depot, sans quoi le .env de la racine ne serait pas lu
+# -- l'override est SILENCIEUSEMENT IGNORE. Verifie, et documente par Docker.
+# Il faut donc le nommer :
+#
+#   docker compose --project-directory . \
+#     -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d
+#
+# Sans ce second `-f`, la pile demarre sur les images servies : aucun montage,
+# aucun rechargement a chaud, et pas la moindre erreur pour le dire. INFRA-06
+# encapsulera les deux commandes dans deux cibles distinctes du Makefile.
+#
+# CE QUE CHAQUE SERVICE Y GAGNE
+#   - une CIBLE de build differente : `dev` partout, la ou la base prend `prod`
+#     pour l'API, `worker` pour le worker et `runner` pour les frontends ;
+#   - le CODE DU POSTE monte en volume, ce qui suppose de masquer ce qui ne doit
+#     surtout pas venir de l'hote -- voir chaque service.
+#
+# LES ANCRES DU FICHIER DE BASE NE SONT PAS VISIBLES ICI. Une ancre YAML ne
+# traverse pas les fichiers : `*app-environment` serait une erreur de syntaxe.
+# Ce fichier redeclare donc le peu dont il a besoin, et c'est aussi pourquoi il
+# reste volontairement court.
+#
+# `docker compose config` avec les DEUX `-f` imprime le resultat de la fusion :
+# c'est la verification a faire apres toute modification de ce fichier.
+
+services:
+  # ---------------------------------------------------------------------------
+  # api -- uvicorn --reload sur le code du poste
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      # La cible `dev` d'INFRA-04 : groupe `dev` installe (Ruff, Mypy, Pytest),
+      # installation EDITABLE, et un CMD qui porte deja
+      # `--reload --reload-dir /app/src`. Il n'y a donc pas de `command:` a
+      # ecrire ici -- l'image sait quoi faire.
+      target: dev
+
+    volumes:
+      # /app EST le repertoire de travail de l'image, et le montage le recouvre
+      # entierement. Ce qui rend l'operation sure a ete decide en INFRA-04 : le
+      # virtualenv vit dans /opt/venv, hors d'atteinte. Un `.venv` laisse dans
+      # /app aurait ete masque, et le conteneur serait parti sur un environnement
+      # vide -- un « ModuleNotFoundError: fastapi » sans rapport visible avec sa
+      # cause.
+      #
+      # RIEN A MASQUER ICI, contrairement aux frontends. Le `.venv` du poste, ses
+      # `__pycache__` et ses caches d'outillage arrivent bien dans le conteneur,
+      # mais aucun n'est lu : les imports passent par /opt/venv, et
+      # PYTHONDONTWRITEBYTECODE=1 empeche le processus d'ecrire dans l'arbre de
+      # travail. C'est aussi pour eux que le CMD limite sa surveillance a
+      # /app/src : sans `--reload-dir`, un passage de Ruff redemarrerait le
+      # serveur.
+      #
+      # A SAVOIR : LE CONTENEUR RELIT ALORS backend/api/.env. L'installation
+      # editable fait resoudre config.py en /app/src/app/core/config.py, donc son
+      # `_ENV_FILE` en /app/.env -- fichier absent de l'image (le .dockerignore
+      # l'exclut), mais ramene par ce montage. Sans consequence, pydantic-settings
+      # donnant la priorite aux variables du PROCESSUS sur le dotenv : ce que
+      # compose passe l'emporte. Mais une variable OUBLIEE cote compose s'y
+      # replierait en silence, avec la valeur d'un fichier ecrit pour un uvicorn
+      # lance hors Docker -- ou POSTGRES_HOST vaut `localhost`.
+      - ./backend/api:/app
+
+  # ---------------------------------------------------------------------------
+  # worker -- meme code monte, meme rechargement impossible
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      # `dev` ET NON `worker`, ET C'EST TOUT L'INTERET DE CE BLOC. La cible
+      # `worker` installe le paquet en `--no-editable` : ses imports passent par
+      # /opt/venv, et monter le code sur /app n'y changerait STRICTEMENT RIEN --
+      # le conteneur continuerait d'executer ce que l'image contient. Seule la
+      # cible `dev` est editable.
+      target: dev
+
+    # LA CONTREPARTIE, ET ELLE EST ASSUMEE : le CMD de la cible `dev` est
+    # `uvicorn`. Choisir cette cible pour le worker oblige donc a redire sa
+    # commande ici, ou le conteneur servirait une seconde API.
+    #
+    # C'est une seconde source de verite a cote du CMD de la cible `worker`
+    # (docker/api/Dockerfile) -- a tenir alignee. L'alternative aurait ete un
+    # etage `worker-dev` de plus dans ce Dockerfile, que le README declare clos
+    # depuis INFRA-05a.
+    #
+    # PAS DE `--reload` : taskiq ne le propose qu'avec l'extra `taskiq[reload]`,
+    # que le projet n'installe pas. Une modification de tache se prend par
+    # `docker compose restart worker`, sans reconstruction.
+    command: ['taskiq', 'worker', 'app.shared.infrastructure.tasks.broker:broker']
+
+    volumes:
+      # Meme montage que l'API ci-dessus, et pour les memes raisons -- les deux
+      # services partagent l'image, le repertoire de travail et l'entrypoint.
+      - ./backend/api:/app
+
+  # ---------------------------------------------------------------------------
+  # frontend-professional -- next dev, code du monorepo monte
+  # ---------------------------------------------------------------------------
+  # PREMIER DES TROIS, ET SEUL A PORTER LES COMMENTAIRES COMMUNS.
+  frontend-professional:
+    build:
+      # La cible `dev` d'INFRA-05a : pnpm et les node_modules du monorepo, et un
+      # CMD `next dev --port 3000 --hostname 0.0.0.0`. Rien a redire ici, l'image
+      # sait quoi faire.
+      target: dev
+
+      # `!override` REMPLACE la table du fichier de base au lieu de la fusionner.
+      # Sans lui, NEXT_PUBLIC_API_URL et API_INTERNAL_URL continueraient d'etre
+      # passees en arguments de build a un etage qui ne les declare PAS : les
+      # trois `ARG` vivent dans `builder`, que la cible `dev` ne traverse pas.
+      # BuildKit avertirait a chaque construction que deux arguments n'ont pas
+      # ete consommes.
+      args: !override
+        APP_NAME: frontend-professional
+
+    environment:
+      # LES MEMES DEUX ADRESSES, MAIS A L'EXECUTION -- et c'est la difference de
+      # fond entre les deux modes. Un `next build` FIGE NEXT_PUBLIC_* dans le
+      # bundle, d'ou les `build.args` du fichier de base ; un `next dev` compile
+      # a la demande et lit `process.env` a ce moment-la. Passer ces valeurs en
+      # arguments de build ici n'aurait donc aucun effet.
+      #
+      # ET C'EST `process.env` QUI L'EMPORTE. Le montage ci-dessous ramene le
+      # `frontend/<app>/.env.local` du poste, que Next charge en developpement --
+      # mais son ordre de priorite place process.env devant. Les valeurs du .env
+      # de la racine restent donc celles qui s'appliquent, meme sur un poste dont
+      # le .env.local dit autre chose.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+    volumes:
+      # LA RACINE DU DEPOT, ET NON LE SEUL DOSSIER DE L'APPLICATION. C'est ce qui
+      # fait traverser le Fast Refresh la frontiere du monorepo : une
+      # modification de packages/ui ou du theme de packages/config-tailwind se
+      # voit dans le navigateur au meme titre qu'une modification d'une page.
+      #
+      # Chemin relatif a la RACINE et non a docker/ -- meme mise en garde qu'en
+      # tete du fichier de base.
+      - .:/app
+
+      # TROIS MASQUES, ET AUCUN N'EST FACULTATIF. Un volume anonyme sur un chemin
+      # que le montage ci-dessus recouvre le REND A L'IMAGE : le conteneur
+      # retrouve son propre contenu, celui de l'hote reste invisible.
+      #
+      # 1 et 2. LES NODE_MODULES, SUR DEUX NIVEAUX -- ce que le Dockerfile
+      # d'INFRA-05a annonce noir sur blanc. Ceux du poste sont construits pour
+      # macOS et inutilisables ici. L'arbre pnpm est fait de liens symboliques du
+      # second niveau vers le premier ; n'en masquer qu'un rendrait l'autre
+      # pendant dans le vide.
+      #
+      # CE QUI EXPLIQUE QU'ON PUISSE S'ARRETER LA, alors que packages/* et
+      # documentation/ ont eux aussi leurs node_modules non masques : les liens
+      # symboliques que pnpm y depose sont RELATIFS et pointent tous vers
+      # `../../node_modules/.pnpm/...`. Dans le conteneur ils se resolvent donc
+      # dans le volume anonyme du premier niveau, c'est-a-dire dans le magasin
+      # construit pour Linux. Verifie.
+      - /app/node_modules
+      - /app/frontend/frontend-professional/node_modules
+
+      # 3. LE CACHE DE BUILD DE NEXT, que le Dockerfile n'annonce pas. Le `.next`
+      # du poste existe des le premier `pnpm dev` et porte des chemins ABSOLUS de
+      # l'hote (/Users/...) ainsi que des artefacts SWC darwin. Laisse visible, il
+      # ferait repartir `next dev` sur un cache fabrique ailleurs -- et le
+      # conteneur reecrirait au passage celui du poste.
+      - /app/frontend/frontend-professional/.next
+
+    healthcheck:
+      # Seul `start_period` change ; le reste vient de `x-frontend-healthcheck`,
+      # les mappings etant fusionnes cle par cle.
+      #
+      # `next dev` NE COMPILE RIEN AVANT LA PREMIERE REQUETE, et cette premiere
+      # compilation est lente -- c'est justement la sonde qui la declenche. Avec
+      # les 30 s de la base, le service passerait `unhealthy` le temps d'un
+      # premier demarrage, et les `depends_on` poses sur lui partiraient en
+      # echec.
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # frontend-individual -- next dev (voir frontend-professional ci-dessus)
+  # ---------------------------------------------------------------------------
+  frontend-individual:
+    build:
+      target: dev
+      args: !override
+        APP_NAME: frontend-individual
+
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+      # SITE_URL n'est plus figee au build en developpement : app/robots.ts et
+      # app/sitemap.ts sont rendus a la demande, ils lisent donc process.env a
+      # chaque requete. La changer et recharger la page suffit ici, la ou l'image
+      # servie exige une reconstruction.
+      SITE_URL: ${FRONTEND_INDIVIDUAL_SITE_URL}
+
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/frontend-individual/node_modules
+      - /app/frontend/frontend-individual/.next
+
+    healthcheck:
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # frontend-admin -- next dev (voir frontend-professional ci-dessus)
+  # ---------------------------------------------------------------------------
+  frontend-admin:
+    build:
+      target: dev
+      args: !override
+        APP_NAME: frontend-admin
+
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/frontend/frontend-admin/node_modules
+      - /app/frontend/frontend-admin/.next
+
+    healthcheck:
+      start_period: 120s

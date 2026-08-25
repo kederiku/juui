@@ -26,10 +26,226 @@
 # `docker compose config` imprime les chemins absolus finalement retenus : c'est
 # la verification a faire apres toute modification de ce fichier.
 #
+# LE FICHIER D'OVERRIDE N'EST PAS CHARGE TOUT SEUL, ET C'EST CONTRE-INTUITIF
+# docker-compose.override.yml, a cote de ce fichier, porte les surcharges de
+# developpement (INFRA-05b). Compose le chargerait d'office s'il avait DECOUVERT
+# ce fichier-ci ; des qu'un `-f` est passe -- ce que fait toute commande du
+# depot, faute de quoi le .env de la racine ne serait pas lu -- l'override est
+# SILENCIEUSEMENT IGNORE. Il faut donc le nommer :
+#
+#   docker compose --project-directory . \
+#     -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d
+#
+# Sans ce second `-f`, la pile demarre sur les images SERVIES : aucun montage de
+# code, aucun rechargement a chaud, et pas la moindre erreur pour le dire.
+#
 # Pas de cle `version:` : obsolete depuis Compose V2, qui avertit si elle est la.
 #
 # Chaque variable employee ici est documentee dans .env.example, ticket par
 # ticket. Ce fichier ne redit pas ce qu'elle vaut, seulement ce qu'il en fait.
+
+# -----------------------------------------------------------------------------
+# Fragments partages entre services (INFRA-05b)
+# -----------------------------------------------------------------------------
+# Compose ignore toute cle de premier niveau prefixee `x-`. Ces quatre blocs ne
+# declarent donc AUCUN service : ils sont seulement references plus bas par des
+# ancres YAML -- `&nom` ici, `*nom` ou `<<: *nom` la-bas.
+#
+# POURQUOI ILS EXISTENT. INFRA-05b ajoute quatre services a un fichier qui en
+# portait huit, et ces quatre-la ne sont pas des briques distinctes : `worker`
+# execute la MEME image que `api` avec une autre commande, et les trois
+# frontends ne different que par un nom d'application et un port publie. Ecrits
+# en clair, ils auraient duplique une quarantaine de lignes -- avec la certitude
+# qu'une correction future n'en atteindrait qu'une partie. C'est le raisonnement
+# qui a donne UN SEUL Dockerfile de frontend en INFRA-05a, transpose ici.
+#
+# A SAVOIR AVANT D'Y TOUCHER : une ancre ne traverse PAS les fichiers.
+# docker-compose.override.yml ne peut rien reutiliser d'ici, et redeclare donc
+# le peu dont il a besoin.
+#
+# `docker compose config` imprime le resultat de toutes ces fusions : c'est la
+# verification a faire apres toute modification de cette section.
+
+# --- Contexte de build de l'image d'API, partage par `api` et `worker` -------
+# Deux cibles du meme Dockerfile (INFRA-04), donc deux services au meme
+# contexte. Seul `target:` les distingue, et il reste sur chaque service.
+x-api-build: &api-build
+  # LE CONTEXTE EST backend/api, ET NON LA RACINE. C'est ce qui rend
+  # backend/api/.dockerignore effectif -- Docker ne lit qu'un seul fichier
+  # d'exclusion, celui de la racine du contexte -- et ce qui evite d'envoyer
+  # node_modules au demon.
+  #
+  # Chemin relatif a la RACINE et non a docker/ : meme mise en garde qu'en tete
+  # de fichier.
+  context: ./backend/api
+
+  # Resolu, lui, relativement au CONTEXTE ci-dessus et non au repertoire de
+  # projet : d'ou les deux `..` qui ramenent a la racine. Un Dockerfile hors
+  # contexte est parfaitement admis par BuildKit.
+  dockerfile: ../../docker/api/Dockerfile
+
+  # CONTEXTE ADDITIONNEL. entrypoint.sh vit dans docker/api/, donc hors du
+  # contexte de build : sans cette ligne, le `COPY --from=scripts` du Dockerfile
+  # n'aurait rien a copier. Un build lance a la main doit passer l'equivalent,
+  # `--build-context scripts=docker/api`.
+  additional_contexts:
+    scripts: ./docker/api
+
+# --- Configuration de l'application, partagee par `api` et `worker` ----------
+# C'est EXACTEMENT ce que `get_settings()` (BACK-03) exige pour se construire.
+# Le detail compte : `Settings` assemble ses cinq sous-modeles d'un coup, et
+# trois d'entre eux ont des champs SANS defaut -- POSTGRES_USER, POSTGRES_PASSWORD,
+# POSTGRES_DB, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET et JWT_SECRET_KEY. En
+# retirer un empeche les DEUX processus de demarrer, pas seulement celui qui
+# s'en sert : le worker a besoin de JWT_SECRET_KEY sans signer le moindre jeton.
+#
+# Ce qui releve du SERVEUR HTTP -- origines CORS, reglages uvicorn -- n'est donc
+# PAS ici mais sur le service `api`, ou cela se lit pour ce que c'est.
+#
+# POURQUOI UNE LISTE EXPLICITE PLUTOT QU'UN `env_file`
+# BACK-03 filtre les variables du PROCESSUS sur les champs declares : les
+# conteneurs supporteraient donc sans broncher le .env complet de la racine. La
+# liste est malgre tout ecrite a la main, pour trois raisons -- c'est le style
+# des services d'infrastructure ci-dessus ; l'interpolation `${...}` suit
+# `--project-directory` sans ambiguite, la ou un chemin `env_file` demanderait
+# une verification de plus ; et PGADMIN_DEFAULT_PASSWORD n'a rien a faire dans
+# l'environnement d'un service applicatif.
+#
+# Les groupes ci-dessous sont ceux de .env.example. Le premier -- ENVIRONMENT et
+# LOG_LEVEL, sans prefixe (BACK-03, BACK-11) -- ouvre le bloc sans marqueur :
+# Prettier replie sur la ligne de la cle tout commentaire qui la suit
+# immediatement. Les quatre autres portent le leur.
+x-app-environment: &app-environment
+  ENVIRONMENT: ${ENVIRONMENT}
+  LOG_LEVEL: ${LOG_LEVEL}
+
+  # --- PostgreSQL (BACK-05) ---
+  # POSTGRES_HOST vaut `postgres` et POSTGRES_PORT le port INTERNE : depuis
+  # app_network, on ne passe jamais par les ports publies sur le poste.
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_HOST: ${POSTGRES_HOST}
+  POSTGRES_PORT: ${POSTGRES_PORT}
+
+  # Reglages du pool de connexions, avec un defaut EN DUR ici. C'est ce qui les
+  # rend facultatives dans le .env : sans le `:-`, un .env anterieur a BACK-05
+  # -- il en existe -- transmettrait une chaine vide, et l'API refuserait de
+  # demarrer sur une valeur entiere invalide. Meme precaution que
+  # WEB_CONCURRENCY, sur le service `api`.
+  POSTGRES_POOL_SIZE: ${POSTGRES_POOL_SIZE:-5}
+  POSTGRES_MAX_OVERFLOW: ${POSTGRES_MAX_OVERFLOW:-10}
+  POSTGRES_POOL_RECYCLE_SECONDS: ${POSTGRES_POOL_RECYCLE_SECONDS:-1800}
+  POSTGRES_ECHO: ${POSTGRES_ECHO:-false}
+
+  # --- Redis (BACK-14, BACK-15) ---
+  # Les deux bases sont separees a dessein depuis INFRA-02 : l'API lit surtout
+  # la 0, le worker surtout la 1, mais les deux processus recoivent les deux --
+  # une tache peut mettre en cache, et l'API peut publier une tache.
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  REDIS_CACHE_DB: ${REDIS_CACHE_DB}
+  REDIS_BROKER_DB: ${REDIS_BROKER_DB}
+  # Le `:-` pour la meme raison que les quatre reglages de pool ci-dessus : un
+  # .env anterieur a BACK-14 ne porte pas cette cle, et compose transmettrait
+  # alors une chaine vide -- que pydantic refuse comme entier, ce qui empecherait
+  # le conteneur de demarrer.
+  REDIS_CACHE_TTL_SECONDS: ${REDIS_CACHE_TTL_SECONDS:-300}
+
+  # --- Stockage objet (BACK-13) ---
+  # MINIO_ROOT_USER et MINIO_ROOT_PASSWORD sont passes en tant qu'ALIAS DE REPLI
+  # de S3_ACCESS_KEY et S3_SECRET_KEY : BACK-03 les declare en AliasChoices, ce
+  # qui evite d'ecrire deux fois la meme valeur dans le .env. Les activer
+  # explicitement cote .env les ferait passer devant.
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+  S3_BUCKET: ${S3_BUCKET}
+  S3_REGION: ${S3_REGION}
+  MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+  # --- Jetons (BACK-10) ---
+  # Ici, et non sur le seul service `api`, pour la raison dite plus haut :
+  # JWT_SECRET_KEY n'a pas de defaut, et `get_settings()` construit ses cinq
+  # sous-modeles d'un bloc. Un worker sans cette variable s'arreterait sur une
+  # ConfigurationError avant d'avoir consomme la moindre tache.
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ALGORITHM: ${JWT_ALGORITHM}
+  JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
+  JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+
+  # --- Courriel sortant : A DECOMMENTER EN BACK-22 ---
+  # Le service `mailpit` existe depuis INFRA-07, ses six variables sont
+  # documentees dans .env.example, mais AUCUNE LIGNE DE CODE ne les lit encore :
+  # l'adaptateur SMTP est l'objet de BACK-22.
+  #
+  #   SMTP_HOST: ${SMTP_HOST}
+  #   SMTP_PORT: ${SMTP_PORT}
+  #   SMTP_USER: ${SMTP_USER}
+  #   SMTP_PASSWORD: ${SMTP_PASSWORD}
+  #   SMTP_USE_TLS: ${SMTP_USE_TLS}
+  #   MAIL_FROM: ${MAIL_FROM}
+  #
+  # DANS CE BLOC PARTAGE, et non sur le seul service `api` ou INFRA-04 l'avait
+  # laisse : ce qui envoie un courriel est une TACHE DE FOND (BACK-17, BACK-22),
+  # donc le worker. L'API en aura besoin aussi, ne serait-ce que pour construire
+  # ses reglages ; les deux le liront d'ici.
+  #
+  # POURQUOI PAS DES MAINTENANT, alors que Redis, S3 et JWT sont bien passes
+  # avant leurs tickets : ceux-la ont ete ajoutes par INFRA-04, qui les trouvait
+  # DEJA dans le .env.example de SETUP-05. Les six ci-dessus naissent avec
+  # INFRA-07, donc apres les .env deja crees sur les postes -- les referencer
+  # produirait six avertissements `variable is not set` a chaque `up`, pour des
+  # variables que personne ne lit.
+
+# --- Contexte de build des trois images de frontend --------------------------
+# UN SEUL Dockerfile pour trois applications (INFRA-05a) : ce qui les distingue
+# tient dans `args`, et reste donc sur chaque service.
+x-frontend-build: &frontend-build
+  # LA RACINE DU DEPOT, et il ne peut pas en etre autrement : un build Next.js en
+  # monorepo pnpm a besoin du pnpm-lock.yaml, du pnpm-workspace.yaml, du
+  # package.json racine, des trois frontend/* et de tout packages/*. Aucun
+  # sous-dossier ne les contient tous -- d'ou le .dockerignore de la RACINE,
+  # cree par INFRA-05a.
+  #
+  # C'est l'inverse exact de `x-api-build` ci-dessus, dont le contexte etroit
+  # oblige a passer l'entrypoint par un contexte additionnel. Ici tout est dans
+  # le contexte : ni `--build-context`, ni `additional_contexts`.
+  context: .
+
+  # Relatif au CONTEXTE ci-dessus, donc a la racine : pas de `..` cette fois.
+  dockerfile: ./docker/frontend/Dockerfile
+
+# --- Sonde de vivacite des trois frontends -----------------------------------
+# EN `node -e`, ET NON EN `curl` OU `wget`. L'image node:*-slim n'embarque de
+# facon garantie ni l'un ni l'autre, exactement comme la python:3.14-slim de
+# l'API -- dont la sonde est deja ecrite en `python -c`, et pour cette raison.
+# `node` est le seul binaire dont la presence soit certaine : c'est celui que
+# lance le CMD.
+#
+# `127.0.0.1` et non `localhost`, pour la quatrieme fois de ce fichier : le
+# resolveur du conteneur tente l'IPv6 d'abord, or Next n'ecoute qu'en IPv4
+# (HOSTNAME=0.0.0.0).
+#
+# LE SEUIL EST `< 500`, ET CE N'EST PAS UN RELACHEMENT. `frontend-admin` repond
+# 307 vers /login sur `/` : son proxy.ts redirige toute requete sans session
+# (FRONT-03). Une sonde qui exigerait 200 le laisserait indefiniment `unhealthy`
+# -- et bloquerait tout `depends_on` pose sur lui. Ce qu'on verifie ici est que
+# le serveur REPOND, ce qui est precisement l'objet d'une sonde de vivacite.
+x-frontend-healthcheck: &frontend-healthcheck
+  test:
+    [
+      'CMD',
+      'node',
+      '-e',
+      "require('node:http').get({host:'127.0.0.1',port:3000,path:'/'},(r)=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))",
+    ]
+  interval: 10s
+  timeout: 5s
+  # Couvre le demarrage du serveur, et surtout l'attente du `depends_on` sur
+  # l'API. L'override d'INFRA-05b l'allonge encore en developpement, ou `next
+  # dev` compile la premiere page a la demande.
+  start_period: 30s
+  retries: 5
 
 services:
   # ---------------------------------------------------------------------------
@@ -426,7 +642,8 @@ services:
     networks: [app_network]
 
   # ---------------------------------------------------------------------------
-  # api -- service d'API FastAPI (INFRA-04, consomme par INFRA-05b et QA-03)
+  # api -- service d'API FastAPI (INFRA-04 ; le `worker` et les trois frontends
+  # d'INFRA-05b en dependent, QA-03 publie son image)
   # ---------------------------------------------------------------------------
   # Premier service APPLICATIF de la pile : les cinq precedents sont des briques
   # d'infrastructure tirees d'images publiques, celui-ci se construit depuis le
@@ -437,126 +654,38 @@ services:
   # backend/api/ et pourquoi son entrypoint arrive par un contexte additionnel.
   api:
     build:
-      # LE CONTEXTE EST backend/api, ET NON LA RACINE. C'est ce qui rend
-      # backend/api/.dockerignore effectif -- Docker ne lit qu'un seul fichier
-      # d'exclusion, celui de la racine du contexte -- et ce qui evite d'envoyer
-      # node_modules au demon.
-      #
-      # Chemin relatif a la RACINE et non a docker/ : meme mise en garde qu'en
-      # tete de fichier. `docker compose config` imprime le chemin absolu
-      # finalement retenu, c'est la verification a faire apres toute
-      # modification de ce bloc.
-      context: ./backend/api
+      # Contexte, Dockerfile et contexte additionnel : voir `x-api-build` en tete
+      # de fichier, partage avec le service `worker`.
+      <<: *api-build
 
-      # Resolu, lui, relativement au CONTEXTE ci-dessus et non au repertoire de
-      # projet : d'ou les deux `..` qui ramenent a la racine. Un Dockerfile hors
-      # contexte est parfaitement admis par BuildKit.
-      dockerfile: ../../docker/api/Dockerfile
-
-      # Image servie, sans rechargement a chaud. INFRA-05b basculera sur `dev`
-      # depuis docker-compose.override.yml.
+      # Image servie, sans rechargement a chaud. docker-compose.override.yml
+      # bascule sur `dev` (INFRA-05b).
       target: prod
 
-      # CONTEXTE ADDITIONNEL. entrypoint.sh vit dans docker/api/, donc hors du
-      # contexte de build : sans cette ligne, le `COPY --from=scripts` du
-      # Dockerfile n'aurait rien a copier. Un build lance a la main doit passer
-      # l'equivalent, `--build-context scripts=docker/api`.
-      additional_contexts:
-        scripts: ./docker/api
-
     environment:
-      # L'API lit sa configuration par ces variables et par elles seules
-      # (BACK-03) : le .env de backend/api n'est ni copie dans l'image ni monte
-      # ici, et le .dockerignore l'exclut explicitement.
-      #
-      # POURQUOI UNE LISTE EXPLICITE PLUTOT QU'UN `env_file`
-      # BACK-03 filtre les variables du PROCESSUS sur les champs declares : le
-      # conteneur supporterait donc sans broncher le .env complet de la racine.
-      # La liste est malgre tout ecrite a la main, pour trois raisons -- c'est le
-      # style des cinq services ci-dessus ; l'interpolation `${...}` suit
-      # `--project-directory` sans ambiguite, la ou un chemin `env_file`
-      # demanderait une verification de plus ; et PGADMIN_DEFAULT_PASSWORD n'a
-      # rien a faire dans l'environnement de l'API.
+      # Configuration de l'APPLICATION, partagee avec le service `worker` : voir
+      # `x-app-environment` en tete de fichier. C'est la que vivent PostgreSQL,
+      # Redis, le stockage objet et les jetons -- et la que se corrige un reglage
+      # qui doit valoir pour les deux processus.
+      <<: *app-environment
 
-      # --- Application (BACK-03, BACK-11) ---
-      ENVIRONMENT: ${ENVIRONMENT}
-      LOG_LEVEL: ${LOG_LEVEL}
+      # --- CE QUI N'APPARTIENT QU'AU SERVEUR HTTP ---
+      # Les trois variables ci-dessous sont restees ici, et non dans l'ancre
+      # partagee, parce qu'elles n'ont aucun sens pour un worker : il ne repond a
+      # aucune requete, donc ni origine a autoriser, ni processus uvicorn a
+      # compter, ni en-tete de proxy a croire.
+
+      # Origines autorisees par CORS (BACK-11).
       CORS_ORIGINS: ${CORS_ORIGINS}
 
-      # --- PostgreSQL (BACK-05) ---
-      # POSTGRES_HOST vaut `postgres` et POSTGRES_PORT le port INTERNE : depuis
-      # app_network, on ne passe jamais par les ports publies sur le poste.
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: ${POSTGRES_HOST}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-
-      # Reglages du pool de connexions, avec un defaut EN DUR ici. C'est ce qui
-      # les rend facultatives dans le .env : sans le `:-`, un .env anterieur a
-      # BACK-05 -- il en existe -- transmettrait une chaine vide, et l'API
-      # refuserait de demarrer sur une valeur entiere invalide. Meme precaution
-      # que WEB_CONCURRENCY plus bas.
-      POSTGRES_POOL_SIZE: ${POSTGRES_POOL_SIZE:-5}
-      POSTGRES_MAX_OVERFLOW: ${POSTGRES_MAX_OVERFLOW:-10}
-      POSTGRES_POOL_RECYCLE_SECONDS: ${POSTGRES_POOL_RECYCLE_SECONDS:-1800}
-      POSTGRES_ECHO: ${POSTGRES_ECHO:-false}
-
-      # --- Redis (BACK-14, BACK-15) ---
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      REDIS_CACHE_DB: ${REDIS_CACHE_DB}
-      REDIS_BROKER_DB: ${REDIS_BROKER_DB}
-      # Le `:-` pour la meme raison que les quatre reglages de pool ci-dessus :
-      # un .env anterieur a BACK-14 ne porte pas cette cle, et compose
-      # transmettrait alors une chaine vide -- que pydantic refuse comme entier,
-      # ce qui empecherait le conteneur de demarrer.
-      REDIS_CACHE_TTL_SECONDS: ${REDIS_CACHE_TTL_SECONDS:-300}
-
-      # --- Stockage objet (BACK-13) ---
-      # MINIO_ROOT_USER et MINIO_ROOT_PASSWORD sont passes en tant qu'ALIAS DE
-      # REPLI de S3_ACCESS_KEY et S3_SECRET_KEY : BACK-03 les declare en
-      # AliasChoices, ce qui evite d'ecrire deux fois la meme valeur dans le
-      # .env. Les activer explicitement cote .env les ferait passer devant.
-      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
-      S3_BUCKET: ${S3_BUCKET}
-      S3_REGION: ${S3_REGION}
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-
-      # --- Jetons (BACK-10) ---
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
-      JWT_ALGORITHM: ${JWT_ALGORITHM}
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
-      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
-
-      # --- Courriel sortant : A DECOMMENTER EN BACK-22 ---
-      # Le service `mailpit` existe depuis INFRA-07, ses six variables sont
-      # documentees dans .env.example, mais AUCUNE LIGNE DE CODE ne les lit
-      # encore : l'adaptateur SMTP est l'objet de BACK-22.
-      #
-      #   SMTP_HOST: ${SMTP_HOST}
-      #   SMTP_PORT: ${SMTP_PORT}
-      #   SMTP_USER: ${SMTP_USER}
-      #   SMTP_PASSWORD: ${SMTP_PASSWORD}
-      #   SMTP_USE_TLS: ${SMTP_USE_TLS}
-      #   MAIL_FROM: ${MAIL_FROM}
-      #
-      # POURQUOI PAS DES MAINTENANT, alors que Redis, S3 et JWT sont bien passes
-      # avant leurs tickets : ceux-la ont ete ajoutes par INFRA-04, qui les
-      # trouvait DEJA dans le .env.example de SETUP-05. Les six ci-dessus
-      # naissent avec INFRA-07, donc apres les .env deja crees sur les postes --
-      # les referencer produirait six avertissements `variable is not set` a
-      # chaque `up`, pour des variables que personne ne lit. Meme attente que le
-      # `depends_on: minio-init` laisse a BACK-13 plus bas.
-
       # --- Serveur uvicorn (INFRA-04) ---
-      # Les deux SEULES variables du fichier a porter une valeur de repli, et
-      # c'est deliberé : elles naissent avec ce ticket, donc tout .env cree
-      # avant lui les ignore. Sans repli, `WEB_CONCURRENCY` vide donnerait un
-      # `int('')` et un conteneur en boucle de redemarrage, et
-      # `FORWARDED_ALLOW_IPS` vide ne ferait plus confiance a personne -- en
-      # silence. Les valeurs ci-dessous sont celles de .env.example.
+      # Valeurs de repli, comme les reglages de pool et de cache de l'ancre
+      # partagee et pour la meme raison : ces deux variables naissent avec
+      # INFRA-04, donc tout .env cree avant lui les ignore. Sans repli,
+      # `WEB_CONCURRENCY` vide donnerait un `int('')` et un conteneur en boucle
+      # de redemarrage, et `FORWARDED_ALLOW_IPS` vide ne ferait plus confiance a
+      # personne -- en silence. Les valeurs ci-dessous sont celles de
+      # .env.example.
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
 
@@ -709,6 +838,205 @@ services:
 
     # Pas de depends_on : Mailpit ne depend de rien, et rien ne lui envoie encore
     # de courriel. C'est l'inverse qui viendra, avec l'adaptateur de BACK-22.
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # worker -- executeur des taches de fond TaskIQ (INFRA-05b ; le code du broker
+  # et des taches appartient a BACK-15)
+  # ---------------------------------------------------------------------------
+  # MEME IMAGE QUE `api`, AUTRE COMMANDE. La cible `worker` du Dockerfile
+  # d'INFRA-04 descend de `runtime` comme `prod` et n'en differe que par son CMD
+  # : les etages partages ne se construisent qu'une fois, et un correctif
+  # applique a l'API suit le worker sans rien a reporter.
+  #
+  # POURQUOI CE SERVICE EST ICI ET NON EN BACK-15. La carte l'ecrit : ce ticket
+  # est proprietaire de la DECLARATION du service, BACK-15 n'ecrit que le code.
+  # Sans ce partage, trois tickets modifieraient ce meme fichier.
+  #
+  # CE QU'IL FAIT AUJOURD'HUI : RIEN, ET IL FAUT LE SAVOIR. Le module
+  # `app.shared.infrastructure.tasks.broker` que designe son CMD arrive avec
+  # BACK-15, et `taskiq-redis` n'est meme pas encore une dependance du projet.
+  # Verifie en INFRA-04, et contre-intuitif : le conteneur ne s'arrete PAS. Le
+  # gestionnaire de processus de taskiq voit ses workers mourir sur un
+  # « ModuleNotFoundError » et les relance en boucle, si bien que
+  # `docker compose ps` le montre `running` alors qu'il ne consomme aucune tache.
+  # SEULS LES JOURNAUX DISENT LA VERITE tant que BACK-15 n'a pas livre :
+  #
+  #   docker compose --project-directory . -f docker/docker-compose.yml logs worker
+  worker:
+    build:
+      # Contexte, Dockerfile et contexte additionnel : voir `x-api-build` en tete
+      # de fichier, partage avec `api`.
+      <<: *api-build
+      target: worker
+
+    # Alias NU et non `<<:` : le worker prend ce bloc tel quel, sans rien y
+    # ajouter. Le jour ou une variable ne concernera que lui, cette ligne
+    # deviendra `<<: *app-environment` suivie de ses ajouts.
+    #
+    # Il recoit donc S3_* et JWT_* sans y toucher : ce n'est pas de la generosite
+    # mais une contrainte de BACK-03, expliquee sur l'ancre elle-meme.
+    environment: *app-environment
+
+    depends_on:
+      # Les deux dependances que nomme la carte, et elles suffisent. Postgres
+      # parce que l'entrypoint partage avec l'API attend une connexion reelle
+      # avant de rendre la main ; Redis parce que c'est la file elle-meme.
+      #
+      # PAS de `minio-init`, contrairement a l'API : aucune tache ne touche
+      # encore au bucket. A ajouter le jour ou l'une d'elles y ecrira -- la
+      # condition `service_completed_successfully` supporte tres bien d'etre
+      # attendue par plusieurs services, replicas compris.
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    # NI `ports:` NI `container_name:`, ET C'EST CE QUI REND `--scale` POSSIBLE.
+    # Un port publie entrerait en collision des le deuxieme replica, et un nom
+    # de conteneur fige ferait echouer la commande sans ambiguite :
+    #
+    #   docker compose --project-directory . -f docker/docker-compose.yml up -d --scale worker=2
+    #
+    # Un worker n'ecoute rien de toute facon -- il tire ses taches de Redis --,
+    # d'ou son absence du tableau des ports du README.
+    #
+    # PAS DE HEALTHCHECK non plus : il n'expose aucune sonde a interroger. Ce
+    # serait a BACK-15 d'en fournir une si le besoin s'en faisait sentir.
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # frontend-professional -- interface B2B des cliniques (INFRA-05b, image
+  # d'INFRA-05a)
+  # ---------------------------------------------------------------------------
+  # PREMIER DES TROIS, ET SEUL A PORTER LES COMMENTAIRES COMMUNS. Les deux
+  # suivants sont sa copie a trois details pres : le nom de l'application, le
+  # port publie, et le SITE_URL que seul `frontend-individual` consomme.
+  #
+  # LES TROIS ECOUTENT SUR 3000 A L'INTERIEUR DU RESEAU. C'est la publication qui
+  # les distingue, et c'est une regle du depot -- le tableau des ports du README
+  # la pose, le CMD de la cible `dev` d'INFRA-05a la tient aussi. Rien ne publie
+  # 3000 : c'est le port le plus dispute d'un poste de developpement.
+  frontend-professional:
+    build:
+      # Contexte et Dockerfile : voir `x-frontend-build` en tete de fichier.
+      <<: *frontend-build
+
+      # Image servie -- la sortie standalone de Next lancee par `node server.js`,
+      # sans pnpm ni node_modules complet. docker-compose.override.yml bascule
+      # sur `dev`.
+      #
+      # Ecrit explicitement bien que ce soit deja le dernier etage du
+      # Dockerfile : c'est ce qui rend lisible, en diff, la bascule que fait
+      # l'override.
+      target: runner
+
+      args:
+        # Sans lui le Dockerfile s'arrete net, avec un message qui nomme les
+        # trois valeurs admises. C'est le seul argument qui distingue vraiment
+        # les trois images.
+        APP_NAME: frontend-professional
+
+        # LES DEUX ADRESSES DE L'API, ET ELLES NE SONT PAS INTERCHANGEABLES.
+        # NEXT_PUBLIC_API_URL est celle du NAVIGATEUR -- http://localhost:8000,
+        # jamais http://api:8000, qui n'est resolvable que par les conteneurs.
+        # API_INTERNAL_URL est celle du SERVEUR Next, qui tourne, lui, dans
+        # app_network : c'est le nom du service.
+        #
+        # EN `args` ET NON EN `environment`, ET LA NUANCE EST TOUT LE SUJET.
+        # Next FIGE ces valeurs AU BUILD : NEXT_PUBLIC_* est litteralement
+        # remplacee dans le bundle client. Les changer impose de RECONSTRUIRE
+        # l'image ; un `docker compose restart` ne changera rien. Le
+        # .env.example de la racine et les trois .env.local.example annoncent
+        # deja ce fonctionnement, mot pour mot.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+    ports:
+      # <port publie sur le poste>:<port ecoute dans app_network>. Seul le
+      # premier se regle, par le .env.
+      - '${FRONTEND_PROFESSIONAL_HOST_PORT}:3000'
+
+    depends_on:
+      # Sur la sonde, et non sur le simple demarrage : l'API d'INFRA-04 en
+      # declare une, autant s'en servir. Un frontend qui repond avant que l'API
+      # accepte une requete afficherait des erreurs de rendu serveur pendant les
+      # trente premieres secondes de chaque `up`.
+      api:
+        condition: service_healthy
+
+    healthcheck: *frontend-healthcheck
+
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # frontend-individual -- interface B2C des proprietaires d'animaux (INFRA-05b)
+  # ---------------------------------------------------------------------------
+  # SEULE DES TROIS A ETRE INDEXABLE, donc seule a recevoir SITE_URL. Voir
+  # frontend-professional ci-dessus pour tout ce qui leur est commun.
+  frontend-individual:
+    build:
+      <<: *frontend-build
+      target: runner
+      args:
+        APP_NAME: frontend-individual
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+        # URL PUBLIQUE du site, lue par le `metadataBase` du layout, par
+        # app/robots.ts et par app/sitemap.ts (FRONT-02). Le nom est prefixe
+        # dans le .env parce qu'un `SITE_URL` nu y serait ambigu au milieu de
+        # trois frontends ; l'application, elle, ne connait que `SITE_URL`.
+        #
+        # PIEGE, plus vicieux que celui des deux adresses d'API : ces trois
+        # consommateurs sont PRERENDUS. La valeur est donc figee au build, et la
+        # laisser sur localhost en production remplirait le sitemap d'URLs
+        # injoignables -- sans la moindre erreur au demarrage.
+        SITE_URL: ${FRONTEND_INDIVIDUAL_SITE_URL}
+
+    ports:
+      - '${FRONTEND_INDIVIDUAL_HOST_PORT}:3000'
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck: *frontend-healthcheck
+
+    networks: [app_network]
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # frontend-admin -- back-office de la plateforme (INFRA-05b)
+  # ---------------------------------------------------------------------------
+  # PAS DE SITE_URL : ce back-office n'a rien a faire indexer, et son
+  # app/robots.ts l'interdit explicitement (FRONT-03).
+  #
+  # C'EST LUI QUI JUSTIFIE LE SEUIL `< 500` DE LA SONDE PARTAGEE. Son accueil vit
+  # dans le groupe `(protected)` et son proxy.ts redirige toute requete sans
+  # session : `/` repond 307 vers /login, ce qui est le comportement attendu et
+  # non une panne.
+  frontend-admin:
+    build:
+      <<: *frontend-build
+      target: runner
+      args:
+        APP_NAME: frontend-admin
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        API_INTERNAL_URL: ${API_INTERNAL_URL}
+
+    ports:
+      - '${FRONTEND_ADMIN_HOST_PORT}:3000'
+
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck: *frontend-healthcheck
+
     networks: [app_network]
     restart: unless-stopped
 
