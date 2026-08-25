@@ -62,7 +62,8 @@ def discover_module_tasks() -> tuple[str, ...]:
             importlib.import_module(candidate)
         except ModuleNotFoundError as error:
             # N'avaler QUE l'absence du sous-paquet lui-meme ou d'un de ses
-            # intermediaires (`organization` n'a pas encore d'`infrastructure/`).
+            # intermediaires (`organization` a une `infrastructure/` mais pas
+            # de `tasks/` ; un module naissant n'aura parfois ni l'un ni l'autre).
             # Le test porte sur des NOMS DE PAQUETS, d'ou le point ajoute :
             # `a.b.orga` ne doit pas passer pour un prefixe de `a.b.organization`.
             missing = error.name

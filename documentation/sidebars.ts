@@ -138,6 +138,11 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0014-traduction-des-erreurs-a-la-bordure',
           label: 'Erreurs à la bordure',
         },
+        {
+          type: 'doc',
+          id: 'adr/0015-cles-etrangeres-frontiere-module',
+          label: 'Clés étrangères au bord du module',
+        },
       ],
     },
     {

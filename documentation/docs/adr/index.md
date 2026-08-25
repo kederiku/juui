@@ -47,6 +47,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0012](./0012-perimetre-de-requete.md)                | Le groupe actif vit dans le jeton, la clinique dans X-Clinic-Id            | Accepté |
 | [ADR-0013](./0013-filtre-de-tenance-dans-le-depot.md)     | Le filtre de tenance vit dans le dépôt, l'échappatoire se déclare          | Accepté |
 | [ADR-0014](./0014-traduction-des-erreurs-a-la-bordure.md) | Les erreurs métier se traduisent en HTTP à la bordure, en un format unique | Accepté |
+| [ADR-0015](./0015-cles-etrangeres-frontiere-module.md)    | Les clés étrangères s'arrêtent à la frontière du module                    | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

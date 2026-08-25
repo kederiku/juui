@@ -159,7 +159,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # propre etiquette -- c'est le module qui decide de sa surface publique, pas ce
 # fichier.
 #
-# `organization` (BACK-16) et les modules suivants viendront s'y ajouter.
+# `organization` (BACK-16) n'a pas de routeur : son premier arrivera avec les
+# routes d'administration de BACK-25. Les modules suivants s'ajouteront ici.
 _MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
 
 

@@ -149,7 +149,7 @@ n'a rien à nettoyer, une requête annulée en plein bloc voit `__aexit__` déro
 fermeture au dépilement.
 
 `get_identity_uow` et non `get_uow` : une unité par module, le nom porte la frontière —
-`organization` publiera la sienne. Et le type de retour est le **port** : une route ne sait pas
+`organization` publie la sienne depuis BACK-16, `get_organization_uow`. Et le type de retour est le **port** : une route ne sait pas
 quelle technologie la sert.
 
 ## Vérifier que l'unité de travail tient

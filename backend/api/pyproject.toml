@@ -408,8 +408,9 @@ forbidden_modules = [
 # a tenir a jour, qu'on oublie une fois.
 #
 # Les couches sont entre parentheses, donc OPTIONNELLES. Il le faut :
-# src/app/modules/organization/ ne porte encore qu'un __init__.py, et un module
-# vide ferait echouer un contrat qui exigerait ses trois couches.
+# src/app/modules/organization/ (BACK-16) vit sans couche application/ avant
+# BACK-25, et un module naissant, reduit a son __init__.py, ferait echouer un
+# contrat qui exigerait ses trois couches.
 #
 # `exhaustive` rattrape tout ce que les parentheses relachent, et c'est ce qui
 # rend le contrat utile malgre elles : un `services/` ou un `utils.py` ajoute

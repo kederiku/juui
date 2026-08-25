@@ -51,7 +51,10 @@ if context.config.config_file_name is not None:
 # tuple `_MODULE_ROUTERS` de main.py : ajouter un module metier, c'est ajouter
 # une ligne ici, et la liste des tables sous controle de version se lit d'un
 # coup d'oeil.
-_MODEL_MODULES: Final[tuple[str, ...]] = ("app.modules.identity.infrastructure.db.models",)
+_MODEL_MODULES: Final[tuple[str, ...]] = (
+    "app.modules.identity.infrastructure.db.models",
+    "app.modules.organization.infrastructure.db.models",
+)
 
 for _module_name in _MODEL_MODULES:
     import_module(_module_name)

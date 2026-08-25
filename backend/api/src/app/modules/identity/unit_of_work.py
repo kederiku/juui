@@ -72,7 +72,7 @@ async def get_identity_uow(request: Request) -> IdentityUnitOfWork:
     rollback et fermeture au depilement.
 
     `get_identity_uow` et non `get_uow` : une unite par module, le nom porte la
-    frontiere. `organization` publiera la sienne.
+    frontiere. `organization` publie la sienne, `get_organization_uow` (BACK-16).
 
     Args:
         request: la requete en cours, d'ou l'on remonte aux ressources de

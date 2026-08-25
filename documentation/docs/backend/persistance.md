@@ -184,12 +184,13 @@ Pourquoi une garde plutôt qu'une consigne : un index manquant ne casse rien. Il
 balayage séquentiel, donc une requête lente, invisible sur un jeu de développement et sensible
 le jour où un client a des données. Ce genre d'oubli ne se rattrape pas à la relecture.
 
-`group_id` ne porte **pas** de clé étrangère vers `groups`. La table n'existe pas avant
-BACK-16, et une `ForeignKey` posée d'avance casserait `metadata.sorted_tables` — donc
-`alembic revision --autogenerate` pour tout le projet — dès le premier modèle adoptant le mixin.
-La dette est assumée dans
-l'[ADR-0004](../adr/0004-tenance-par-groupe.md) : BACK-16 posera la
-contrainte table par table, quand `groups` existera.
+`group_id` ne porte **pas** de clé étrangère vers `groups` dans le mixin, et c'est définitif :
+une contrainte partant de `shared/` vers une table d'`organization` rendrait tous les modules
+structurellement dépendants de celui-là. Depuis que BACK-16 a livré la table `groups`, la clé se
+pose **table par table, par consentement**, dans le `__table_args__` de chaque modèle adoptant —
+`clinics` est le premier exemple. La règle complète — FK obligatoires à l'intérieur d'un module,
+jamais d'un module vers un autre — est consignée dans
+l'[ADR-0015](../adr/0015-cles-etrangeres-frontiere-module.md).
 
 ## Ce que la session promet, et ce qu'elle coûte
 
