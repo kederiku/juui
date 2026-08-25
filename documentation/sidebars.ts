@@ -127,6 +127,11 @@ const sidebars: SidebarsConfig = {
           label: 'Routage par module (/api/v1)',
         },
         { type: 'doc', id: 'adr/0012-perimetre-de-requete', label: 'Périmètre de requête' },
+        {
+          type: 'doc',
+          id: 'adr/0013-filtre-de-tenance-dans-le-depot',
+          label: 'Filtre de tenance',
+        },
       ],
     },
     {

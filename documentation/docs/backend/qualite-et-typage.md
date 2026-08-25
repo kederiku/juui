@@ -47,9 +47,9 @@ Le jeu de règles : `E`/`F` (socle), `I` (tri des imports), `N` (nommage), `UP`
 builtins), `C4`, `SIM`, `RUF`, `ANN` (annotations obligatoires), `S` (sécurité)
 et `D` (docstrings).
 
-Dans `tests/` — à venir en BACK-12 — `assert` (S101) et les docstrings (D1xx)
-sont relâchés. Les annotations, non : `-> None` sur une fonction de test coûte
-huit caractères.
+Dans `tests/` — ouvert par BACK-06b avec les tests d'isolation, complété par
+BACK-12 — `assert` (S101) et les docstrings (D1xx) sont relâchés. Les
+annotations, non : `-> None` sur une fonction de test coûte huit caractères.
 
 À noter : `ruff format` traite aussi les blocs de code Python **de la
 documentation Markdown**, ce qui garde les exemples conformes. Un extrait

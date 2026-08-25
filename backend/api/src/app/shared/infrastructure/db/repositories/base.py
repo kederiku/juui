@@ -21,15 +21,20 @@ fabrique aucune erreur `shared` : la hierarchie intermediaire des absences
 appartient a BACK-09, et une `EntityNotFoundError` posee ici entrerait en
 collision avec elle.
 
-CE QUE BACK-06B AJOUTERA ICI
-Le filtre de tenance, applique aux seuls modeles declarant `TenantMixin`.
+DEUX COUTURES, ET AUCUNE TENANCE ICI
+`_select` est le point de depart de TOUTE requete SELECT -- `list` comme les
+finders maison des depots concrets -- et `_load` le chargement par identifiant
+que `get`, `save` et `delete` partagent. Ce sont les deux seuls endroits que le
+filtre de tenance (BACK-06b) surcharge, dans `tenant.py` : cette classe-ci
+reste vierge de tenance, comme `TenantMixin` l'exige -- le filtre ne s'applique
+qu'aux depots qui heritent de `TenantSqlAlchemyRepository`, jamais globalement.
 """
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.domain.exceptions import DomainError
@@ -132,6 +137,43 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         """
         return self._not_found_error(self._not_found_message.format(entity_id=entity_id))
 
+    def _select(self) -> Select[tuple[ModelT]]:
+        """Point de depart de TOUTE requete SELECT sur l'agregat.
+
+        Les finders maison des depots concrets partent d'ici plutot que d'un
+        `select(...)` importe : c'est la couture que le depot tenant (BACK-06b)
+        surcharge pour restreindre au groupe courant. La convention rend le
+        contournement visible -- un `from sqlalchemy import select` dans un
+        depot est un signal de revue.
+
+        Returns:
+            La requete nue sur la classe de modele, prete a etre completee.
+        """
+        return select(self._model_type)
+
+    async def _load(self, entity_id: UUID) -> ModelT:
+        """Charge la ligne portant cet identifiant, ou leve l'erreur d'absence.
+
+        Chemin commun de `get`, `save` et `delete` -- et seconde couture de la
+        tenance (BACK-06b) : `session.get` sert depuis l'identity map sans SQL
+        quand il le peut, aucun WHERE ne peut donc s'y glisser, et c'est la
+        surcharge de cette methode qui verifie l'appartenance de la ligne.
+
+        Args:
+            entity_id: l'identifiant cherche.
+
+        Returns:
+            La ligne chargee, suivie par la session.
+
+        Raises:
+            DomainError: l'erreur d'absence declaree par le depot concret, si
+                aucune ligne ne porte cet identifiant.
+        """
+        model = await self._session.get(self._model_type, entity_id)
+        if model is None:
+            raise self._not_found(entity_id)
+        return model
+
     async def get(self, entity_id: UUID, /) -> EntityT:
         """Retourne l'entite portant cet identifiant.
 
@@ -145,10 +187,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             DomainError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant.
         """
-        model = await self._session.get(self._model_type, entity_id)
-        if model is None:
-            raise self._not_found(entity_id)
-        return self._to_entity(model)
+        return self._to_entity(await self._load(entity_id))
 
     async def list(self) -> Sequence[EntityT]:
         """Retourne toutes les entites, dans leur ordre de creation.
@@ -161,7 +200,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         Returns:
             Les entites, de la plus ancienne a la plus recente.
         """
-        statement = select(self._model_type).order_by(*self._model_type.__mapper__.primary_key)
+        statement = self._select().order_by(*self._model_type.__mapper__.primary_key)
         models = (await self._session.execute(statement)).scalars().all()
         return [self._to_entity(model) for model in models]
 
@@ -194,9 +233,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             DomainError: l'erreur d'absence declaree par le depot concret, si
                 l'entite n'a jamais ete enregistree.
         """
-        model = await self._session.get(self._model_type, entity.id)
-        if model is None:
-            raise self._not_found(entity.id)
+        model = await self._load(entity.id)
         self._apply_to_model(entity, model)
 
     async def delete(self, entity_id: UUID, /) -> None:
@@ -204,8 +241,8 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
 
         La ligne est CHARGEE puis supprimee, jamais effacee par un DELETE
         direct : les cascades declarees a l'ORM s'appliquent, l'identity map
-        du bloc reste coherente, et BACK-06b aura une ligne en main pour
-        verifier la tenance avant de la laisser partir.
+        du bloc reste coherente, et le depot tenant (BACK-06b) a une ligne en
+        main pour verifier la tenance avant de la laisser partir.
 
         Args:
             entity_id: l'identifiant de l'entite a supprimer.
@@ -214,7 +251,5 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             DomainError: l'erreur d'absence declaree par le depot concret, si
                 aucune ligne ne porte cet identifiant.
         """
-        model = await self._session.get(self._model_type, entity_id)
-        if model is None:
-            raise self._not_found(entity_id)
+        model = await self._load(entity_id)
         await self._session.delete(model)

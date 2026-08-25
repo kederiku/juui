@@ -163,9 +163,15 @@ garde** — les contre-exemples qui valent règle (`Consultation` le porte, `Ani
 non) et leurs motifs sont consignés dans les ADR
 [0004](../adr/0004-tenance-par-groupe.md),
 [0005](../adr/0005-appartenance-datee.md) et
-[0006](../adr/0006-dossier-medical-animal.md). Le filtre correspondant ne
-sera **jamais** appliqué globalement dans le dépôt de base : c'est BACK-06b qui l'appliquera,
-aux seuls agrégats déclarant le mixin.
+[0006](../adr/0006-dossier-medical-animal.md). Le filtre correspondant n'est
+**jamais** appliqué globalement dans le dépôt de base : BACK-06b l'a livré dans une sous-classe
+dédiée, `TenantSqlAlchemyRepository`, dont hérite le dépôt de tout agrégat déclarant le mixin —
+lecture, écriture et suppression restreintes au groupe actif, insertion estampillée par le socle,
+échappatoire nommée `use_all_groups(reason=...)` pour les rares lectures transverses légitimes.
+La mécanique et ses alternatives écartées sont consignées dans
+l'[ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md), le détail dans la page
+[Unité de travail](./unite-de-travail.md), et la preuve dans les tests `tenant_isolation`
+(`make test` depuis `backend/api`, PostgreSQL docker démarré).
 
 Déclarer le mixin **oblige** la table à porter un index — ou une contrainte d'unicité, que
 PostgreSQL sert par un index — dont la première colonne est `group_id`. Le contrôle vit dans

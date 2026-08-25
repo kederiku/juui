@@ -23,9 +23,10 @@ suffirait a rendre la promesse intenable. Ce qui se publie, c'est l'unite de
 travail de CHAQUE module (`get_identity_uow`, a la racine du module identity),
 jamais une dependance globale.
 
-CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-BACK-06b : le filtre de tenance, applique dans `repositories/` aux seuls
-agregats declarant `TenantMixin`.
+LE FILTRE DE TENANCE EST LA (BACK-06b)
+`repositories/tenant.py` : les depots des agregats declarant `TenantMixin`
+heritent de `TenantSqlAlchemyRepository`, les autres restent vierges de
+tenance. L'echappatoire « tous groupes » se declare dans `../tenancy.py`.
 
 CORRECTION DE CE QUE BACK-04 ANNONCAIT ICI
 La contextvar `current_group_id` ne vit PAS dans ce paquet : elle est montee d'un

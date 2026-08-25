@@ -88,10 +88,9 @@ foi.
 
 ## Ce qui n'est pas encore là
 
-| Sujet                                 | Ticket   |
-| ------------------------------------- | -------- |
-| Filtrage multi-tenant automatique     | BACK-06b |
-| Doublures en mémoire (fakes)          | BACK-06c |
-| Traduction des erreurs métier en HTTP | BACK-09  |
-| Suite de tests                        | BACK-12  |
-| Pipeline CI complet du backend        | QA-01    |
+| Sujet                                                                                                 | Ticket   |
+| ----------------------------------------------------------------------------------------------------- | -------- |
+| Doublures en mémoire (fakes)                                                                          | BACK-06c |
+| Traduction des erreurs métier en HTTP                                                                 | BACK-09  |
+| Harnais de tests complet (BACK-06b a ouvert `tests/` avec la suite `tenant_isolation` et `make test`) | BACK-12  |
+| Pipeline CI complet du backend                                                                        | QA-01    |

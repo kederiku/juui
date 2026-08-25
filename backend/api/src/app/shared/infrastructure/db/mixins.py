@@ -29,9 +29,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.db.base import SchemaConventionError
 
-# Nom de la colonne de tenance. Constante plutot que litteral repete : le
-# controle ci-dessous et la colonne doivent parler du meme nom.
-_TENANT_COLUMN: Final = "group_id"
+# Nom de la colonne de tenance. Constante PUBLIQUE plutot que litteral repete :
+# le controle ci-dessous, la colonne et la garde anti-mapping du depot tenant
+# (BACK-06b, repositories/tenant.py) doivent parler du meme nom.
+TENANT_COLUMN: Final = "group_id"
 
 
 class UUIDPrimaryKey:
@@ -133,7 +134,7 @@ def _has_tenant_index(table: Table) -> bool:
         *(item for item in table.constraints if isinstance(item, UniqueConstraint)),
     ]
     return any(
-        next((column.name for column in item.columns), None) == _TENANT_COLUMN for item in indexed
+        next((column.name for column in item.columns), None) == TENANT_COLUMN for item in indexed
     )
 
 
@@ -150,8 +151,9 @@ class TenantMixin:
     plusieurs groupes avec un seul compte.
 
     Le filtre correspondant ne doit JAMAIS etre applique globalement dans le
-    depot de base. C'est BACK-06b qui l'appliquera, et aux seuls agregats
-    declarant ce mixin.
+    depot de base. BACK-06b l'a livre dans `repositories/tenant.py` : le depot
+    d'un agregat declarant ce mixin herite de `TenantSqlAlchemyRepository`, et
+    les autres depots restent vierges de tenance.
 
     PAS DE CLE ETRANGERE VERS `groups`, POUR L'INSTANT
     La table `groups` n'existe pas avant BACK-16. Une `ForeignKey("groups.id")`
@@ -203,9 +205,9 @@ class TenantMixin:
         if not _has_tenant_index(table):
             message = (
                 f"{cls.__name__} declare TenantMixin mais la table « {table.name} » "
-                f"ne porte aucun index dont la premiere colonne est « {_TENANT_COLUMN} ». "
+                f"ne porte aucun index dont la premiere colonne est « {TENANT_COLUMN} ». "
                 f"Toute requete filtree par groupe y finirait en balayage sequentiel. "
                 f"Ajouter par exemple :\n"
-                f'    __table_args__ = (Index(None, "{_TENANT_COLUMN}", "<colonne>"),)'
+                f'    __table_args__ = (Index(None, "{TENANT_COLUMN}", "<colonne>"),)'
             )
             raise SchemaConventionError(message)

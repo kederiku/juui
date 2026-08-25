@@ -61,18 +61,22 @@ visiblement partagée.
 
 ## Le contexte de tenance
 
-Le groupe actif est porté par `current_group_id`, dans `shared/infrastructure/tenancy.py`. Trois
-choses, et rien de plus : lire, exiger (`require_current_group_id()`), et poser le temps d'un bloc
-(`use_group()`).
+Le groupe actif est porté par `current_group_id`, dans `shared/infrastructure/tenancy.py` : lire,
+exiger (`require_current_group_id()`), poser le temps d'un bloc (`use_group()`) — et, depuis
+BACK-06b, assumer une lecture **tous groupes** par `use_all_groups(reason=...)`, l'échappatoire
+nommée de l'[ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md).
 
 `require_current_group_id()` **lève** au lieu de dégrader — le motif est consigné dans
 l'[ADR-0004](../adr/0004-tenance-par-groupe.md). La dégradation gracieuse
-porte sur Redis absent, pas sur un appelant qui ignore de quel groupe il parle.
+porte sur Redis absent, pas sur un appelant qui ignore de quel groupe il parle. Elle lève aussi
+sous `use_all_groups` : une clé `TENANT` n'a pas de sens « tous groupes », et composer une clé
+comme estampiller une insertion exigent **un** groupe — un bloc `use_group` imbriqué le désigne.
 
-BACK-06b y ajoutera l'intergiciel qui alimente la contextvar depuis l'authentification (BACK-10c),
-et le filtre SQLAlchemy dans `db/`. Un piège l'attend, écrit dans la docstring : `BaseHTTPMiddleware`
-exécute l'aval de la chaîne dans une **tâche distincte**, donc un `set()` fait dans son `dispatch()`
-n'atteindrait pas l'endpoint.
+Le filtre SQLAlchemy que ce contexte promettait est livré (BACK-06b), dans
+`db/repositories/tenant.py` — voir [Persistance](./persistance.md). L'intergiciel qui alimentera
+la contextvar depuis l'authentification appartient à BACK-10c ; un piège l'attend, écrit dans la
+docstring de `tenancy.py` : `BaseHTTPMiddleware` exécute l'aval de la chaîne dans une **tâche
+distincte**, donc un `set()` fait dans son `dispatch()` n'atteindrait pas l'endpoint.
 
 ## Ce que la dégradation gracieuse promet — et ce qu'elle ne promet pas
 

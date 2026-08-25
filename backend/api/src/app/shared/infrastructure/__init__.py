@@ -4,7 +4,7 @@ Ce qui vit ici DEPEND du domaine et jamais l'inverse. Trois sous-paquets :
 
 - `db/` -- socle de persistance : la `Base` declarative et sa convention de
   nommage, le moteur, la fabrique de sessions et les mixins (BACK-05), le depot
-  generique et l'unite de travail (BACK-06a) ; puis le filtre de tenance
+  generique et l'unite de travail (BACK-06a), le filtre de tenance
   (BACK-06b) ;
 - `api/` -- socle HTTP : sondes de sante et routeur racine v1 (BACK-08),
   handlers d'erreur (BACK-09), intergiciels, CORS et identifiant de requete

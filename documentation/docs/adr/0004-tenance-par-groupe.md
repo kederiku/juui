@@ -75,8 +75,9 @@ une ressource du groupe B, devient testable.
 
 **Ce que cela coûte.** Tant que le RLS n'est pas tranché, la sécurité de tenance repose sur la
 seule application : c'est une dette explicite. Chaque nouvel agrégat exige un choix conscient —
-mixin ou pas — en revue de code. Le filtre SQLAlchemy lui-même appartient à BACK-06b et reste à
-écrire, avec un piège documenté dans `tenancy.py` : l'intergiciel qui alimente la variable de
+mixin ou pas — en revue de code. Le filtre SQLAlchemy lui-même a été livré par BACK-06b, avec sa
+propre décision ([ADR-0013](./0013-filtre-de-tenance-dans-le-depot.md)) ; reste le piège documenté
+dans `tenancy.py` pour BACK-10c : l'intergiciel qui alimente la variable de
 contexte ne peut pas être un `BaseHTTPMiddleware`. Enfin, `group_id` ne porte pas encore de clé
 étrangère vers la table des groupes — elle n'existera qu'avec BACK-16, qui posera la contrainte
 table par table ; en attendant, l'intégrité tient par le filtre, pas par la base.
