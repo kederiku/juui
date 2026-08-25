@@ -39,9 +39,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Tout ce qui doit vivre aussi longtemps que le serveur -- et non le temps
     d'une requete -- se cree ici : le pool de connexions PostgreSQL (BACK-05),
-    le client Redis (BACK-14), le client S3 (BACK-13), le broker TaskIQ
-    (BACK-15). Ces ressources se rangent ensuite dans `app.state`, d'ou les
-    dependances FastAPI les recuperent via `request.app.state`.
+    le client Redis (BACK-14), le client S3 (BACK-13). Ces ressources se
+    rangent ensuite dans `app.state`, d'ou les dependances FastAPI les
+    recuperent via `request.app.state`. Le broker TaskIQ (BACK-15) est a part :
+    il demarre et s'arrete ici aussi, mais les routes qui declenchent une tache
+    importent la tache elle-meme -- rien a ranger dans `app.state`.
 
     Le point d'accroche fixe une contrainte que le reste du code doit respecter :
     aucune connexion ne s'ouvre a l'import du module, tout passe par ici. Ce qui
@@ -108,7 +110,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 # fichiers en silence. `ping()` journalise, les operations levent.
                 await storage.ping()
 
-                yield
+                # Cinquieme ressource : le broker TaskIQ (BACK-15). Import
+                # LOCAL et non en tete de module : importer `tasks.broker`
+                # construit le broker, donc lit la configuration -- or `import
+                # app.main` doit rester possible sans fichier .env (voir plus
+                # haut). Construire n'ouvre aucune connexion, comme partout.
+                from app.shared.infrastructure.tasks.broker import broker
+
+                # Cote API, seul le versant CLIENT demarre : le backend de
+                # resultats, necessaire au `kiq`. Le worker -- qui IMPORTE ce
+                # module -- a son propre cycle de vie (WORKER_STARTUP) : la
+                # garde `is_worker_process` evite le double demarrage.
+                if not broker.is_worker_process:
+                    await broker.startup()
+                try:
+                    yield
+                finally:
+                    # Ferme en premier : le broker est ouvert en dernier.
+                    if not broker.is_worker_process:
+                        await broker.shutdown()
             finally:
                 # Toujours en ordre inverse : le stockage, puis le cache, puis le
                 # moteur. `aclose()` n'echoue pas -- une exception levee ici
