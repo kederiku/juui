@@ -22,6 +22,13 @@ propre prefixe et leurs propres dependances d'autorisation.
 from fastapi import APIRouter
 
 # Prefixe et etiquette poses des maintenant : ils fixent l'URL publique du
-# module et le groupe sous lequel /docs rangera ses routes. Le prefixe vit ICI,
-# et non dans `app.main`, pour que le module reste maitre de sa propre surface.
+# module et le groupe sous lequel /docs rangera ses routes. Le module possede
+# le chemin de sa RESSOURCE (`/auth`) ; la VERSION (`/api/v1`), elle, est un
+# choix du service, pose par le routeur racine de BACK-08 -- URL publique
+# finale : /api/v1/auth/... L'etiquette vaut le NOM DU MODULE : Orval
+# (SHARED-03) decoupe le client genere par etiquette, une par contexte metier.
+#
+# Convention pour les routes a venir (BACK-28, BACK-29) : chaque route porte un
+# `operation_id` explicite, en snake_case verbe-objet, egal au nom de sa
+# fonction -- Orval en derive le nom des hooks generes.
 router = APIRouter(prefix="/auth", tags=["identity"])

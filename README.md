@@ -322,6 +322,7 @@ Les adresses à ouvrir dans un navigateur :
 | ------------------------------- | ------------------------------------ | ---------------------------------------------------- |
 | API — documentation interactive | <http://localhost:8000/docs>         | —                                                    |
 | API — contrat OpenAPI           | <http://localhost:8000/openapi.json> | —                                                    |
+| API — sonde de disponibilité    | <http://localhost:8000/health/ready> | —                                                    |
 | `frontend-professional`         | <http://localhost:3001>              | —                                                    |
 | `frontend-individual`           | <http://localhost:3002>              | —                                                    |
 | `frontend-admin`                | <http://localhost:3003>              | —                                                    |
@@ -399,8 +400,10 @@ INFRA-04 : demarrage de -- uvicorn app.main:app --host 0.0.0.0 --port 8000 --pro
 ```
 
 L'API répond alors sur <http://localhost:8000/docs>. La sonde du service vise
-`/openapi.json` et non `/health/live` : cette dernière relève de BACK-08 et
-n'existe pas encore.
+`/health/live` (BACK-08) : la sonde de **vie**, sans dépendance externe — c'est
+exactement ce qu'un healthcheck de conteneur doit tester, un PostgreSQL tombé ne
+se répare pas en redémarrant l'API. L'état des dépendances, lui, se lit sur
+`/health/ready`, qui nomme le composant défaillant.
 
 #### L'IP réelle du client
 
@@ -409,7 +412,7 @@ publiées par Docker lui arrivent avec celle de la passerelle — `192.168.65.1`
 sous Docker Desktop. Se donner l'occasion de le constater :
 
 ```bash
-curl -s -o /dev/null http://localhost:8000/openapi.json
+curl -s -o /dev/null http://localhost:8000/health/live
 docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
 ```
 
@@ -422,9 +425,9 @@ donc de s'afficher, et c'est le comportement attendu. Le mécanisme se vérifie 
 
 ```bash
 FORWARDED_ALLOW_IPS='*' docker compose --project-directory . -f docker/docker-compose.yml up -d api
-curl -s -o /dev/null -H 'X-Forwarded-For: 203.0.113.7' http://localhost:8000/openapi.json
+curl -s -o /dev/null -H 'X-Forwarded-For: 203.0.113.7' http://localhost:8000/health/live
 docker compose --project-directory . -f docker/docker-compose.yml logs api | tail -1
-# INFO:     203.0.113.7:0 - "GET /openapi.json HTTP/1.1" 200 OK
+# INFO:     203.0.113.7:0 - "GET /health/live HTTP/1.1" 200 OK
 ```
 
 Remettre ensuite la valeur du `.env` — `*` ferait confiance à n'importe quel
@@ -988,7 +991,7 @@ partagées](#configurations-partagées).
 | Un étage `runtime` de plus, et `prod` écrit en **dernier**                                   | Le ticket décrit `builder` + `runtime`. `prod` et `worker` ne différant que par leur `CMD`, l'étage commun leur évite d'être écrits deux fois. Et Docker construit le dernier étage quand aucun `--target` n'est passé : mettre `worker` là ferait produire l'image du worker à un `docker build` nu, en silence.                                                                                                                                                                                          |
 | `WEB_CONCURRENCY` et `FORWARDED_ALLOW_IPS` plutôt que `--workers` et `--forwarded-allow-ips` | Une forme `exec` de `CMD` n'interpole aucune variable ; passer par des arguments imposerait d'envelopper la commande dans un `sh -c`. uvicorn lit lui-même ces deux variables (`uvicorn/config.py`, lignes 352 et 357) : s'appuyer dessus évite ce détour et une seconde source de vérité à côté du `.env`.                                                                                                                                                                                                |
 | Ce que `--proxy-headers` change réellement                                                   | Le ticket présente le drapeau comme le correctif du problème d'IP. Vérifié : il ne fait rien tout seul. Un conteneur voit toujours l'IP de la passerelle (`192.168.65.1` sous Docker Desktop) ; uvicorn ne la remplace que si un intermédiaire pose un `X-Forwarded-For` **et** que cet intermédiaire figure dans `FORWARDED_ALLOW_IPS`. Rien ne pose cet en-tête dans la pile de développement : le réglage ne compte qu'en production, et `*` y serait une faille.                                       |
-| Sonde sur `/openapi.json`, et dans le compose plutôt que dans l'image                        | `/health/live` relève de BACK-08 et n'existe pas : la viser laisserait le service indéfiniment `unhealthy` et bloquerait les `depends_on` d'INFRA-05b. Quant à l'emplacement, le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. À basculer sur `/health/live` à BACK-08.                                                                                                                                                                                                         |
+| Sonde sur `/openapi.json`, et dans le compose plutôt que dans l'image                        | `/health/live` relevait de BACK-08 et n'existait pas encore : la viser aurait laissé le service indéfiniment `unhealthy` et bloqué les `depends_on` d'INFRA-05b. Quant à l'emplacement, le dépôt déclare toutes ses sondes dans le fichier compose depuis INFRA-01. Basculée sur `/health/live` à BACK-08, comme promis ici — d'autant que `/openapi.json` se ferme désormais en production.                                                                                                               |
 | Sonde écrite en `python -c`, pas en `curl` ni `wget`                                         | `python:3.14-slim` n'embarque ni l'un ni l'autre, et en installer un contredirait le « runtime minimal » du ticket. `urlopen` lève sur tout code hors 2xx, l'appel se suffit donc à lui-même. `127.0.0.1` et non `localhost`, même piège IPv6 qu'en INFRA-02 et INFRA-03.                                                                                                                                                                                                                                  |
 | Migrations **sautées** tant qu'`alembic.ini` est absent                                      | Le ticket veut `alembic upgrade head` dans l'entrypoint ; `alembic.ini` et les premières migrations arrivaient tous deux avec BACK-07 — INFRA-04 les attribuait à BACK-05, qui n'a livré que le socle SQLAlchemy. La garde de présence a permis d'écrire l'étape d'avance, et elle s'est activée d'elle-même à la livraison de BACK-07, sans qu'on revienne sur le fichier. La course entre migrateurs concurrents, laissée « à arbitrer », est réglée par le verrou consultatif de l'`env.py` (ADR-0010). |
 | Attente de PostgreSQL en `asyncpg`, pas en `pg_isready`                                      | `pg_isready` demanderait `postgresql-client` dans une image que le ticket veut minimale, pour une commande utilisée une fois. Un simple test TCP ne suffit pas non plus : c'est la leçon déjà inscrite dans le healthcheck `postgres` d'INFRA-01. `asyncpg` est déjà dans le virtualenv.                                                                                                                                                                                                                   |

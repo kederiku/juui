@@ -54,6 +54,12 @@ const sidebars: SidebarsConfig = {
           label: 'Unité de travail par module',
         },
         { type: 'doc', id: 'adr/0010-migrations-alembic', label: 'Migrations (Alembic)' },
+        {
+          type: 'doc',
+          id: 'adr/0011-routage-versionne-par-module',
+          label: 'Routage par module (/api/v1)',
+        },
+        { type: 'doc', id: 'adr/0012-perimetre-de-requete', label: 'Périmètre de requête' },
       ],
     },
   ],
