@@ -11,7 +11,7 @@
 # `docker compose` chercherait son .env a cote de lui, ne trouverait rien, et
 # toutes les `${...}` ci-dessous vaudraient la chaine vide -- sans la moindre
 # erreur. D'ou le `--project-directory .` de toutes les commandes du README, et
-# plus tard de `make up` (INFRA-06) :
+# de `make up` (INFRA-06) :
 #
 #   docker compose --project-directory . -f docker/docker-compose.yml up -d
 #

@@ -11,6 +11,7 @@ d'administration côté plateforme.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `.github/`                        | Workflows GitHub Actions. Une seule chaîne pour l'instant : la construction et la publication du site de documentation (DOC-01).                 |
 | `docker/`                         | Configurations de conteneurisation : le `docker-compose.yml` qui assemble la pile, les Dockerfiles des services et les scripts d'initialisation. |
+| `scripts/`                        | Scripts shell appelés par le `Makefile` de la racine (INFRA-06) : ouverture de la boîte Mailpit, remise à zéro de la base.                       |
 | `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                                 |
 | `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                               |
 | `frontend/frontend-individual/`   | Interface **B2C** — application des propriétaires d'animaux.                                                                                     |
@@ -68,13 +69,13 @@ Pour le parcours qui fonctionne aujourd'hui :
   pas. C'est bien `docker compose`, sous-commande du client, qui est attendue —
   pas l'ancien binaire `docker-compose`, qui n'est plus maintenu.
 
-Un outil de plus pour le parcours conteneurisé. **Rien ne le réclame encore** —
-le `Makefile` de la racine relève d'INFRA-06 ; l'installer maintenant évite
-seulement d'avoir à revenir ici :
+Un outil de plus pour le parcours conteneurisé, requis depuis INFRA-06 — c'est
+lui qui porte `make up`, `make db-reset` et les autres cibles du
+[`Makefile`](Makefile) de la racine :
 
 - **`make`** — sur macOS, il vient des Command Line Tools :
-  `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est déjà
-  elle qui exécute [`backend/api/Makefile`](backend/api/Makefile).
+  `xcode-select --install`. La version 3.81 livrée par Apple suffit : c'est elle
+  qui exécute les deux `Makefile` du dépôt.
 
 ### Installation
 
@@ -201,16 +202,12 @@ pnpm --filter frontend-individual run dev
 > [`docker/docker-compose.yml`](docker/docker-compose.yml) porte les douze
 > services du dépôt : `postgres`, `pgadmin`, `redis`, `redisinsight`, `minio`,
 > `minio-init`, `mailpit`, `api`, `worker` et les trois frontends. Onze démarrent
-> avec un `up` nu — `redisinsight` attend son profil `tools`. Il ne manque plus
-> que le `Makefile` de la racine (INFRA-06) : `make up` répondrait aujourd'hui
-> `No rule to make target 'up'`, et les commandes `docker compose` ci-dessous
-> sont donc encore à taper en entier. À relire une fois INFRA-06 livré.
+> avec un `up` nu — `redisinsight` attend son profil `tools`.
 >
 > Le `worker` consomme les tâches de fond depuis BACK-15 — voir
 > [Le worker](#le-worker).
 
-Une fois la pile conteneurisée en place, l'installation se réduira à trois
-commandes :
+L'installation tient en trois commandes :
 
 ```bash
 git clone git@github.com:kederiku/juui.git && cd juui
@@ -218,21 +215,25 @@ cp .env.example .env
 make up
 ```
 
-| Cible                   | Effet                                       |
-| ----------------------- | ------------------------------------------- |
-| `make up`               | Démarre toute la pile en arrière-plan.      |
-| `make down`             | Arrête la pile et libère les ports.         |
-| `make logs service=api` | Suit les logs d'un service.                 |
-| `make help`             | Cible par défaut : liste toutes les cibles. |
+| Cible                   | Effet                                                                     |
+| ----------------------- | ------------------------------------------------------------------------- |
+| `make help`             | Cible par défaut : liste toutes les cibles.                               |
+| `make up`               | Démarre toute la pile en arrière-plan, sur les images servies.            |
+| `make dev`              | Démarre la pile en mode développement — code monté, rechargement à chaud. |
+| `make down`             | Arrête la pile et libère les ports ; les volumes survivent.               |
+| `make restart`          | Redémarre les conteneurs sans les recréer.                                |
+| `make logs service=api` | Suit les logs d'un service.                                               |
+| `make shell-api`        | Ouvre un shell `bash` dans le conteneur d'API.                            |
+| `make mail`             | Ouvre la boîte de réception Mailpit dans le navigateur.                   |
 
-INFRA-06 en prévoit d'autres — migrations, seed, tests, shell dans un conteneur.
-`make help` fera foi, comme dans [`backend/api/Makefile`](backend/api/Makefile),
-qui adopte déjà ces conventions et auquel le Makefile racine n'aura qu'à
-déléguer.
+Les cibles de base de données et de qualité sont décrites dans
+[Cibles `make` de la racine](#cibles-make-de-la-racine). `make help` fait foi,
+comme dans [`backend/api/Makefile`](backend/api/Makefile), qui adopte les mêmes
+conventions et auquel le `Makefile` de la racine délègue.
 
 Le fichier compose vit dans `docker/`, le `.env` à la racine. Sans
 `--project-directory`, `docker compose` chercherait son `.env` dans `docker/` et
-n'en trouverait pas : c'est cette commande que `make up` encapsulera.
+n'en trouverait pas : c'est cette commande que `make up` encapsule.
 
 ```bash
 docker compose --project-directory . -f docker/docker-compose.yml up -d
@@ -249,10 +250,11 @@ bases Redis.
 
 > **Après modification d'un mot de passe dans `.env`.** PostgreSQL ne lit ses
 > identifiants qu'à la **première** création de son volume : les changer ensuite
-> reste sans effet jusqu'à un `docker compose down -v`, qui détruit les données
-> au passage. La cible `make db-reset` (INFRA-06) fera cela proprement. MinIO,
-> lui, relit les siens à chaque démarrage — un `restart` suffit, sans rien
-> perdre.
+> reste sans effet tant que le volume vit. `make db-reset` fait cela proprement :
+> il ne détruit que le volume de PostgreSQL — les fichiers de MinIO, le cache
+> Redis et la configuration de pgAdmin survivent —, demande confirmation
+> (`force=1` pour la sauter), puis rejoue les migrations. MinIO, lui, relit ses
+> identifiants à chaque recréation — un `make up` suffit, sans rien perdre.
 
 Node et `uv` restent utiles sur le poste même avec ce parcours : les hooks de
 pre-commit s'exécutent en dehors des conteneurs.
@@ -594,8 +596,8 @@ docker compose --project-directory . -f docker/docker-compose.yml -f docker/dock
 ```
 
 Sans ce second `-f`, la pile repart sur les images servies : aucun montage,
-aucun rechargement à chaud, et pas la moindre erreur pour le dire. INFRA-06
-encapsulera les deux invocations dans deux cibles distinctes du `Makefile`.
+aucun rechargement à chaud, et pas la moindre erreur pour le dire. `make up` et
+`make dev` encapsulent les deux invocations.
 
 Les ports, les URLs et les identifiants ne changent pas d'un mode à l'autre :
 ceux du tableau plus haut valent dans les deux.
@@ -776,8 +778,8 @@ compte restait non vérifié.
 La boîte de réception s'ouvre sur <http://localhost:8025>, sans identifiants.
 Elle est **vide à chaque démarrage**, et c'est voulu : le service n'a aucun
 volume, donc le dernier message affiché est toujours celui qu'on vient de
-déclencher. `make mail` l'ouvrira directement, quand INFRA-06 aura livré le
-`Makefile` de la racine.
+déclencher. `make mail` l'ouvre directement — et sur un poste sans navigateur,
+la cible affiche l'URL au lieu d'échouer.
 
 Pour un aller-retour complet — envoi sur le port SMTP, relecture par l'API HTTP —
 depuis le conteneur `api`, c'est-à-dire par le chemin exact qu'empruntera
@@ -913,14 +915,50 @@ partagées](#configurations-partagées).
 
 > **Note.** Ces scripts ne couvrent que les workspaces pnpm ; le backend a les
 > siens, décrits dans [`backend/api/README.md`](backend/api/README.md). Les
-> cibles `make` qui réuniront les deux chaînes derrière une interface unique
-> arrivent avec INFRA-06.
+> cibles `make` de la racine réunissent les deux chaînes derrière une interface
+> unique — voir [Cibles `make` de la racine](#cibles-make-de-la-racine).
+
+### Cibles `make` de la racine
+
+Le [`Makefile`](Makefile) de la racine (INFRA-06) complète le tableau de la
+section [La pile complète, avec Docker](#la-pile-complète-avec-docker) par les
+cibles de base de données et de qualité :
+
+| Cible                         | Effet                                                         |
+| ----------------------------- | ------------------------------------------------------------- |
+| `make db-migrate m="message"` | Génère une révision Alembic autogénérée — à relire.           |
+| `make db-upgrade`             | Applique les migrations jusqu'à `head`.                       |
+| `make db-downgrade`           | Annule la dernière migration appliquée.                       |
+| `make db-reset`               | Détruit le volume PostgreSQL, recrée la base, migre et seede. |
+| `make seed`                   | Injecte le jeu de données de démonstration (INFRA-08).        |
+| `make lint`                   | Ruff et contrats d'architecture, puis ESLint.                 |
+| `make format`                 | Ruff côté Python, puis Prettier sur tout le dépôt.            |
+| `make typecheck`              | mypy en mode strict, puis TypeScript workspace par workspace. |
+| `make test`                   | Enchaîne `test-back` (BACK-12) et `test-front` (QA-02).       |
+
+Trois règles gouvernent ces cibles, et elles sont écrites en tête du `Makefile` :
+
+- **Les cibles `db-*` tournent sur le poste**, jamais dans un conteneur, par
+  délégation à [`backend/api/Makefile`](backend/api/Makefile) : la génération
+  d'une révision déclenche les hooks Ruff d'Alembic, absents des images
+  servies. Elles supposent `uv`, le port PostgreSQL publié et
+  `backend/api/.env`.
+- **`make db-reset` ne détruit que le volume de PostgreSQL.** Les fichiers de
+  MinIO, le cache Redis et la configuration de pgAdmin survivent ; la cible
+  demande confirmation, `force=1` la saute.
+- **Le `Makefile` ne lit pas le `.env`.** C'est `docker compose` qui le lit, et
+  lui seul : l'importer dans `make` exporterait `POSTGRES_HOST=postgres` vers
+  les cibles `db-*` du poste — et les secrets vers tout sous-processus.
+
+Les cibles `test`, `test-back` et `seed` sont déclarées mais n'exécutent encore
+rien : elles nomment le ticket attendu — BACK-12 pour pytest, QA-02 pour les
+workspaces, INFRA-08 pour le seed — et sortent en succès.
 
 ### Écarts assumés avec le ticket SETUP-05
 
 | Écart                                                             | Raison                                                                                                                                                                                                                                                                       |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Deux parcours au lieu de la seule séquence `make up`              | `make up` n'existe pas : le Makefile racine relève d'INFRA-06, qui dépend d'INFRA-05, donc de FRONT-01 à FRONT-03. Une séquence unique laisserait le nouvel arrivant sur `No rule to make target 'up'`.                                                                      |
+| Deux parcours au lieu de la seule séquence `make up`              | Au moment de SETUP-05, `make up` n'existait pas — le Makefile racine relevait d'INFRA-06. **INFRA-06 a levé l'écart** : `make up` existe. Les deux parcours restent documentés, l'un faisant tourner l'API sur le poste, l'autre toute la pile en conteneurs.                |
 | Docker et `make` signalés comme pas encore nécessaires            | Le ticket les liste en prérequis. Les présenter sans réserve ferait installer Docker Desktop à qui veut seulement lancer un `uvicorn`.                                                                                                                                       |
 | `env_prefix` par sous-modèle plutôt que `env_nested_delimiter`    | BACK-03 prévoit `DB__`, `JWT__`… mais `POSTGRES_*`, `MINIO_ROOT_*` et `PGADMIN_DEFAULT_*` sont imposés par les images Docker. Le préfixe simple donne les mêmes sous-modèles sans couche de traduction.                                                                      |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` → `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Pour que le bloc JWT tienne dans un unique `env_prefix`. Seul renommage appliqué à la liste du ticket.                                                                                                                                                                       |
@@ -1045,6 +1083,23 @@ partagées](#configurations-partagées).
 | `depends_on: api` en `service_healthy` et non `service_started`                                 | La sonde de l'API existe depuis INFRA-04, autant s'en servir : un frontend qui répond avant que l'API accepte une requête afficherait des erreurs de rendu serveur pendant les trente premières secondes de chaque `up`.                                                                                                                                                                                                                                                                                                               |
 | `.env.example` inchangé                                                                         | Les six variables nécessaires — les trois `FRONTEND_*_HOST_PORT`, `FRONTEND_INDIVIDUAL_SITE_URL`, `NEXT_PUBLIC_API_URL` et `API_INTERNAL_URL` — y sont depuis SETUP-05 et annoncent déjà, mot pour mot, qu'INFRA-05 les passera « en `build.args` ». Aucune valeur de repli `${VAR:-…}` non plus : la règle du dépôt réserve ce mécanisme aux variables nées **après** les `.env` déjà créés sur les postes.                                                                                                                           |
 
+### Écarts assumés avec le ticket INFRA-06
+
+| Écart                                                      | Raison                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Une cible `dev` en plus de la liste du ticket              | Le ticket ne nomme que `up`. Le README et l'en-tête de `docker-compose.override.yml` promettent **deux cibles distinctes** pour les deux invocations de compose : `up` reste, mot pour mot, la commande servie du README ; `dev` porte le second `-f`, sans lequel l'override est silencieusement ignoré.                                                                                                     |
+| Deux scripts seulement dans `scripts/`                     | Le ticket impose le dossier, pas son remplissage. Toute recette qui tient en une ligne reste dans le `Makefile`, où elle se lit. Seules deux cibles n'y tiennent pas : `mail` (choix de l'ouvreur du système, lecture d'une variable) et `db-reset` (confirmation, valeurs passées d'une commande à l'autre) — `make` 3.81 n'a pas de `.ONESHELL`, chaque ligne de recette étant un shell distinct.           |
+| `db-reset` ne détruit **que** le volume de PostgreSQL      | `docker compose down -v` emporterait aussi MinIO — donc les fichiers déposés dans le bucket —, Redis, RedisInsight et pgAdmin. La cible s'appelle `db-reset`. Le nom du volume est **demandé à Docker** (`docker inspect` sur le conteneur), jamais reconstruit à partir de `COMPOSE_PROJECT_NAME`, qui n'est qu'une valeur du `.env`.                                                                        |
+| `db-reset` demande confirmation (`force=1` pour la sauter) | La cible détruit des données sans retour possible. Aucun autre geste du dépôt n'est destructif sans le dire, et une entrée non interactive échoue explicitement plutôt que de détruire en silence.                                                                                                                                                                                                            |
+| Les cibles `db-*` tournent sur l'hôte                      | `alembic revision --autogenerate` déclenche les `post_write_hooks` Ruff (BACK-07), que les images `prod` et `worker` n'embarquent pas. Elles délèguent donc à `backend/api/Makefile`, écrit pour ça. Prérequis : `uv`, le port PostgreSQL publié, et `backend/api/.env` qui pointe `localhost`.                                                                                                               |
+| Le `Makefile` ne lit pas le `.env`                         | `include` puis `export` mettrait `POSTGRES_HOST=postgres` dans l'environnement de chaque recette et casserait les cibles `db-*` de l'hôte — pydantic-settings donne la priorité au processus sur le dotenv —, en exportant au passage les mots de passe dans tout sous-processus, `pnpm` compris. `docker compose` lit ce fichier lui-même ; `make mail` lit sa seule variable dans son script.               |
+| `test`, `test-back` et `seed` déclarées sans rien exécuter | pytest arrive avec BACK-12, les tests des workspaces avec QA-02, le seed avec INFRA-08 — dont la carte demande précisément que `make seed` soit « déclaré sans être fourni ». Les cibles sortent en 0 avec un message qui nomme le ticket attendu, comme l'entrypoint d'INFRA-04 annonce ses migrations sautées. `test-front` appelle le vrai `pnpm test`, muet tant qu'aucun workspace ne définit le script. |
+| `logs` exige `service=` et valide le nom                   | Le ticket écrit `make logs service=api`. La garde reprend celle du `m=` de `backend/api/Makefile`. La validation n'est pas du zèle : `docker compose logs --follow` sur un service inconnu n'affiche rien et sort en 0 — un écran vide à regarder indéfiniment.                                                                                                                                               |
+| `restart` ne relit pas le `.env`                           | `docker compose restart` relance les conteneurs sans les recréer : c'est le sens du mot, et la cible s'y tient. Après un changement de configuration, c'est `make up` ou `make dev` qu'il faut — ils recréent ce qui a changé. Le `Makefile` le dit en commentaire.                                                                                                                                           |
+| `up` refuse de démarrer sans `.env`, sans le créer         | Sans `.env`, Compose substitue la chaîne vide dans chaque `${...}` **sans erreur** — postgres sans mot de passe, ports invalides. La cible échoue en donnant la commande à taper plutôt que de copier le gabarit en douce : la séquence d'installation documentée reste la seule source de vérité.                                                                                                            |
+| `.dockerignore` complété, **hors portée**                  | Le contexte de build des trois frontends est la racine du dépôt. Sans deux motifs, le `Makefile` et `scripts/` entreraient dans le `COPY . .` de l'étage `deps` — en amont du `pnpm install` : toute modification du `Makefile` invaliderait le cache de construction des trois images. Deux lignes, dans le fichier dont c'est exactement l'objet.                                                           |
+| Trois commentaires corrigés hors portée                    | `docker/docker-compose.yml`, `docker/docker-compose.override.yml` et `.env.example` annonçaient au futur ce que ce ticket livre (« et plus tard de `make up` », « INFRA-06 encapsulera »). Les laisser rendrait faux, le jour de la livraison, trois fichiers que le dépôt tient à jour ligne à ligne.                                                                                                        |
+
 ### Écarts assumés avec le ticket INFRA-07
 
 | Écart                                                           | Raison                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
@@ -1056,7 +1111,7 @@ partagées](#configurations-partagées).
 | `SMTP_PORT` plutôt que `MAILPIT_SMTP_PORT`                      | Nom côté application, fixé par SETUP-08 : l'adaptateur de BACK-22 n'a pas à savoir quel conteneur lui répond. La variable sert **aussi** de port d'écoute, comme `POSTGRES_PORT`, d'où la seule entorse à la convention `<SERVICE>_PORT` du `.env.example`.                                                                                                                                                                                                                                                                                                          |
 | Variables SMTP non passées au service `api`                     | Hors de la portée du ticket, qui s'arrête au service `mailpit` et à `.env.example`. Surtout : ces six variables naissent **après** les `.env` déjà créés sur les postes, et les référencer produirait six avertissements `variable is not set` à chaque `up` pour des variables qu'aucune ligne de code ne lit. Le bloc attend, en commentaires, à sa place exacte.                                                                                                                                                                                                  |
 | Critère n°5 livré en commande documentée, pas en test pytest    | `backend/api/tests/` n'existe pas — `pyproject.toml` l'écrit noir sur blanc, il arrive avec BACK-12 — et il n'y a ni configuration pytest, ni adaptateur SMTP (BACK-22), ni parcours OTP (BACK-17). Amorcer un harnais de test ici empiéterait sur BACK-12 et contredirait la frontière que le ticket pose lui-même. Précédent exact d'INFRA-03, qui a documenté l'aller-retour MinIO au lieu de le tester. L'aller-retour livré passe bien par l'API HTTP, ce que le critère vise ; le test pytest revient à BACK-12 et BACK-22, l'helper de lecture d'OTP à QA-04. |
-| Cible `make mail` non livrée                                    | Le ticket la renvoie explicitement à INFRA-06, et le `Makefile` de la racine n'existe pas encore. La boîte est documentée en attendant.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Cible `make mail` non livrée, **levée depuis**                  | Le ticket la renvoyait explicitement à INFRA-06, qui l'a livrée : `make mail` ouvre la boîte via `scripts/open-mailbox.sh`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `MP_MAX_MESSAGES` laissé à son défaut de 500                    | Le ticket n'en dit rien. Sans volume, la boîte repart vide à chaque redémarrage : le plafond ne se rencontre pas sur un poste de développement, et l'écrire n'ajouterait qu'une variable à maintenir.                                                                                                                                                                                                                                                                                                                                                                |
 
 ### Écarts assumés avec le ticket DOC-01

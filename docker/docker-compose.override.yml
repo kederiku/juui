@@ -19,8 +19,8 @@
 #     -f docker/docker-compose.yml -f docker/docker-compose.override.yml up -d
 #
 # Sans ce second `-f`, la pile demarre sur les images servies : aucun montage,
-# aucun rechargement a chaud, et pas la moindre erreur pour le dire. INFRA-06
-# encapsulera les deux commandes dans deux cibles distinctes du Makefile.
+# aucun rechargement a chaud, et pas la moindre erreur pour le dire. `make up`
+# et `make dev` encapsulent ces deux commandes (INFRA-06).
 #
 # CE QUE CHAQUE SERVICE Y GAGNE
 #   - une CIBLE de build differente : `dev` partout, la ou la base prend `prod`
