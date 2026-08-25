@@ -161,12 +161,12 @@ typecheck: ## Verifie le typage Python (mypy strict) puis TypeScript
 	$(MAKE) --no-print-directory -C backend/api typecheck
 	pnpm typecheck
 
-# AUCUNE SUITE N'EXISTE ENCORE : le harnais pytest arrive avec BACK-12, celui
-# des workspaces avec QA-02. La cible backend est declaree quand meme -- c'est
-# l'interface que le ticket annonce -- et sort en 0 en nommant ce qu'on attend,
-# comme l'entrypoint d'INFRA-04 le fait pour les migrations absentes.
-test-back: ## Suites de tests du backend (BACK-12)
-	@echo 'INFRA-06 : aucune suite backend -- le harnais pytest arrive avec BACK-12.'
+# Delegue a backend/api/Makefile, qui porte une vraie cible `test` depuis
+# BACK-06b. Meme prerequis qu'elle : PostgreSQL docker demarre (`make dev`),
+# les tests d'isolation travaillent sur la base `app_test` d'INFRA-01. Le
+# decoupage par niveaux (unit/integration/slow) arrive avec BACK-12.
+test-back: ## Suite de tests du backend (PostgreSQL docker demarre)
+	$(MAKE) --no-print-directory -C backend/api test
 
 # Celle-ci est un VRAI appel : `pnpm -r --if-present run test` ignore en
 # silence les workspaces sans script `test`, donc tous aujourd'hui. Le jour ou
