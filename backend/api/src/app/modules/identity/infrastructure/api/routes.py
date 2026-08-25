@@ -1,14 +1,16 @@
 """Routeur HTTP du module identity (BACK-04).
 
 Le routeur existe, il est assemble par `app.main`, et il ne porte ENCORE AUCUNE
-ROUTE. Ce n'est pas un oubli : une route de creation de compte a besoin d'une
-unite de travail (BACK-06a) pour ouvrir la session que BACK-05 sait desormais
-fabriquer, et decider du commit -- et celle-la n'existe pas. L'exposer
-aujourd'hui supposerait de brancher un depot factice dans le code de production,
-c'est-a-dire d'ecrire du code jetable et de le documenter comme s'il etait vrai.
+ROUTE. Ce n'est plus une question d'outillage : l'unite de travail existe
+(BACK-06a), et une route n'aurait qu'a annoter `uow: IdentityUowDep` pour la
+recevoir. Ce qui manque est METIER : le parcours d'inscription porte des regles
+-- mot de passe hache (BACK-10b), non-divulgation (BACK-09), verification
+(BACK-17) -- qu'une route de demonstration contournerait, et qu'il faudrait
+documenter comme si elles etaient tenues.
 
-Le trajet complet -- schema, commande, entite, modele -- est en revanche
-EXECUTABLE des maintenant : la sonde du README le parcourt de bout en bout.
+Le trajet complet -- schema, commande, entite, unite de travail, modele -- est
+en revanche EXECUTABLE des maintenant : les sondes du README le parcourent de
+bout en bout, route de sonde comprise.
 
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
 `POST /auth/register` (BACK-28), `POST /auth/login` et le rafraichissement de

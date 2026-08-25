@@ -7,8 +7,10 @@ couche application ne voie jamais une `AsyncSession`. Une dependance
 `get_session()` publiee ici serait exactement l'affordance qui rend cette
 promesse intenable -- la premiere route pressee s'en servirait.
 
-Rien n'en a besoin avant BACK-06a, du reste : le depot recoit sa session en
-argument et n'en cree jamais, et la sonde de sante (BACK-08) interroge le moteur.
+L'unite de travail (BACK-06a) est le consommateur prevu : elle prend ici la
+fabrique, ouvre une session par bloc `async with` et la referme a la sortie. Le
+depot recoit sa session en argument et n'en cree jamais, et la sonde de sante
+(BACK-08) interroge le moteur.
 """
 
 from dataclasses import dataclass
@@ -38,17 +40,20 @@ def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     passage par une entite du domaine fait que la peremption ne sort jamais de
     l'infrastructure.
 
-    DEUX PIEGES A CONNAITRE AVANT BACK-06a
+    DEUX PIEGES QUE L'UNITE DE TRAVAIL (BACK-06a) AFFRONTE
     `rollback()` perime les instances QUOI QU'IL ARRIVE : journaliser
     `account.email` apres l'annulation leve `MissingGreenlet` au lieu de rendre
     une valeur perimee -- capturer ce qu'on veut tracer AVANT. Et une session
-    reutilisee d'un bloc `async with` a l'autre ressert son identity map sans
-    relire la base : une session par bloc, ou `expunge_all()` en sortie.
+    reutilisee d'un bloc `async with` a l'autre resservirait son identity map
+    sans relire la base : l'unite de travail fabrique pour cela une session
+    NEUVE a chaque bloc.
 
-    `autoflush=False` : avec le defaut, un `find_by_email()` appele apres un
-    `add()` provoque un flush implicite, et la violation d'unicite remonte alors
-    depuis la LECTURE -- au mauvais endroit, sous le mauvais nom. Le flush a lieu
-    au commit, la ou on l'attend.
+    `autoflush=False` : avec le defaut, la premiere lecture venue declenche un
+    flush implicite, et une violation de contrainte remonte alors depuis la
+    LECTURE -- au mauvais endroit, sous le mauvais nom. Le flush a lieu aux
+    ecritures qui le demandent -- `add()` du depot generique flushe sa ligne,
+    pour qu'elle soit visible de son propre bloc -- et au commit, jamais au
+    detour d'une lecture.
 
     Args:
         engine: le moteur ouvert par le `lifespan`.
@@ -77,8 +82,8 @@ def get_database(request: Request) -> Database:
 
     Forme de reference pour les ressources de longue duree : une cle, un type, un
     accesseur. Le client Redis (BACK-14) et le broker TaskIQ (BACK-15) la
-    reprendront ; l'unite de travail (BACK-06a) en sera le premier consommateur
-    reel, en y prenant la fabrique de sessions.
+    reprendront ; l'unite de travail (BACK-06a) en est le premier consommateur
+    reel -- `get_identity_uow` y prend la fabrique de sessions.
 
     L'`isinstance` n'est pas de la defense pour rien. `app.state` est type `Any`,
     et Mypy en mode strict refuse d'en retourner la valeur telle quelle. Il
