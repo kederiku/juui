@@ -66,6 +66,10 @@ backend/api/
         │   ├── application/    use_cases/
         │   ├── infrastructure/ db/ (modèle, dépôt), api/ (schémas, routeur)
         │   └── unit_of_work.py unité de travail du module, `get_identity_uow` (BACK-06a)
+        ├── medical_records/ dossier de l'animal : fiche et détention datée (BACK-19)
+        │   ├── domain/         entités, enums, règle « une seule détention active », ports
+        │   ├── infrastructure/ db/ (2 tables, dépôts non tenant — pas encore d'api/)
+        │   └── unit_of_work.py `get_medical_records_uow`
         └── organization/   groupes, cliniques, appartenances, affectations (BACK-16)
             ├── domain/         entités, rôles, règle d'affectation, les 3 ports
             ├── infrastructure/ db/ (4 tables, dépôts — pas encore d'api/)

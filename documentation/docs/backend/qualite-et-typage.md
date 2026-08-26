@@ -99,8 +99,8 @@ six mois plus tard en revue de code.
 Trois choix de configuration méritent d'être connus avant d'y toucher :
 
 - **Les contrats 2 et 3 visent `app.modules.*`, pas une liste de modules.** Ils
-  couvrent `organization` depuis BACK-16 et couvriront `medical_records`
-  (BACK-19) et les suivants le jour où ceux-ci naîtront — c'est la différence
+  couvrent `organization` depuis BACK-16, `medical_records` depuis BACK-19, et
+  couvriront les suivants le jour où ceux-ci naîtront — c'est la différence
   entre un garde-fou et une liste qu'on oublie de tenir à jour.
 - **Les couches du contrat 2 sont optionnelles** (elles s'écrivent entre
   parenthèses) parce qu'un module vit sans certaines d'entre elles —

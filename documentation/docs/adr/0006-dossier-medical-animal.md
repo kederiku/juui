@@ -73,6 +73,9 @@ confidentialité, pas un oubli.
 
 ## Références
 
+- `backend/api/src/app/modules/medical_records/infrastructure/db/models.py` — la décision
+  appliquée par BACK-19 : `animals` sans tenance, `custodies` datée, et l'index unique partiel
+  qui rend « une seule détention active » physique.
 - `backend/api/src/app/shared/infrastructure/db/mixins.py` — `Animal` comme contre-exemple fondateur
   de la tenance opt-in.
 - `backend/api/src/app/shared/infrastructure/clients/storage_keys.py` — les emplacements
