@@ -56,6 +56,11 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'backend/configuration', label: 'Configuration' },
         { type: 'doc', id: 'backend/persistance', label: 'Persistance' },
         { type: 'doc', id: 'backend/unite-de-travail', label: 'Unité de travail' },
+        {
+          type: 'doc',
+          id: 'backend/doublures-en-memoire',
+          label: 'Doublures en mémoire',
+        },
         { type: 'doc', id: 'backend/migrations', label: 'Migrations' },
         { type: 'doc', id: 'backend/cache', label: 'Cache' },
         { type: 'doc', id: 'backend/stockage-objet', label: 'Stockage objet' },
@@ -173,6 +178,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'adr/0022-transport-email-partage',
           label: 'Transport e-mail partagé',
+        },
+        {
+          type: 'doc',
+          id: 'adr/0023-doublures-en-memoire-et-conformite',
+          label: 'Conformité des doublures',
         },
       ],
     },

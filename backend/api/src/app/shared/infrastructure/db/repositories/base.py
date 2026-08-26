@@ -30,6 +30,15 @@ filtre de tenance (BACK-06b) surcharge, dans `tenant.py` : cette classe-ci
 reste vierge de tenance, comme `TenantMixin` l'exige -- le filtre ne s'applique
 qu'aux depots qui heritent de `TenantSqlAlchemyRepository`, jamais globalement.
 
+LES TROIS ECRITURES FLUSHENT, ET C'EST UNE PROPRIETE DU BLOC
+`add`, `save` et `delete` poussent leur SQL dans la transaction du bloc des
+qu'elles sont appelees -- jamais un commit, que seule l'unite de travail decide.
+C'est ce qui rend une ecriture VISIBLE du reste de son propre bloc, requetes
+comprises, la ou `autoflush=False` (BACK-05) ferait autrement lire l'etat
+d'avant. Seul `add` le faisait jusqu'a BACK-06c ; les deux autres l'ont gagne
+quand la suite de conformite a compare ce chemin a celui de la doublure en
+memoire.
+
 LA PAGINATION PASSE PAR `_paginate`, ET `_paginate` PART DE `_select`
 `list` sert la convention de BACK-24 -- une page par appel, enveloppe avec
 total, tri sur liste blanche -- et delegue a `_paginate`, la couture que les
@@ -332,6 +341,15 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
     async def save(self, entity: EntityT, /) -> None:
         """Reporte sur la ligne suivie l'etat d'une entite deja enregistree.
 
+        FLUSHEE COMME UN `add`, ET POUR LA MEME RAISON (correction BACK-06c). La
+        modification d'une ligne suivie se relit sans SQL par l'identity map, ce
+        qui masquait le probleme : mais une REQUETE, elle, part vers la base et
+        `autoflush=False` (BACK-05) lui fait lire l'etat d'AVANT. Un cas d'usage
+        qui modifie puis liste dans la meme transaction recevait donc une page
+        ordonnee -- ou filtree -- sur ce qu'il venait de remplacer. C'est la suite
+        de conformite de BACK-06c qui l'a mis au jour, en comparant ce chemin a
+        celui de la doublure en memoire.
+
         Args:
             entity: l'entite modifiee.
 
@@ -341,6 +359,7 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         """
         model = await self._load(entity.id)
         self._apply_to_model(entity, model)
+        await self._session.flush([model])
 
     async def delete(self, entity_id: UUID, /) -> None:
         """Supprime l'entite portant cet identifiant.
@@ -349,6 +368,14 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         direct : les cascades declarees a l'ORM s'appliquent, l'identity map
         du bloc reste coherente, et le depot tenant (BACK-06b) a une ligne en
         main pour verifier la tenance avant de la laisser partir.
+
+        FLUSHEE COMME UN `add`, ET POUR LA MEME RAISON (correction BACK-06c).
+        Sans ce flush, `session.delete()` ne fait que MARQUER la ligne : elle
+        reste dans l'identity map, et le `session.get` de `_load` continue de la
+        servir sans SQL. Le bloc voyait donc survivre ce qu'il venait de
+        supprimer -- un second `delete` reussissait, et un `get` rendait une
+        entite deja partie. La suite de conformite de BACK-06c l'a mis au jour :
+        la doublure en memoire, elle, retirait la ligne aussitot.
 
         Args:
             entity_id: l'identifiant de l'entite a supprimer.
@@ -359,3 +386,4 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         """
         model = await self._load(entity_id)
         await self._session.delete(model)
+        await self._session.flush([model])

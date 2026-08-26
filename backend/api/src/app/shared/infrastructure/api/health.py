@@ -48,8 +48,8 @@ class SupportsPing(Protocol):
     Un protocole STRUCTUREL plutot qu'un ajout au port `Cache` : sonder est un
     geste d'exploitation, pas de cache -- le port promet des lectures et des
     ecritures, rien d'autre -- et `RedisCache.ping()` existe deja (BACK-14).
-    La doublure en memoire de BACK-06c n'aura qu'a porter un `ping()` pour
-    convenir, sans que ce fichier change.
+    `InMemoryCache` (BACK-06c) porte le sien et convient donc sans que ce fichier
+    ait eu a changer -- ce qui etait tout l'interet du protocole.
     """
 
     async def ping(self) -> bool:

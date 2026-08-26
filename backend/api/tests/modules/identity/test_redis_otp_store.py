@@ -27,7 +27,7 @@ from app.modules.identity.infrastructure.clients.redis_otp_store import (
     derive_otp_pepper,
 )
 from app.shared.infrastructure.clients.cache_keys import environment_slug
-from tests.modules.identity.otp_doubles import otp_rules
+from tests.modules.identity.helpers import otp_rules
 
 pytestmark = pytest.mark.otp
 

@@ -17,7 +17,7 @@ from app.modules.identity.domain.policies import (
     fingerprint_otp_code,
     generate_otp_code,
 )
-from tests.modules.identity.otp_doubles import otp_rules
+from tests.modules.identity.helpers import otp_rules
 
 
 def test_generated_code_has_six_digits() -> None:

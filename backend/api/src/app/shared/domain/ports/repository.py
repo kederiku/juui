@@ -2,8 +2,9 @@
 
 Ce module decrit ce que TOUTE implementation generique de depot sait faire :
 cinq operations, exprimees en entites du domaine. Le depot SQLAlchemy de
-BACK-06a les fournit, la doublure en memoire de BACK-06c les fournira, et le
-test de conformite commun des deux s'ecrira contre ce protocole. C'est aussi
+BACK-06a les fournit, la doublure en memoire de BACK-06c les fournit aussi, et
+le test de conformite commun des deux est ECRIT contre ce protocole -- une suite
+qui ne peut rien appeler qu'une seule des deux implementations saurait faire. C'est aussi
 l'appui des machineries transverses : le filtre de tenance (BACK-06b) raisonne
 sur ce vocabulaire, et la pagination (BACK-24) fait de meme -- `list` echange
 les objets-valeurs de `shared/domain/pagination.py`, jamais ceux d'un depot

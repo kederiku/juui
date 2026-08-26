@@ -423,7 +423,7 @@ def get_cache(request: Request) -> Cache:
 
     Meme forme que `get_database` (BACK-05) : une cle, un type, un accesseur.
     L'`isinstance` porte sur le PORT et non sur `RedisCache` -- c'est ce qui
-    laissera BACK-06c ranger une doublure en memoire dans `app.state` sans
+    laisse `InMemoryCache` (BACK-06c) se ranger dans `app.state` sans
     toucher a ce fichier. Il est de toute facon obligatoire : `app.state` est
     type `Any`, et Mypy strict refuse d'en retourner la valeur telle quelle.
 

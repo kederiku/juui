@@ -26,8 +26,9 @@ LE TRI EST UN NOM PUBLIC, JAMAIS UNE COLONNE
 `Sort.field` porte le nom expose par l'API, pas un nom de colonne : la
 correspondance nom -> colonne appartient au depot concret, qui la declare en
 liste blanche (`_sortable`). Rien de ce que le client envoie n'approche donc le
-SQL, et la doublure en memoire (BACK-06c) saura trier par nom d'attribut sans
-rien connaitre de SQLAlchemy.
+SQL, et la doublure en memoire (BACK-06c) trie par nom d'ATTRIBUT sans rien
+connaitre de SQLAlchemy -- deux listes blanches distinctes, une seule convention,
+et une suite de conformite qui refuse qu'elles divergent.
 
 Comme tout le domaine, ce module ne s'appuie que sur la bibliotheque standard
 (contrat `domain-purity`) : l'enveloppe Pydantic exposee par l'API vit cote

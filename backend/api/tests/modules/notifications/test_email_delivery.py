@@ -37,7 +37,9 @@ from app.modules.notifications.infrastructure.clients.email_sender import (
 )
 from app.modules.notifications.infrastructure.clients.push_sender import LoggingPushSender
 from app.modules.notifications.infrastructure.clients.sms_sender import LoggingSmsSender
-from tests.modules.notifications.notification_doubles import InMemoryNotificationsUnitOfWork
+from app.modules.notifications.infrastructure.memory.unit_of_work import (
+    InMemoryNotificationsUnitOfWork,
+)
 
 pytestmark = pytest.mark.notifications
 

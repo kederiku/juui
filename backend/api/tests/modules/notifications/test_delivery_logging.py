@@ -29,8 +29,8 @@ from app.modules.notifications.domain.entities import (
 )
 from app.modules.notifications.domain.policies import NotificationChannel, NotificationEvent
 from app.modules.notifications.domain.ports import NotificationDeliveryError
-from tests.modules.notifications.notification_doubles import (
-    FakeNotificationSender,
+from app.modules.notifications.infrastructure.memory.senders import FakeNotificationSender
+from app.modules.notifications.infrastructure.memory.unit_of_work import (
     InMemoryNotificationsUnitOfWork,
 )
 

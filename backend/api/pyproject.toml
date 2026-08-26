@@ -310,6 +310,7 @@ markers = [
     "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
     "otp: tests de la verification d'adresse par code OTP (BACK-17)",
     "notifications: tests des preferences et de la remise de notifications (BACK-22)",
+    "conformance: suites jouees contre l'implementation reelle ET sa doublure (BACK-06c)",
 ]
 
 # ---------------------------------------------------------------------------

@@ -20,16 +20,15 @@ from app.modules.identity.domain.exceptions import (
     OtpResendThrottledError,
 )
 from app.modules.identity.domain.ports import OtpConsumption, OtpStoreUnavailableError
-from tests.modules.identity.otp_doubles import (
-    FakeClock,
+from app.modules.identity.infrastructure.memory.otp import (
     FakeOtpSender,
-    InMemoryIdentityUnitOfWork,
     InMemoryOtpStore,
     RecordingOtpDispatcher,
     UnavailableOtpStore,
-    an_account,
-    otp_rules,
 )
+from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
+from app.shared.infrastructure.memory.clock import FakeClock
+from tests.modules.identity.helpers import an_account, otp_rules
 
 
 async def test_a_request_reaches_the_queue() -> None:

@@ -4,8 +4,8 @@ Un port est un BESOIN exprime par le domaine, jamais une technologie. Celui-ci
 dit « je dois pouvoir retrouver et enregistrer un compte » ; il ne dit ni
 PostgreSQL, ni SQLAlchemy, ni meme « base de donnees ». L'adaptateur qui le
 remplit vit dans `infrastructure/db/repositories.py`, et un second adaptateur en
-memoire lui repondra pour les tests (BACK-06c) sans qu'une ligne de metier
-change.
+memoire lui repond pour les tests (`infrastructure/memory/`, BACK-06c) sans
+qu'une ligne de metier change.
 
 POURQUOI CES PORTS-LA SONT DANS LE DOMAINE DU MODULE
 `AccountRepository` et `IdentityUnitOfWork` parlent de comptes : ce sont des

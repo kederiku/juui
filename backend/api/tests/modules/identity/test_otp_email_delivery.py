@@ -30,12 +30,10 @@ from app.modules.identity.application.use_cases.verify_otp import (
     VerifyEmailOtp,
 )
 from app.modules.identity.infrastructure.clients.email_otp_sender import build_otp_sender
+from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
+from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
 from app.modules.identity.infrastructure.tasks.otp import send_email_verification_otp
-from tests.modules.identity.otp_doubles import (
-    InMemoryIdentityUnitOfWork,
-    InMemoryOtpStore,
-    an_account,
-)
+from tests.modules.identity.helpers import an_account, stored_account
 
 pytestmark = pytest.mark.otp
 
@@ -127,6 +125,6 @@ async def test_the_code_travels_to_the_mailbox_and_verifies_the_account(
         )
 
         assert verified.email_verified
-        assert uow.stored(account.id).email_verified
+        assert stored_account(uow, account.id).email_verified
     finally:
         await _delete_message(mailpit, str(message["ID"]))
