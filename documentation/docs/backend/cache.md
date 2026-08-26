@@ -194,9 +194,11 @@ async def main() -> None:
         await cache.set("liste:1", 1, ttl=60)
         await cache.set("liste:2", 2, ttl=60)
         print("3. invalidate_pattern   :", await cache.invalidate_pattern("liste:*"))
-        await cache.set("ephemere", "x", ttl=1)
-        horloge.advance(2)
-        print("4. TTL expire           :", await cache.get("ephemere") is MISSING)
+        # Sans `ttl` : c'est le defaut configure (REDIS_CACHE_TTL_SECONDS) qui
+        # s'applique, celui-la meme que porte l'adaptateur Redis.
+        await cache.set("ephemere", "x")
+        horloge.advance(get_settings().redis.cache_ttl_seconds + 1)
+        print("4. TTL par defaut expire:", await cache.get("ephemere") is MISSING)
         cas = LireLeDossier(cache)
         await cas.execute("rex")
         await cas.execute("rex")

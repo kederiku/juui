@@ -78,10 +78,16 @@ class InMemoryUnitOfWork(AbstractUnitOfWork):
             copy: la fonction qui duplique une entite de cet agregat. `deepcopy`
                 par defaut ; a ne remplacer que pour une raison ecrite.
 
+        Le magasin recoit l'etat d'ouverture de l'unite : c'est ce qui rend la
+        regle 3 STRUCTURELLE ici comme cote SQLAlchemy. La garde `_require_open()`
+        des proprietes ne s'execute qu'a l'acces ; celle du magasin s'execute a
+        chaque geste, et couvre donc aussi un depot capture dans un bloc et rejoue
+        apres sa sortie.
+
         Returns:
             Le magasin, vide, deja rattache a l'unite.
         """
-        store: InMemoryStore[EntityT] = InMemoryStore(copy=copy)
+        store: InMemoryStore[EntityT] = InMemoryStore(copy=copy, is_open=lambda: self._open)
         self._stores.append(store)
         return store
 

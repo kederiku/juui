@@ -42,8 +42,9 @@ importer `app.modules`, donc un `FakeOtpSender` rangé avec les doublures techni
 `tests/shared/conformance/`, sous la forme d'une classe de base portant les tests et de deux
 sous-classes ne fournissant que la fixture du sujet. La classe de base ne s'appelle pas `Test…` :
 pytest ne la collecte pas, et **un test ajouté à la base est mécaniquement joué des deux côtés**.
-Trois sujets aujourd'hui : le dépôt et l'unité de travail (PostgreSQL contre dictionnaires), le
-cache (Redis contre mémoire), le stockage objet (MinIO contre mémoire).
+Cinq sujets aujourd'hui : le dépôt et l'unité de travail (PostgreSQL contre dictionnaires), le
+cache (Redis contre mémoire), le stockage objet (MinIO contre mémoire), et — parce que le socle ne
+dit rien des doublures de module — le dépôt de comptes et le magasin d'OTP d'`identity`.
 
 **Ce qui ne peut pas se comparer reste hors de la suite**, dans `tests/shared/memory/` : la réponse
 à la panne — qui se simule d'un côté et demanderait d'arrêter un conteneur de l'autre — et les
@@ -81,7 +82,11 @@ le sens inverse de celui qu'on attendait. Ce n'était pas la doublure qui mentai
 l'adaptateur SQLAlchemy qui laissait survivre, dans son propre bloc, une ligne qu'il venait de
 supprimer, et qui ordonnait une page sur l'état d'avant une écriture non flushée. Deux ans de
 relecture attentive n'auraient pas montré cela ; une suite jouée deux fois l'a montré en une
-exécution.
+exécution. Une revue contradictoire menée dans la foulée en a sorti quatre autres, dans des
+recoins qu'aucune suite n'atteignait : la casse de `find_by_email`, l'arrondi du `Retry-After`,
+quatre divergences de syntaxe de motifs entre Redis et `fnmatch`, et un dépôt en mémoire qui
+restait opérant après la sortie de son bloc. **Le dispositif ne dispense pas de la relecture ; il
+en fixe le résultat.**
 
 ## Conséquences
 
@@ -91,7 +96,8 @@ suivants**. La règle qui en découle est simple à tenir : une doublure qui gag
 gagne sa ligne de conformité dans le même commit.
 
 Ce qu'il paie : ces classes voyagent dans la roue de production et dans l'image Docker. Le coût est
-mesuré — huit fichiers, aucune dépendance nouvelle — et il n'est pas que du poids mort :
+mesuré — seize fichiers, les deux paquets de module compris, aucune dépendance nouvelle — et il
+n'est pas que du poids mort :
 `InMemoryCache` rend un poste de développement capable de servir toutes les routes sans Redis, la
 dépendance `get_cache` portant déjà son `isinstance` sur le **port** et non sur `RedisCache`.
 

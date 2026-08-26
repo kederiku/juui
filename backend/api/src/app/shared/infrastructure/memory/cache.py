@@ -28,12 +28,13 @@ stockage, cote reel comme ici.
 LE TEMPS EST INJECTE. Sans horloge pilotable, prouver qu'une entree expire
 demanderait de dormir la duree du TTL.
 
-LIMITE CONNUE DES MOTIFS. `invalidate_pattern` s'appuie sur `fnmatch`, dont la
-syntaxe couvre `*`, `?` et `[...]` comme les motifs Redis, mais qui n'interprete
-pas les echappements par barre inverse. Aucun motif du service n'en porte.
+LES MOTIFS SONT CEUX DE REDIS, PAS CEUX DE `fnmatch`. La distinction a l'air
+d'un detail et ne l'est pas : les deux syntaxes s'opposent sur `[^a]` contre
+`[!a]`, et le `?` de Redis compte un OCTET la ou celui de `fnmatch` compte un
+caractere. `memory/glob.py` porte la semantique de Redis, et la suite de
+conformite epingle les quatre cas.
 """
 
-import fnmatch
 import logging
 from typing import Final
 
@@ -42,6 +43,7 @@ from app.shared.domain.ports.cache import MISSING, Cache, CacheScope, JsonValue,
 from app.shared.infrastructure.clients.cache_keys import CacheKeyBuilder, build_key_builder
 from app.shared.infrastructure.clients.redis_cache import CacheSerializer, JsonSerializer
 from app.shared.infrastructure.memory.clock import DEFAULT_CLOCK, Clock
+from app.shared.infrastructure.memory.glob import matches
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -168,7 +170,7 @@ class InMemoryCache(Cache):
         if self.unavailable:
             self._report("invalidation")
             return 0
-        targeted = [key for key in self.physical_keys() if fnmatch.fnmatchcase(key, physical)]
+        targeted = [key for key in self.physical_keys() if matches(physical, key)]
         for key in targeted:
             del self._entries[key]
         return len(targeted)

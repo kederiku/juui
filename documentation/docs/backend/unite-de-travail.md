@@ -31,7 +31,8 @@ l'appelant, et toute sortie de bloc sans commit explicite — exception comprise
 
 Ce rollback automatique n'est pas une consigne : `__aexit__` est la **seule méthode concrète du
 port**, une méthode-gabarit qui enchaîne `rollback()` puis la libération des ressources, et que
-tous les adaptateurs héritent — celui de SQLAlchemy comme la doublure en mémoire de BACK-06c. La
+tous les adaptateurs héritent — celui de SQLAlchemy comme
+[`InMemoryUnitOfWork`](./doublures-en-memoire.md) (BACK-06c). La
 promesse centrale du pattern est ainsi du code partagé, pas une discipline à reproduire.
 
 Le rollback de sortie est **inconditionnel**, sans drapeau « déjà commité » : après un commit,
@@ -69,8 +70,9 @@ module — la place que BACK-04 avait fixée : le point d'assemblage, ni domaine
 infrastructure. La raison du dédoublement est mécanique autant qu'architecturale : le fichier
 racine importe l'infrastructure, et un cas d'usage qui le nommerait créerait la chaîne
 `application → infrastructure` que le contrat [`module-layers`](./qualite-et-typage.md#import-linter) refuse. Le cas
-d'usage type donc sur le port, qui ne connaît que le domaine — et c'est ce qui permettra à
-BACK-06c de substituer sa doublure sans toucher une signature.
+d'usage type donc sur le port, qui ne connaît que le domaine — et c'est ce qui permet à
+[`InMemoryIdentityUnitOfWork`](./doublures-en-memoire.md) (BACK-06c) de s'y substituer sans toucher
+une signature.
 
 Les dépôts du module sont des **propriétés paresseuses**, pas des attributs posés à l'entrée du
 bloc : un attribut survivrait à la sortie, dépôt mort en main, tandis que la propriété repasse
@@ -107,7 +109,12 @@ Quatre comportements valent d'être nommés, parce qu'ils se décident ici pour 
 
 - `get`, `save` et `delete` lèvent **l'erreur du module** — l'absence est une erreur quand on
   tient l'identifiant d'un jeton ou d'une URL, la doctrine `get_`/`find_` du port ne change pas ;
-- `add` **flushe sa ligne, sans jamais commiter** : l'INSERT part dans la transaction du bloc —
+- **les trois écritures flushent, sans jamais commiter** — `add` depuis BACK-06a, `save` et
+  `delete` depuis BACK-06c, où la [suite de conformité](./doublures-en-memoire.md) a montré ce que
+  leur absence coûtait : une ligne supprimée survivait dans son propre bloc (l'identity map de
+  `session.get` la servait encore), et une page listée après un `save` était ordonnée sur l'état
+  d'avant, `autoflush=False` faisant lire la base non flushée. Pour `add`, l'INSERT part dans la
+  transaction du bloc —
   que le rollback de sortie sait toujours annuler — et l'entité ajoutée est aussitôt visible du
   reste de son bloc, pour `get`, `save`, `delete` comme pour `find_by_email`. Sans ce flush,
   `autoflush=False` la rendrait invisible à son propre bloc — un `delete` après `add` aurait

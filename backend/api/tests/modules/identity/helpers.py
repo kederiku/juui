@@ -11,7 +11,7 @@ restees.
 Le module ne porte pas le prefixe `test_` : pytest ne le collecte pas.
 """
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from app.modules.identity.domain.entities import Account, AccountType
 from app.modules.identity.domain.policies import OtpRules
@@ -79,3 +79,20 @@ def stored_account(uow: InMemoryIdentityUnitOfWork, account_id: UUID) -> Account
     account = uow.accounts_store.committed_entity(account_id)
     assert account is not None, f"Aucun compte valide ne porte l'identifiant {account_id}."
     return account
+
+
+def a_client_ip() -> str:
+    """Une adresse d'appelant qui ne peut croiser celle d'aucun autre test.
+
+    UNE PLAGE DE DOCUMENTATION IPv6 (RFC 3849) ET UN TIRAGE LARGE, et ce n'est pas
+    de la coquetterie : les plafonds par IP vivent dans le Redis du poste, avec un
+    TTL d'une HEURE, partage avec toute la suite. Un octet tire dans
+    `203.0.113.0/24` ne laisse que deux cents valeurs -- soit 29 % de chance de
+    rejouer la meme au bout de douze executions dans l'heure, et un test qui
+    echoue alors sans rapport avec ce qu'il eprouve. Mesure : c'est exactement ce
+    qui arrivait, une fois sur douze.
+
+    Returns:
+        Une adresse unique en pratique, hors de toute plage reellement routee.
+    """
+    return f"2001:db8:{uuid4().hex[:4]}:{uuid4().hex[:4]}::1"

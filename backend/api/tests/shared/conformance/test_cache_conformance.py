@@ -6,6 +6,11 @@ compare n'est pas « ca marche des deux cotes » mais le CONTRAT du port : la
 sentinelle d'absence distincte d'un `None` mis en cache, le refus d'une entree
 sans expiration, le cloisonnement par groupe, et l'aller-retour de serialisation.
 
+LA SYNTAXE DES MOTIFS EST EPINGLEE, ET ELLE LE DOIT. Redis et `fnmatch` se
+ressemblent puis divergent sur quatre points, dont une inversion complete
+(`[^a]` contre `[!a]`) : quatre tests plus bas les fixent, et c'est ce qui
+justifie le portage de `memory/glob.py` plutot qu'un `fnmatch` qui « marchait ».
+
 CE QUE LA SUITE NE COUVRE PAS, ET POURQUOI
 La degradation gracieuse. Elle se simule d'un cote (`unavailable=True`) et
 demanderait d'arreter Redis de l'autre : elle est donc eprouvee sur la seule
@@ -157,6 +162,67 @@ class CacheConformance:
     ) -> None:
         with use_group(group_a):
             assert await cache.invalidate_pattern(f"conformance:vide:{uuid4()}:*") == 0
+
+    async def test_a_negated_class_follows_the_redis_syntax(
+        self, cache: Cache, group_a: UUID
+    ) -> None:
+        """`[^x]` nie, `[!x]` est litteral -- et `fnmatch` fait exactement l'inverse.
+
+        LE CAS LE PLUS DANGEREUX DES QUATRE : selon la syntaxe employee, une purge
+        efface tout d'un cote et rien de l'autre. Un test qui ne l'epingle pas
+        laisse croire qu'une invalidation a eu lieu.
+        """
+        marker = uuid4().hex[:8]
+        with use_group(group_a):
+            await cache.set(f"conf:{marker}:b", 1, ttl=_TTL)
+            await cache.set(f"conf:{marker}:!", 1, ttl=_TTL)
+            # `[^!]` NIE : il retire « b » et laisse « ! ». Sous `fnmatch`, le
+            # meme motif serait la classe litterale {^, !} et retirerait « ! ».
+            assert await cache.invalidate_pattern(f"conf:{marker}:[^!]") == 1
+            assert await cache.get(f"conf:{marker}:b") is MISSING
+            assert await cache.get(f"conf:{marker}:!") == 1
+            # `[!b]` est LITTERAL : la classe {!, b}, dont seul « ! » subsiste.
+            assert await cache.invalidate_pattern(f"conf:{marker}:[!b]") == 1
+            assert await cache.get(f"conf:{marker}:!") is MISSING
+
+    async def test_a_backslash_escapes_a_wildcard(self, cache: Cache, group_a: UUID) -> None:
+        """Un `*` echappe vise l'asterisque litteral, pas n'importe quelle suite."""
+        marker = uuid4().hex[:8]
+        with use_group(group_a):
+            await cache.set(f"conf:{marker}:a*b", 1, ttl=_TTL)
+            await cache.set(f"conf:{marker}:axb", 1, ttl=_TTL)
+            assert await cache.invalidate_pattern(f"conf:{marker}:a\\*b") == 1
+            assert await cache.get(f"conf:{marker}:a*b") is MISSING
+            assert await cache.get(f"conf:{marker}:axb") == 1
+
+    async def test_an_unclosed_class_stays_a_class(self, cache: Cache, group_a: UUID) -> None:
+        """Un crochet non referme ne rend pas le motif invalide : il se referme tout seul."""
+        marker = uuid4().hex[:8]
+        with use_group(group_a):
+            await cache.set(f"conf:{marker}:a", 1, ttl=_TTL)
+            await cache.set(f"conf:{marker}:z", 1, ttl=_TTL)
+            assert await cache.invalidate_pattern(f"conf:{marker}:[abc") == 1
+            assert await cache.get(f"conf:{marker}:a") is MISSING
+            assert await cache.get(f"conf:{marker}:z") == 1
+
+    async def test_a_question_mark_matches_one_byte_not_one_character(
+        self, cache: Cache, group_a: UUID
+    ) -> None:
+        """LE `?` COMPTE UN OCTET, et ce n'est pas un cas de laboratoire ici.
+
+        Le service est francophone : une seule cle accentuee suffit a faire
+        diverger n'importe quel motif a `?` entre Redis et un moteur qui compterait
+        des caracteres.
+        """
+        marker = uuid4().hex[:8]
+        with use_group(group_a):
+            await cache.set(f"conf:{marker}:e", 1, ttl=_TTL)
+            await cache.set(f"conf:{marker}:\u00e9", 1, ttl=_TTL)
+            assert await cache.invalidate_pattern(f"conf:{marker}:?") == 1
+            assert await cache.get(f"conf:{marker}:e") is MISSING
+            assert await cache.get(f"conf:{marker}:\u00e9") == 1
+            assert await cache.invalidate_pattern(f"conf:{marker}:??") == 1
+            assert await cache.get(f"conf:{marker}:\u00e9") is MISSING
 
     async def test_an_empty_pattern_is_refused(self, cache: Cache, group_a: UUID) -> None:
         with use_group(group_a), pytest.raises(ValueError, match="vide"):

@@ -20,6 +20,7 @@ d'un code ou la fermeture d'une fenetre de renvoi demanderait de dormir dix
 minutes.
 """
 
+import math
 from dataclasses import dataclass, field
 from typing import Final
 from uuid import UUID
@@ -120,7 +121,9 @@ class InMemoryOtpStore(OtpStore):
 
         gate_until = self._gates.get(account_id, 0.0)
         if gate_until > now:
-            return ResendVerdict(allowed=False, retry_after_seconds=int(gate_until - now) or 1)
+            return ResendVerdict(
+                allowed=False, retry_after_seconds=self._remaining(gate_until, now)
+            )
 
         account_counter = self._counter(self._per_account, account_id, now, rules)
         if account_counter.used >= rules.resend_max_per_email:
@@ -160,6 +163,25 @@ class InMemoryOtpStore(OtpStore):
             counters[key] = counter
         return counter
 
+    @staticmethod
+    def _remaining(deadline: float, now: float) -> int:
+        """Rend le delai avant nouvelle tentative, arrondi comme le fait Redis.
+
+        AU SUPERIEUR, ET NON PAR TRONCATURE. Le `TTL` de Redis rend le nombre de
+        secondes ENTIERES restantes arrondi vers le haut : une echeance a 59,4
+        secondes rend 60. Un `int()` rendait 59 ici, et la doublure sous-evaluait
+        donc systematiquement d'une seconde le `Retry-After` que la production
+        annoncera -- un client discipline serait refuse une seconde fois.
+
+        Args:
+            deadline: l'instant ou le tourniquet rouvre.
+            now: l'instant courant.
+
+        Returns:
+            Le delai en secondes, jamais nul.
+        """
+        return max(1, math.ceil(deadline - now))
+
     def _refuse(self, counter: _ResendCounter, now: float) -> ResendVerdict:
         """Compose le refus d'un plafond atteint.
 
@@ -171,7 +193,7 @@ class InMemoryOtpStore(OtpStore):
             Le verdict de refus, avec le delai avant nouvelle tentative.
         """
         return ResendVerdict(
-            allowed=False, retry_after_seconds=int(counter.window_ends_at - now) or 1
+            allowed=False, retry_after_seconds=self._remaining(counter.window_ends_at, now)
         )
 
 

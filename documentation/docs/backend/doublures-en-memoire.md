@@ -58,6 +58,19 @@ et sérialise avec le `JsonSerializer` de l'adaptateur Redis — les vrais, pas 
 entrée composée sans groupe actif échoue donc exactement là où la production échouerait, un tuple
 revient en liste des deux côtés, et une valeur non sérialisable est refusée ici comme là-bas.
 
+**Et ses motifs sont ceux de Redis, pas ceux de `fnmatch`.** Les deux syntaxes se ressemblent puis
+divergent sur quatre points, dont une **inversion** — `[^a]` nie chez Redis, `[!a]` chez `fnmatch`,
+si bien que chaque syntaxe purge d'un côté et ne purge rien de l'autre — et un `?` qui compte un
+**octet** chez l'un, un caractère chez l'autre : dans un service francophone, une seule clé accentuée
+suffit à faire diverger n'importe quel motif. `memory/glob.py` porte `stringmatchlen()` de Redis, et
+la conformité épingle les quatre cas.
+
+**Un dépôt capturé dans un bloc meurt avec lui.** Côté SQLAlchemy c'est structurel : la session
+capturée est fermée. En mémoire, un dépôt ne tient qu'un dictionnaire — il resterait opérant
+indéfiniment, et ce qu'il écrirait serait validé par le commit d'un bloc _étranger_. La garde vit
+donc dans le **magasin**, sur ses quatre gestes transactionnels, et pas seulement sur les propriétés
+de l'unité — celles-ci ne s'exécutent qu'à l'accès.
+
 **Le temps est injecté.** `FakeClock` fait expirer un code de dix minutes en zéro seconde de test.
 
 ## La réponse à la panne, port par port
@@ -97,8 +110,14 @@ collecte pas : **un test ajouté à la base est mécaniquement joué des deux c�
 cd backend/api && uv run pytest -m conformance -v
 ```
 
-Les moitiés réelles sont **ignorées** quand leur service ne répond pas, avec le message qui dit quoi
-lancer. Une suite verte n'est donc pas la preuve que la conformité a été vérifiée : lire les `skip`.
+Les moitiés **Redis et MinIO** sont ignorées quand leur service ne répond pas, avec le message qui
+dit quoi lancer. Une suite verte n'est donc pas la preuve que la conformité a été vérifiée : lire
+les `skip`.
+
+PostgreSQL, lui, ne se saute pas : la fixture `engine` du harnais (BACK-06b) appelle `pytest.exit()`
+pour que la preuve d'isolation ne puisse pas disparaître en silence. Sans base de test, la session
+s'arrête — y compris pour les moitiés en mémoire, qui n'ont pourtant besoin d'aucun conteneur.
+L'arbitrage appartient à BACK-12, qui reprend le harnais.
 
 ### Ce qu'elle a trouvé le jour de son écriture
 
@@ -113,7 +132,23 @@ Deux divergences, **toutes deux du côté réel** — ce n'est pas la doublure q
   page ordonnée sur ce qu'il venait de remplacer : des éléments justes, dans un ordre faux, et rien
   pour le signaler.
 
-Les trois écritures du dépôt générique flushent désormais, comme `add` le faisait déjà.
+Les trois écritures du dépôt générique flushent désormais, comme `add` le faisait déjà — avec une
+nuance mesurée depuis : le flush de `delete()` est **complet**, jamais restreint à la ligne
+supprimée. `session.delete()` cascade immédiatement vers les enfants `delete-orphan`, qu'un flush
+restreint exclurait : le DELETE du parent partirait seul et heurterait la clé étrangère.
+
+Une revue contradictoire, menée dans la foulée sur le même diff, en a sorti quatre autres — dans des
+recoins qu'aucune suite n'atteignait encore :
+
+- `find_by_email` comparait l'adresse **exacte** dans la doublure, là où la base compare en
+  minuscules : une adresse déclarée libre en test, refusée en production ;
+- le `retry_after_seconds` du magasin d'OTP **tronquait** d'une seconde là où le `TTL` de Redis
+  arrondit au supérieur — ce délai sort en en-tête `Retry-After` ;
+- les quatre divergences de syntaxe de motifs décrites plus haut ;
+- un dépôt en mémoire restait opérant après la sortie de son bloc.
+
+Chacune a reçu son correctif **et** son test. Le dispositif ne dispense pas de la relecture ; il en
+fixe le résultat.
 
 ### Ce qu'elle ne couvre pas, et pourquoi
 

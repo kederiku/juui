@@ -27,8 +27,6 @@ from app.shared.infrastructure.memory.email import FakeEmailTransport
 from app.shared.infrastructure.memory.file_storage import InMemoryFileStorage
 from app.shared.infrastructure.tenancy import use_group
 
-pytestmark = pytest.mark.conformance
-
 _PNG = b"\x89PNG\r\n\x1a\n"
 
 

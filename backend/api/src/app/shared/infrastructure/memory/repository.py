@@ -80,6 +80,16 @@ class _Row[EntityT]:
     group_id: UUID | None = None
 
 
+def _always_open() -> bool:
+    """Etat par defaut d'un magasin construit sans unite de travail.
+
+    Un magasin autonome -- celui qu'un test monte pour eprouver un depot seul --
+    n'a pas de bloc a garder. Ceux que `InMemoryUnitOfWork._new_store()` fabrique
+    recoivent, eux, l'etat d'ouverture de leur unite.
+    """
+    return True
+
+
 @dataclass(slots=True)
 class InMemoryStore[EntityT: Identified]:
     """Etat d'un agregat : ce qui est valide, et ce que le bloc en cours change.
@@ -97,9 +107,20 @@ class InMemoryStore[EntityT: Identified]:
             ferait passer les tests d'annulation sans rien prouver. Une doublure
             qui sait faire moins cher peut la remplacer, jamais l'alleger sans
             raison ecrite.
+        is_open: dit si le bloc de l'unite de travail proprietaire est ouvert.
+            C'EST LA GARDE DE LA REGLE 3 DU PORT, ET ELLE EST ICI A DESSEIN.
+            Cote SQLAlchemy, la regle est STRUCTURELLE : un depot capture dans un
+            bloc tient une session que la sortie a fermee, il ne peut plus rien.
+            Un depot en memoire, lui, ne tient qu'un dictionnaire -- il resterait
+            parfaitement operant apres la sortie du bloc, et ce qu'il ecrirait
+            serait valide par le commit du bloc SUIVANT. La garde posee sur les
+            proprietes de l'unite ne suffit pas : elle ne s'execute qu'a l'ACCES,
+            pas sur l'objet deja rendu. En la mettant ici, sur les quatre gestes
+            transactionnels du magasin, elle couvre aussi le depot echappe.
     """
 
     copy: Callable[[EntityT], EntityT] = deepcopy
+    is_open: Callable[[], bool] = _always_open
     _committed: dict[UUID, _Row[EntityT]] = field(default_factory=dict, init=False)
     _written: dict[UUID, _Row[EntityT]] = field(default_factory=dict, init=False)
     _deleted: set[UUID] = field(default_factory=set, init=False)
@@ -123,7 +144,11 @@ class InMemoryStore[EntityT: Identified]:
         Returns:
             Les lignes visibles, entites copiees. Les ecritures du bloc masquent
             le valide, les suppressions du bloc le retirent.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur l'unite proprietaire.
         """
+        self._require_open()
         visible = {**self._committed, **self._written}
         return {
             entity_id: _Row(entity=self.copy(row.entity), group_id=row.group_id)
@@ -139,7 +164,11 @@ class InMemoryStore[EntityT: Identified]:
 
         Returns:
             La ligne, entite copiee, ou `None` si le bloc ne la voit pas.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur l'unite proprietaire.
         """
+        self._require_open()
         if entity_id in self._deleted:
             return None
         row = self._written.get(entity_id) or self._committed.get(entity_id)
@@ -153,7 +182,11 @@ class InMemoryStore[EntityT: Identified]:
         Args:
             row: la ligne a ecrire. L'entite est copiee : ce que l'appelant garde
                 en main ne peut plus toucher l'etat range.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur l'unite proprietaire.
         """
+        self._require_open()
         entity_id = row.entity.id
         self._deleted.discard(entity_id)
         self._written[entity_id] = _Row(entity=self.copy(row.entity), group_id=row.group_id)
@@ -163,9 +196,26 @@ class InMemoryStore[EntityT: Identified]:
 
         Args:
             entity_id: l'identifiant de la ligne a supprimer.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur l'unite proprietaire.
         """
+        self._require_open()
         self._written.pop(entity_id, None)
         self._deleted.add(entity_id)
+
+    def _require_open(self) -> None:
+        """Refuse tout geste transactionnel hors d'un bloc ouvert.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur l'unite proprietaire.
+        """
+        if not self.is_open():
+            message = (
+                "Aucune transaction en cours : l'unite de travail ne sert "
+                "que dans son bloc async with."
+            )
+            raise RuntimeError(message)
 
     def commit(self) -> None:
         """Replie les ecritures et les suppressions du bloc dans l'etat valide."""
@@ -408,20 +458,35 @@ class InMemoryRepository[EntityT: Identified](ABC):
         tests pour des regles que la vraie base n'applique peut-etre pas de la
         meme facon. Elles sont l'objet des tests d'infrastructure sur vraie base.
 
+        CE QUI EST REPRODUIT EST LA DETECTION, PAS LA MORT DE LA TRANSACTION.
+        Cote PostgreSQL, une violation de cle primaire AVORTE la transaction :
+        tout ce que le bloc tente ensuite leve `PendingRollbackError`, et le
+        travail deja fait est perdu. Ici le bloc CONTINUE. Un cas d'usage qui
+        rattraperait la collision pour poursuivre autrement passerait donc au vert
+        sur la doublure et mourrait en production. Reproduire l'avortement
+        demanderait de le reproduire pour TOUTES les violations, dont aucune autre
+        n'est detectee ici : ce serait mentir plus precisement. La regle a retenir
+        est plus simple -- ne pas rattraper cette erreur, c'est un defaut de
+        programmation du test.
+
+        L'ESTAMPILLAGE PRECEDE LA DETECTION, dans l'ordre du depot reel : hors
+        contexte de tenance, c'est `MissingTenantContextError` qui sort des deux
+        cotes, et non une collision que la production n'aurait jamais atteinte.
+
         Args:
             entity: l'entite a creer.
 
         Raises:
-            RuntimeError: si une entite porte deja cet identifiant -- defaut de
-                programmation du test, comme l'ouverture d'un bloc deja ouvert.
+            RuntimeError: si une entite porte deja cet identifiant.
         """
+        row = self._stamp(entity)
         if self._store.row(entity.id) is not None:
             message = (
                 f"Une entite porte deja l'identifiant {entity.id} dans cette doublure : "
                 "`add` cree, il ne remplace pas -- utiliser `save` pour modifier."
             )
             raise RuntimeError(message)
-        self._store.write(self._stamp(entity))
+        self._store.write(row)
 
     async def save(self, entity: EntityT, /) -> None:
         """Reporte l'etat d'une entite deja enregistree, sans valider.

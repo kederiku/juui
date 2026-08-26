@@ -377,6 +377,20 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         entite deja partie. La suite de conformite de BACK-06c l'a mis au jour :
         la doublure en memoire, elle, retirait la ligne aussitot.
 
+        FLUSH COMPLET, ET SURTOUT PAS `flush([model])` COMME `add`. La nuance
+        n'est pas de style, elle a ete mesuree : `session.delete()` cascade
+        IMMEDIATEMENT vers les enfants declares en `cascade="all, delete-orphan"`
+        et les place dans la file de suppression ; un flush restreint a la seule
+        ligne parente les en EXCLUT, le DELETE du parent part seul et heurte la
+        cle etrangere. Un flush complet emet les enfants d'abord, comme le
+        `commit()` le faisait avant que ce flush existe. `add` n'a pas ce
+        probleme -- verifie : les enfants d'une insertion partent au commit,
+        apres un parent deja insere -- et garde donc sa liste.
+
+        AUCUN MODELE NE DECLARE ENCORE DE `relationship()`, ce qui rend la
+        nuance invisible aujourd'hui. Elle attend BACK-19 et BACK-20, ou les
+        documents medicaux pendront a la fiche animal.
+
         Args:
             entity_id: l'identifiant de l'entite a supprimer.
 
@@ -386,4 +400,4 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         """
         model = await self._load(entity_id)
         await self._session.delete(model)
-        await self._session.flush([model])
+        await self._session.flush()

@@ -21,6 +21,7 @@ LA DOUBLURE SUIT SON PORT.
 CE FICHIER REMPLACE `tests/modules/identity/otp_doubles.py`, ecrit en avance sur
 ce ticket par BACK-17 et dont la docstring promettait sa propre disparition. Ce
 qui restait specifiquement de TEST -- les bornes par defaut, la fabrique de
-compte -- est reste sous `tests/`, dans `factories.py` : une doublure repond a un
-port, une fabrique de donnees ne repond a personne.
+compte, la lecture de l'etat valide -- est reste sous `tests/`, dans
+`helpers.py` : une doublure repond a un port, une aide de test ne repond a
+personne.
 """

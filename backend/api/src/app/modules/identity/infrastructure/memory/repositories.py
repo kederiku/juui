@@ -36,13 +36,17 @@ class InMemoryAccountRepository(InMemoryRepository[Account], AccountRepository):
         -- mais la convention est ce qui fera porter le filtre aux finders du
         premier module tenant qui en ecrira.
 
-        LA COMPARAISON EST EXACTE, alors que la base compare en minuscules
-        (`ix_accounts_email_lower`, INFRA-09). Ce n'est pas une divergence
-        tolerable par negligence : l'adresse est NORMALISEE par le domaine avant
-        d'atteindre le port (`normalize_email`), donc les deux cotes voient deja
-        la meme chaine. Ce que la base garantit en plus -- qu'aucune insertion
-        concurrente ne cree un doublon de casse -- est une contrainte de
-        STOCKAGE, prouvee par les tests d'infrastructure et non reproductible ici.
+        LA COMPARAISON MET LA VALEUR RANGEE EN MINUSCULES, exactement comme
+        `func.lower(AccountModel.email)` cote SQLAlchemy (INFRA-09) -- et non
+        l'argument, deja normalise par le domaine (`normalize_email`). La nuance
+        porte sur ce qui est RANGE : une ligne ecrite hors du domaine peut porter
+        `Veto@x.fr`, et le depot reel la retrouve. Une comparaison exacte ici
+        declarerait l'adresse LIBRE alors que la production la refuse -- une
+        creation de compte qui passe en test et echoue en production.
+
+        Ce que la base garantit en plus -- qu'aucune insertion concurrente ne cree
+        un doublon de casse -- reste une contrainte de STOCKAGE, prouvee par les
+        tests d'infrastructure et non reproductible ici.
 
         Args:
             email: l'adresse, deja normalisee par le domaine.
@@ -51,6 +55,6 @@ class InMemoryAccountRepository(InMemoryRepository[Account], AccountRepository):
             Le compte, ou None si l'adresse est libre.
         """
         for row in self._scope():
-            if row.entity.email == email:
+            if row.entity.email.lower() == email:
                 return row.entity
         return None

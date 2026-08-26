@@ -12,7 +12,7 @@ import pytest
 
 from app.shared.domain.pagination import PageRequest
 from app.shared.infrastructure.memory.repository import InMemoryRepository, InMemoryStore
-from app.shared.infrastructure.tenancy import use_group
+from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
 from tests.shared.tenancy_stubs import (
     InMemoryNoteUnitOfWork,
     InMemoryPlainNoteRepository,
@@ -20,8 +20,6 @@ from tests.shared.tenancy_stubs import (
     PlainNoteNotFoundError,
     TenantNote,
 )
-
-pytestmark = pytest.mark.conformance
 
 
 async def test_a_returned_entity_is_a_copy_of_the_stored_one() -> None:
@@ -54,8 +52,34 @@ async def test_the_entity_handed_to_add_is_copied_too() -> None:
         assert (await uow.plain_notes.get(note.id)).label == "a la creation"
 
 
+async def test_a_tenant_add_without_context_fails_on_the_context_first() -> None:
+    """L'estampillage precede la detection de collision, comme cote reel.
+
+    Sans cet ordre, une collision d'identifiant hors contexte de tenance sortirait
+    ici en `RuntimeError` la ou la production leve `MissingTenantContextError` :
+    le depot reel estampille dans `_to_model`, donc bien avant que la base ait
+    l'occasion de se plaindre d'une cle primaire.
+    """
+    uow = InMemoryNoteUnitOfWork()
+    note = TenantNote(id=uuid4(), label="tenant")
+    group = uuid4()
+    async with uow:
+        with use_group(group):
+            await uow.tenant_notes.add(note)
+            await uow.commit()
+        with pytest.raises(MissingTenantContextError):
+            await uow.tenant_notes.add(note)
+
+
 async def test_adding_twice_the_same_identifier_is_refused() -> None:
-    """Ecraser en silence est le seul comportement qu'aucune base n'a."""
+    """Ecraser en silence est le seul comportement qu'aucune base n'a.
+
+    CE QUI EST REPRODUIT EST LA DETECTION, PAS LA MORT DE LA TRANSACTION : cote
+    PostgreSQL, la violation de cle primaire avorte le bloc entier et tout ce qui
+    suit leve `PendingRollbackError`. Ici le bloc continue. Un cas d'usage qui
+    rattraperait cette erreur pour poursuivre autrement passerait donc au vert ici
+    et mourrait en production -- la regle est de ne pas la rattraper.
+    """
     uow = InMemoryNoteUnitOfWork()
     note = PlainNote(id=uuid4(), label="premiere")
     async with uow:
@@ -89,15 +113,32 @@ def test_a_repository_without_its_class_attributes_is_refused() -> None:
 
 
 async def test_the_store_survives_the_block_and_the_repository_does_not() -> None:
-    """Le magasin tient lieu de base : il survit au bloc comme une base a une session."""
+    """Le magasin tient lieu de base ; le depot, lui, meurt avec son bloc.
+
+    DEUX GARDES, ET LA SECONDE EST CELLE QU'ON OUBLIE. Refuser de SERVIR un depot
+    hors bloc ne dit rien d'un depot deja servi : l'objet rendu ne tient qu'un
+    dictionnaire, il resterait operant indefiniment, et ce qu'il ecrirait serait
+    valide par le commit d'un bloc ETRANGER -- une ecriture qu'aucune transaction
+    n'a jamais autorisee. Cote SQLAlchemy la question ne se pose pas, la session
+    capturee etant fermee. Ici, c'est le magasin qui porte la garde.
+    """
     uow = InMemoryNoteUnitOfWork()
     note = PlainNote(id=uuid4(), label="durable")
     async with uow:
         await uow.plain_notes.add(note)
         await uow.commit()
+        echappe = uow.plain_notes
     assert uow.plain_store.committed_entity(note.id) == note
+    # 1. On ne peut pas SE FAIRE SERVIR un depot hors bloc.
     with pytest.raises(RuntimeError):
         _ = uow.plain_notes
+    # 2. Et un depot capture dans le bloc ne sert plus a rien apres sa sortie.
+    with pytest.raises(RuntimeError):
+        await echappe.get(note.id)
+    with pytest.raises(RuntimeError):
+        await echappe.add(PlainNote(id=uuid4(), label="ecrite hors bloc"))
+    with pytest.raises(RuntimeError):
+        await echappe.list(PageRequest())
 
 
 async def test_the_commit_counter_tells_how_many_times_the_block_validated() -> None:

@@ -5,9 +5,9 @@ description: Un dépôt dédié aux agrégats tenant charge puis vérifie le gro
 
 # ADR-0013 — Le filtre de tenance vit dans le dépôt, l'échappatoire se déclare
 
-| Statut      | Date       | Tickets                                                             |
-| ----------- | ---------- | ------------------------------------------------------------------- |
-| **Accepté** | 2026-08-25 | BACK-06b, BACK-06c (à venir), BACK-25 (à venir), INFRA-08 (à venir) |
+| Statut      | Date       | Tickets                                                   |
+| ----------- | ---------- | --------------------------------------------------------- |
+| **Accepté** | 2026-08-25 | BACK-06b, BACK-06c, BACK-25 (à venir), INFRA-08 (à venir) |
 
 ## Contexte
 
@@ -54,7 +54,7 @@ L'événement `do_orm_execute` aurait ajouté le critère à chaque SELECT, find
 couvre pas l'identity map de `session.get()` — aucun SQL émis, aucun critère appliqué — donc le
 chargé-vérifié resterait nécessaire : deux mécanismes au lieu d'un. Il ignore l'erreur d'absence
 propre à chaque module, que seul le dépôt connaît. Il serait invisible des doublures en mémoire de
-BACK-06c, dont le test de conformité doit reproduire la même tenance. Et il déplacerait le filtre
+BACK-06c, dont le test de conformité reproduit la même tenance — `InMemoryTenantRepository` y parvient en surchargeant les **mêmes deux coutures** que le dépôt réel. Et il déplacerait le filtre
 hors du code que la revue lit — à rebours du choix conscient et visible voulu par l'ADR-0004.
 
 ### Le filtre dans la classe de base, conditionné au mixin

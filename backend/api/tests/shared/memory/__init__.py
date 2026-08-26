@@ -14,4 +14,9 @@ Trois familles :
 Tout le reste appartient a `tests/shared/conformance/` : un comportement qui
 peut se comparer aux deux implementations DOIT y etre, sinon il n'engage que la
 doublure.
+
+AUCUN MARQUEUR `conformance` ICI, ET C'EST LA MEME REGLE VUE DE L'AUTRE COTE.
+`pyproject.toml` definit ce marqueur comme « suites jouees contre l'implementation
+reelle ET sa doublure » : le poser sur ces tests ferait annoncer a
+`pytest -m conformance` des tests qui ne comparent rien.
 """

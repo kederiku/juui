@@ -27,7 +27,7 @@ from app.modules.identity.infrastructure.clients.redis_otp_store import (
     derive_otp_pepper,
 )
 from app.shared.infrastructure.clients.cache_keys import environment_slug
-from tests.modules.identity.helpers import otp_rules
+from tests.modules.identity.helpers import a_client_ip, otp_rules
 
 pytestmark = pytest.mark.otp
 
@@ -201,7 +201,7 @@ async def test_the_account_ceiling_closes_after_its_quota(store: RedisOtpStore) 
 
 async def test_the_ip_ceiling_counts_across_accounts(store: RedisOtpStore) -> None:
     """Le plafond par IP compte l'APPELANT, quel que soit le compte vise."""
-    client_ip = f"203.0.113.{uuid4().int % 200 + 1}"
+    client_ip = a_client_ip()
     rules = otp_rules(resend_min_interval_seconds=0, resend_max_per_email=10, resend_max_per_ip=2)
 
     verdicts = [
