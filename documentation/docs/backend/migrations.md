@@ -39,8 +39,10 @@ La relecture est donc obligatoire, et elle vérifie au minimum :
 
 - **l'ordre des colonnes** : identité, tenance, colonnes du modèle, horodatage — la silhouette
   imposée par les `sort_order` des `mixins` ;
-- **les noms passés par `op.f()`** (`pk_accounts`, `ix_accounts_email`) : c'est la convention
-  de nommage figée qui parle, pas une fantaisie du générateur ;
+- **les noms passés par `op.f()`** (`pk_accounts`, `ix_custodies_animal_id`) : c'est la
+  convention de nommage figée qui parle, pas une fantaisie du générateur. Exception : un index
+  d'**expression** (`ix_accounts_email_lower`, INFRA-09) porte un nom écrit à la main — la
+  convention compose ses noms à partir de colonnes et ne sait rien nommer d'un `lower(email)` ;
 - **l'index unique reste un index** : `unique=True, index=True` sur une colonne produit un
   `op.create_index(..., unique=True)` nommé `ix_…`. Le « corriger » en contrainte `uq_…`
   ferait diverger la base des métadonnées, et `alembic check` le reprocherait à chaque fois ;
@@ -117,7 +119,7 @@ postgres` depuis la racine), depuis `backend/api/` :
 
 ```bash
 uv run alembic upgrade head     # applique tout
-uv run alembic current          # -> 41e48e9250af (head)
+uv run alembic current          # -> 91eefe8e775b (head)
 uv run alembic downgrade base   # revient à zéro — geste de vérification, base de dev uniquement
 uv run alembic current          # -> (vide)
 uv run alembic upgrade head     # rejoue sans erreur
@@ -136,7 +138,8 @@ docker compose --project-directory . -f docker/docker-compose.yml exec postgres 
   psql -U juui -d juui -c '\d accounts'
 ```
 
-Attendu : `"pk_accounts" PRIMARY KEY` et `"ix_accounts_email" UNIQUE`.
+Attendu : `"pk_accounts" PRIMARY KEY` et `"ix_accounts_email_lower" UNIQUE, btree
+(lower(email::text))` — la forme exacte qu'affiche psql pour l'index d'expression d'INFRA-09.
 
 ## Vérifier que la comparaison voit vraiment quelque chose
 
