@@ -16,22 +16,23 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 
 ## Les pages de cette section
 
-| Page                                                    | Ce qu'on y trouve                                                          |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [Structure du service](./structure.md)                  | L'arborescence de `backend/api` et ce que fait `main.py` au démarrage.     |
-| [Architecture du service](./architecture-du-service.md) | Les trois espaces, les trois couches d'un module, la règle des 3 modèles.  |
-| [Configuration](./configuration.md)                     | Les Settings Pydantic et la validation au démarrage.                       |
-| [Persistance](./persistance.md)                         | Le moteur SQLAlchemy, la convention de nommage, les mixins, la tenance.    |
-| [Unité de travail](./unite-de-travail.md)               | Le port UnitOfWork, le dépôt générique, l'injection par requête.           |
-| [Migrations](./migrations.md)                           | Alembic piloté par Settings, un seul migrateur à la fois.                  |
-| [Cache](./cache.md)                                     | Le port de cache Redis et sa dégradation gracieuse.                        |
-| [Stockage objet](./stockage-objet.md)                   | Le port S3/MinIO et les URLs pré-signées.                                  |
-| [Tâches de fond](./taches-de-fond.md)                   | TaskIQ : le broker, le worker, la politique de reprise.                    |
-| [Surface HTTP](./surface-http.md)                       | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
-| [Erreurs](./erreurs.md)                                 | La hiérarchie `DomainError`, le format d'erreur unique, le 404-jamais-403. |
-| [Journalisation](./journalisation.md)                   | Les deux formats, l'identifiant de requête, le masquage, le CORS.          |
-| [Dépendances](./dependances.md)                         | Les dépendances déclarées, `--frozen`/`--locked`, la version d'`uv`.       |
-| [Qualité et typage](./qualite-et-typage.md)             | Ruff, Mypy strict et les contrats Import Linter.                           |
+| Page                                                        | Ce qu'on y trouve                                                          |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| [Structure du service](./structure.md)                      | L'arborescence de `backend/api` et ce que fait `main.py` au démarrage.     |
+| [Architecture du service](./architecture-du-service.md)     | Les trois espaces, les trois couches d'un module, la règle des 3 modèles.  |
+| [Configuration](./configuration.md)                         | Les Settings Pydantic et la validation au démarrage.                       |
+| [Persistance](./persistance.md)                             | Le moteur SQLAlchemy, la convention de nommage, les mixins, la tenance.    |
+| [Unité de travail](./unite-de-travail.md)                   | Le port UnitOfWork, le dépôt générique, l'injection par requête.           |
+| [Migrations](./migrations.md)                               | Alembic piloté par Settings, un seul migrateur à la fois.                  |
+| [Cache](./cache.md)                                         | Le port de cache Redis et sa dégradation gracieuse.                        |
+| [Stockage objet](./stockage-objet.md)                       | Le port S3/MinIO et les URLs pré-signées.                                  |
+| [Tâches de fond](./taches-de-fond.md)                       | TaskIQ : le broker, le worker, la politique de reprise.                    |
+| [Vérification d'adresse (OTP)](./verification-email-otp.md) | Le code à six chiffres : haché, poivré, à usage unique, borné.             |
+| [Surface HTTP](./surface-http.md)                           | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
+| [Erreurs](./erreurs.md)                                     | La hiérarchie `DomainError`, le format d'erreur unique, le 404-jamais-403. |
+| [Journalisation](./journalisation.md)                       | Les deux formats, l'identifiant de requête, le masquage, le CORS.          |
+| [Dépendances](./dependances.md)                             | Les dépendances déclarées, `--frozen`/`--locked`, la version d'`uv`.       |
+| [Qualité et typage](./qualite-et-typage.md)                 | Ruff, Mypy strict et les contrats Import Linter.                           |
 
 ## Où en est le service
 
@@ -48,7 +49,10 @@ et toute [erreur](./erreurs.md) y sort désormais au format unique, codes namesp
 et 404-jamais-403 compris (BACK-09,
 [ADR-0014](../adr/0014-traduction-des-erreurs-a-la-bordure.md)),
 les [tâches de fond](./taches-de-fond.md) ont leur broker, leur worker et leur
-politique de reprise (BACK-15), le service est
+politique de reprise (BACK-15) — et leur premier consommateur métier, la
+[vérification d'adresse par code OTP](./verification-email-otp.md), dont le code
+est haché, poivré et engendré dans le worker (BACK-17,
+[ADR-0020](../adr/0020-otp-hache-et-echec-ferme.md)) —, le service est
 [observable](./journalisation.md) — journaux structurés, identifiant de requête
 propagé de bout en bout, contexte de tenance automatique, secrets masqués — et
 joignable depuis les trois frontends (BACK-11,

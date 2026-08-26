@@ -16,6 +16,7 @@ la correspondance entre chaque categorie et son statut :
 | `ConflictError`         | 409         |
 | `ValidationError`       | 422         |
 | `PermissionDeniedError` | 403         |
+| `TooManyRequestsError`  | 429         |
 | `DomainError` non typee | 400         |
 
 LES CODES SE LISENT EN PRODUCTION SANS OUVRIR LE CODE
@@ -47,6 +48,7 @@ __all__ = [
     "DomainError",
     "NotFoundError",
     "PermissionDeniedError",
+    "TooManyRequestsError",
     "ValidationError",
 ]
 
@@ -135,3 +137,46 @@ class PermissionDeniedError(DomainError):
     """
 
     code: ClassVar[str] = "shared.resource.forbidden"
+
+
+class TooManyRequestsError(DomainError):
+    """L'appelant a demande trop souvent : un quota de cadence est atteint.
+
+    Traduite en 429, statut que BACK-09 n'avait pas eu a poser -- aucun parcours
+    livre jusqu'ici n'etait limite en cadence. BACK-17 en apporte le premier :
+    les renvois de code de verification sont plafonnes par adresse et par IP,
+    faute de quoi le formulaire de renvoi devient un outil de harcelement par
+    courriel, aux frais du service.
+
+    A DISTINGUER DE `ConflictError`, qui serait le refuge facile : un 409 dit
+    « l'etat de la ressource s'y oppose », alors qu'ici l'etat est bon et c'est le
+    RYTHME qui ne l'est pas. Le client n'en tire pas la meme conduite -- sur 429
+    il reessaie plus tard, sur 409 il abandonne.
+
+    `retry_after_seconds` PORTE LA SEULE INFORMATION UTILE AU CLIENT : dans combien
+    de temps reessayer. L'adaptateur d'API en fait un en-tete `Retry-After`, que
+    les clients HTTP et les navigateurs savent lire. Il reste facultatif -- un
+    quota sur fenetre glissante ne sait pas toujours dire quand il rouvrira.
+    """
+
+    code: ClassVar[str] = "shared.request.too_many"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        details: Mapping[str, object] | None = None,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        """Construit le refus, avec le delai avant nouvelle tentative s'il est connu.
+
+        Args:
+            message: la phrase destinee a l'appelant. NE JAMAIS y faire figurer le
+                compteur restant : ce serait dire a un attaquant combien d'essais
+                il lui reste avant de changer d'adresse IP.
+            details: complement structure et serialisable en JSON.
+            retry_after_seconds: delai en secondes avant que l'appel redevienne
+                possible. `None` quand le quota ne sait pas le dire.
+        """
+        super().__init__(message, details=details)
+        self.retry_after_seconds = retry_after_seconds

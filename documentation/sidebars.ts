@@ -60,6 +60,11 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'backend/cache', label: 'Cache' },
         { type: 'doc', id: 'backend/stockage-objet', label: 'Stockage objet' },
         { type: 'doc', id: 'backend/taches-de-fond', label: 'Tâches de fond' },
+        {
+          type: 'doc',
+          id: 'backend/verification-email-otp',
+          label: 'Vérification d’adresse (OTP)',
+        },
         { type: 'doc', id: 'backend/surface-http', label: 'Surface HTTP' },
         { type: 'doc', id: 'backend/erreurs', label: 'Erreurs' },
         { type: 'doc', id: 'backend/journalisation', label: 'Journalisation' },

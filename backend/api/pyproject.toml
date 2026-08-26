@@ -206,6 +206,22 @@ convention = "google"
 # produisent des methodes de classe.
 classmethod-decorators = ["pydantic.field_validator", "pydantic.model_validator"]
 
+[tool.ruff.lint.flake8-bugbear]
+# B008 refuse un APPEL dans une valeur par defaut, et il a raison : l'appel n'a
+# lieu qu'une fois, a la definition, ce qui fait d'un `= []` ou d'un `= now()`
+# un piege classique. `TaskiqDepends` est l'exception que la regle prevoit --
+# l'appel ne construit qu'un MARQUEUR, que l'injecteur de TaskIQ relit a chaque
+# execution ; c'est le pendant de `fastapi.Depends`, que la meme option couvre
+# dans tous les projets FastAPI.
+#
+# POURQUOI CE MARQUEUR N'EST PAS EN `Annotated`, comme `Depends` l'est partout
+# ailleurs dans ce depot : le type de `Task.kiq` est calque sur la signature de
+# la tache, et une dependance annotee y devient un argument obligatoire a
+# l'APPEL -- l'appelant devrait fournir l'unite de travail du worker. Le defaut
+# est ce qui reduit la signature de `kiq` aux arguments qui voyagent vraiment
+# sur le fil (BACK-17).
+extend-immutable-calls = ["taskiq.TaskiqDepends"]
+
 [tool.ruff.lint.per-file-ignores]
 # La regle a ete posee avant tests/ pour que la suite de tests naisse conforme ;
 # BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 apportera le
@@ -292,6 +308,7 @@ markers = [
     "tenant_isolation: tests d'isolation multi-tenant (BACK-06b)",
     "pagination: tests de la convention de pagination (BACK-24)",
     "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
+    "otp: tests de la verification d'adresse par code OTP (BACK-17)",
 ]
 
 # ---------------------------------------------------------------------------

@@ -115,11 +115,17 @@ def build_key_builder(settings: Settings) -> CacheKeyBuilder:
     Returns:
         Le compositeur, a partager pour toute la duree du processus.
     """
-    return CacheKeyBuilder(environment=_environment_slug(settings.app.environment))
+    return CacheKeyBuilder(environment=environment_slug(settings.app.environment))
 
 
-def _environment_slug(environment: Literal["development", "staging", "production"]) -> str:
+def environment_slug(environment: Literal["development", "staging", "production"]) -> str:
     """Abrege l'environnement en premier segment de cle.
+
+    PUBLIQUE DEPUIS BACK-17, qui compose ses propres cles : le magasin d'OTP vit
+    dans la meme base 0, doit porter le meme premier segment, et n'a rien a faire
+    du perimetre de tenance que `CacheKeyBuilder` ajoute ensuite. Une seconde
+    table `development -> dev` ailleurs dans le service aurait derive au premier
+    environnement ajoute.
 
     `development` devient `dev` et `production` devient `prod` : c'est la
     promesse que les deux `.env.example` publient au-dessus d'`ENVIRONMENT`
