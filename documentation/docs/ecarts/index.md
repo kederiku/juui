@@ -38,6 +38,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [INFRA-05b](./infra.md#écarts-assumés-avec-le-ticket-infra-05b)  | La pile compose complète                               |
 | [INFRA-06](./infra.md#écarts-assumés-avec-le-ticket-infra-06)    | Le Makefile de la racine                               |
 | [INFRA-07](./infra.md#écarts-assumés-avec-le-ticket-infra-07)    | Mailpit, le SMTP de développement                      |
+| [INFRA-09](./infra.md#écarts-assumés-avec-le-ticket-infra-09)    | Les extensions PostgreSQL et l'unicité d'e-mail        |
 | [BACK-02](./back.md#écarts-assumés-avec-le-ticket-back-02)       | L'outillage qualité Python (Ruff, Mypy)                |
 | [BACK-03](./back.md#écarts-assumés-avec-le-ticket-back-03)       | La configuration validée au démarrage                  |
 | [BACK-04](./back.md#écarts-assumés-avec-le-ticket-back-04)       | Le socle hexagonal et le module pilote                 |

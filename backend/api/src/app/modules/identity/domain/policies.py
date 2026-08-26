@@ -26,10 +26,10 @@ def normalize_email(value: str) -> str:
     comptes pour une seule personne, et la seconde inscription passerait le
     controle d'unicite sans broncher.
 
-    La regle est ici parce qu'elle est METIER : la base la fera respecter de son
-    cote avec un index insensible a la casse (INFRA-09), mais un index refuse,
-    il ne normalise pas -- l'utilisateur recevrait un conflit la ou il attend un
-    compte.
+    La regle est ici parce qu'elle est METIER : la base la fait respecter de
+    son cote avec l'index `ix_accounts_email_lower` (INFRA-09, ADR-0016), mais
+    un index refuse, il ne normalise pas -- l'utilisateur recevrait un conflit
+    la ou il attend un compte.
 
     Args:
         value: l'adresse telle que saisie.

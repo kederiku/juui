@@ -143,6 +143,11 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0015-cles-etrangeres-frontiere-module',
           label: 'Clés étrangères au bord du module',
         },
+        {
+          type: 'doc',
+          id: 'adr/0016-unicite-email-insensible-casse',
+          label: 'Unicité d’e-mail',
+        },
       ],
     },
     {
