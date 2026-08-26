@@ -12,9 +12,11 @@ plutot qu'en liste au sommet : un objet s'etend sans casser le contrat -- on
 peut ajouter une cle demain -- et Orval le type proprement, la ou une union
 objet-ou-liste serait penible des deux cotes.
 
-`request_id` vaut `null` tant que l'intergiciel de correlation (BACK-11) n'est
-pas pose : le champ et sa plomberie (`core/correlation.py`) sont livres, seul
-l'intergiciel manque. Ecart consigne au registre.
+`request_id` porte l'identifiant de la requete, pose par l'intergiciel de
+correlation (BACK-11) et renvoye au client dans l'en-tete `X-Request-ID` : le
+corps d'une erreur et les lignes de journal qui la racontent se recoupent. Il ne
+vaut `null` que HORS de toute requete HTTP -- une `DomainError` levee depuis une
+tache de fond ou un script --, ce qui reste un etat normal.
 """
 
 from pydantic import BaseModel, ConfigDict, JsonValue

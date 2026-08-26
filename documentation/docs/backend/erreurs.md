@@ -51,15 +51,22 @@ clés, **toujours présentes**, `null` compris :
   "code": "identity.account.not_found",
   "message": "Aucun compte ne porte l'identifiant demandé.",
   "details": null,
-  "request_id": null
+  "request_id": "8f2e1c04a7b3419d"
 }
 ```
 
 Le schéma vit dans `shared/infrastructure/api/schemas/error.py` ; c'est lui que le mutator d'Orval
 ([ADR-0007](../adr/0007-client-api-genere-orval.md)) normalisera en un seul endroit. `details` est
 toujours un **objet** ou `null`, jamais une liste au sommet : un objet s'étend sans casser le
-contrat. `request_id` vaut `null` tant que l'intergiciel de corrélation (BACK-11) n'est pas posé —
-la plomberie (`core/correlation.py`) est prête et testée, seul l'intergiciel manque.
+contrat. `request_id` porte l'identifiant de la requête, posé par l'intergiciel de corrélation
+([Journalisation](./journalisation.md)) et renvoyé au client dans l'en-tête `X-Request-ID` : le
+corps d'une erreur et la ligne de journal qui la raconte se recoupent. Il ne vaut `null` que hors de
+toute requête HTTP — une `DomainError` levée depuis une tâche de fond ou un script.
+
+Un **500** est le seul cas où l'identifiant ne vient pas de la contextvar mais de la clé de `scope` :
+`ServerErrorMiddleware` construit sa réponse après que l'intergiciel a rendu la main, et avec le
+`send` d'origine. C'est aussi pourquoi une réponse 500 ne porte pas les en-têtes CORS — limite de
+Starlette, consignée au [registre des écarts](../ecarts/back.md).
 
 ## Les erreurs de validation Pydantic, reformatées
 
@@ -104,14 +111,14 @@ dernières depuis `backend/api`, sans docker pour les deux du milieu.
 curl -si http://localhost:8000/api/v1/inexistant | head -1
 # HTTP/1.1 404 Not Found
 curl -s http://localhost:8000/api/v1/inexistant
-# {"code":"http.request.not_found","message":"Not Found","details":null,"request_id":null}
+# {"code":"http.request.not_found","message":"Not Found","details":null,"request_id":"8f2e1c04…"}
 ```
 
 **2. La méthode refusée aussi.**
 
 ```bash
 curl -s -X POST http://localhost:8000/health/live
-# {"code":"http.request.method_not_allowed","message":"Method Not Allowed","details":null,"request_id":null}
+# {"code":"http.request.method_not_allowed","message":"Method Not Allowed","details":null,"request_id":"3d7a5b91…"}
 ```
 
 **3. Le format exact, mécaniquement.**

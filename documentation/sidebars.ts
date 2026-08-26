@@ -62,6 +62,7 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'backend/taches-de-fond', label: 'Tâches de fond' },
         { type: 'doc', id: 'backend/surface-http', label: 'Surface HTTP' },
         { type: 'doc', id: 'backend/erreurs', label: 'Erreurs' },
+        { type: 'doc', id: 'backend/journalisation', label: 'Journalisation' },
         { type: 'doc', id: 'backend/dependances', label: 'Dépendances' },
         { type: 'doc', id: 'backend/qualite-et-typage', label: 'Qualité et typage' },
       ],
@@ -149,6 +150,11 @@ const sidebars: SidebarsConfig = {
           label: 'Unicité d’e-mail',
         },
         { type: 'doc', id: 'adr/0017-pagination-par-offset', label: 'Pagination' },
+        {
+          type: 'doc',
+          id: 'adr/0018-journalisation-bibliotheque-standard',
+          label: 'Journaux structurés',
+        },
       ],
     },
     {

@@ -35,9 +35,21 @@ ici par construction. `FileStorageUnavailableError`, elle, EN descend (contrat
 du port oblige) mais reste une panne technique : le handler `DomainError` la
 re-leve vers ce chemin plutot que de la deguiser en refus metier.
 
-Les 4xx, eux, ne se journalisent pas : un refus metier est un fonctionnement
-normal du service -- les journaux d'acces arrivent avec BACK-11, comme le
-`request_id` de la reponse, lu de `core/correlation.py` et `null` d'ici la.
+Les 4xx, eux, ne se journalisent PAS ICI : un refus metier est un fonctionnement
+normal du service, et l'intergiciel d'acces de BACK-11 en produit deja une ligne,
+avec son statut et sa duree. Le `request_id` de la reponse, lui, vient de
+`core/correlation.py` : il vaut `null` seulement hors de toute requete HTTP --
+une `DomainError` levee depuis une tache de fond ou un script.
+
+LE 500 EST LE SEUL A LIRE LE `scope`, ET IL LE FAUT
+`ServerErrorMiddleware` etant la couche la plus exterieure, il construit sa
+reponse APRES que l'intergiciel de correlation a rendu la main -- donc apres le
+`reset(token)`, quand la contextvar vaut de nouveau `None`. Et il repond avec le
+`send` D'ORIGINE, si bien qu'aucune enveloppe de sortie ne peut y ajouter
+d'en-tete. `_handle_unexpected_error` fait donc les deux gestes lui-meme : il lit
+`REQUEST_ID_SCOPE_KEY`, qui vit aussi longtemps que la requete, et pose
+`X-Request-ID` sur sa propre reponse. Sans cela, les 500 -- les seules reponses
+ou l'identifiant compte vraiment -- seraient les seules a en manquer.
 """
 
 import logging
@@ -51,7 +63,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.correlation import current_request_id
+from app.core.correlation import (
+    REQUEST_ID_HEADER,
+    REQUEST_ID_SCOPE_KEY,
+    current_request_id,
+)
 from app.shared.domain.exceptions import (
     AlreadyExistsError,
     ConflictError,
@@ -92,6 +108,7 @@ def _error_response(
     message: str,
     details: Mapping[str, object] | None,
     headers: Mapping[str, str] | None = None,
+    request_id: str | None = None,
 ) -> JSONResponse:
     """Fabrique la reponse d'erreur au format unique, quatre cles toujours presentes.
 
@@ -104,6 +121,10 @@ def _error_response(
             qu'en erreur de serialisation.
         headers: en-tetes a poser sur la reponse -- ceux d'une `HTTPException`
             doivent survivre a la traduction (`WWW-Authenticate` en tete).
+        request_id: l'identifiant a inscrire, quand l'appelant l'a lu ailleurs
+            que dans la contextvar. Seul le handler du 500 s'en sert -- voir la
+            docstring du module. `None` fait lire le contexte, ce qui est le
+            chemin de tous les autres handlers.
 
     Returns:
         La reponse JSON prete a etre rendue.
@@ -113,7 +134,7 @@ def _error_response(
             "code": code,
             "message": message,
             "details": jsonable_encoder(details),
-            "request_id": current_request_id.get(),
+            "request_id": current_request_id.get() if request_id is None else request_id,
         }
     )
     return JSONResponse(
@@ -244,7 +265,8 @@ async def _handle_unexpected_error(request: Request, error: Exception) -> JSONRe
 
     Returns:
         La reponse 500 au corps fige : code generique, message generique,
-        aucun detail interne.
+        aucun detail interne -- mais l'identifiant de requete, en en-tete comme
+        dans le corps, qui est ce qui rendra l'incident relisible.
     """
     _LOGGER.error(
         "Erreur interne non geree sur %s %s.",
@@ -252,11 +274,18 @@ async def _handle_unexpected_error(request: Request, error: Exception) -> JSONRe
         request.url.path,
         exc_info=error,
     )
+    # Le `scope` et non la contextvar : celle-ci a deja ete remise a sa valeur
+    # precedente quand ce handler s'execute (voir la docstring du module).
+    request_id = request.scope.get(REQUEST_ID_SCOPE_KEY)
     return _error_response(
         status_code=500,
         code="http.server.internal_error",
         message="Une erreur interne est survenue.",
         details=None,
+        # Pose ici parce qu'aucune enveloppe de sortie ne traversera cette
+        # reponse : `ServerErrorMiddleware` repond avec le `send` d'origine.
+        headers=None if request_id is None else {REQUEST_ID_HEADER: request_id},
+        request_id=request_id,
     )
 
 

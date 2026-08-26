@@ -272,7 +272,12 @@ CMD ["uvicorn", "app.main:app", \
 # que BACK-15 n'a pas livre le broker.
 FROM runtime AS worker
 
-CMD ["taskiq", "worker", "app.shared.infrastructure.tasks.broker:broker"]
+# `--no-configure-logging` : sans lui, le `basicConfig` de TaskIQ court AVANT
+# l'import du broker, donc avant que `worker_startup` n'appelle
+# `configure_logging` (BACK-11), et poserait un second handler sur la racine --
+# chaque ligne du worker sortirait en double, dont une au mauvais format.
+CMD ["taskiq", "worker", "--no-configure-logging", \
+     "app.shared.infrastructure.tasks.broker:broker"]
 
 
 # =============================================================================

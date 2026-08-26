@@ -422,9 +422,12 @@ Cache Redis injoignable sur localhost:6399 (base 0) (demarrage) : le service con
 code de sortie : 0
 ```
 
-L'avertissement paraît alors qu'**aucune journalisation n'est configurée** : le `lastResort` de la
-bibliothèque standard sert les `WARNING` sur `stderr`. BACK-11 n'aura donc rien à défaire ici — mais
-c'est aussi pourquoi le message `INFO` de `ping()` réussi reste invisible d'ici là.
+L'avertissement paraît ici sans qu'aucune journalisation soit configurée : cette sonde s'exécute
+hors du `lifespan`, et le `lastResort` de la bibliothèque standard sert les `WARNING` sur `stderr`.
+Dans le service, la journalisation est posée par le `lifespan`
+([Journalisation](./journalisation.md)) : le message `INFO` de `ping()` réussi est visible, et la
+reprise du cache — écrite en `WARNING` tant que rien n'était configuré, faute de quoi la fin d'une
+panne aurait été invisible — est repassée en `INFO`.
 
 **5. L'application démarre et répond sans Redis, et le pool meurt avec le processus.**
 

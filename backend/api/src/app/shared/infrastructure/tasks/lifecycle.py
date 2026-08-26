@@ -24,13 +24,14 @@ from typing import Annotated, Final
 
 from taskiq import Context, TaskiqDepends, TaskiqState
 
-from app.core import get_settings
+from app.core import configure_logging, get_settings
 from app.shared.domain.ports.cache import Cache
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, RedisCache, build_cache
 from app.shared.infrastructure.db.base import Base, check_schema
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
 from app.shared.infrastructure.tasks.discovery import discover_module_tasks
+from app.shared.infrastructure.tenancy import current_group_label
 
 _LOGGER: Final = logging.getLogger(__name__)
 
@@ -50,11 +51,26 @@ async def worker_startup(state: TaskiqState) -> None:
         DatabaseUnavailableError: si PostgreSQL ne repond pas -- le worker
             meurt, compose le relance.
     """
+    settings = get_settings()
+
+    # La journalisation avant tout le reste (BACK-11), pour la meme raison que
+    # dans le `lifespan` de l'API : ce qui suit doit sortir au format du projet,
+    # l'echec de decouverte compris. Le worker n'appelle jamais `create_app()` --
+    # c'est ici, et nulle part ailleurs, qu'il herite de la configuration.
+    #
+    # Les deux commandes du worker portent `--no-configure-logging` (Dockerfile
+    # et docker-compose.override.yml) : sans lui, le `basicConfig` de TaskIQ
+    # court AVANT cet appel et poserait un second handler sur la racine.
+    #
+    # `current_group_label` passe en argument comme cote API : `core` ne peut pas
+    # importer `shared`, et c'est ce pont qui fait apparaitre le groupe d'une
+    # tache dans ses journaux.
+    configure_logging(settings.app, context_providers={"group_id": current_group_label})
+
     # La decouverte AVANT les ressources : un fichier de taches qui ne
     # s'importe pas doit tuer le worker sans avoir ouvert le moindre pool.
+    # `get_settings()` ci-dessus n'ouvre rien, la promesse tient.
     discover_module_tasks()
-
-    settings = get_settings()
 
     engine = build_engine(settings)
     try:

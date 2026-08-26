@@ -126,7 +126,6 @@ ranger, et quel ticket l'apporte.
 | Emplacement                        | Ce qui manque                                            | Ticket                    |
 | ---------------------------------- | -------------------------------------------------------- | ------------------------- |
 | `shared/domain/ports/`             | `TokenService`                                           | BACK-10a                  |
-| `shared/infrastructure/api/`       | intergiciels, identifiant de requête                     | BACK-11                   |
 | `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe | BACK-28, BACK-29, BACK-31 |
 | `modules/organization/`            | cas d'usage, invitations, routes d'administration        | BACK-25                   |
 

@@ -10,6 +10,14 @@ S3.
 `raise_app_exceptions=False` sur le transport est OBLIGATOIRE pour les tests
 du 500 : `ServerErrorMiddleware` envoie la reponse du handler PUIS re-leve
 l'exception, et sans ce drapeau elle traverserait le client de test.
+
+DEPUIS BACK-11, LES DEUX ANGLES NE PROUVENT PLUS LA MEME CHOSE
+`create_app()` monte desormais trois intergiciels ; `_build_app()` n'en monte
+aucun. Les tests batis sur la seconde eprouvent le TRADUCTEUR seul -- dont le
+comportement hors de toute requete HTTP, qui est le cas reel d'une `DomainError`
+levee depuis une tache de fond ou un script. Ceux batis sur la premiere eprouvent
+le traducteur ET la chaine. NE PAS convertir les premiers aux seconds : les deux
+angles sont distincts, et le second ne couvre pas le premier.
 """
 
 import logging
@@ -178,15 +186,25 @@ async def test_all_error_responses_share_the_same_shape() -> None:
         assert set(body) == {"code", "message", "details", "request_id"}, body
 
 
-async def test_request_id_field_is_null_without_correlation() -> None:
-    """Etat BACK-09 : le champ est present et vaut null, l'intergiciel est BACK-11."""
+async def test_request_id_field_is_null_outside_any_request_context() -> None:
+    """Le champ tolere l'absence de contexte, et cette absence est un etat NORMAL.
+
+    Depuis BACK-11, une requete HTTP porte toujours un identifiant. Ce test
+    couvre l'autre moitie : une `DomainError` levee hors de toute requete --
+    tache de fond, script, CLI -- doit se traduire sans que rien ne leve.
+    """
     async with _client(_build_app()) as client:
         response = await client.get("/raise/not-found")
     assert response.json()["request_id"] is None
 
 
-async def test_request_id_reflects_the_correlation_context() -> None:
-    """La plomberie de correlation est prete : posee, elle sort dans la reponse."""
+async def test_request_id_reflects_the_correlation_context_when_it_is_set_by_hand() -> None:
+    """Le REPLI de `_error_response`, et non le chemin nominal.
+
+    En production l'identifiant vient de la cle de `scope` posee par
+    l'intergiciel de BACK-11 ; ce test couvre la lecture de la contextvar, qui
+    reste le chemin de tout ce qui traduit une erreur hors d'une requete servie.
+    """
     async with _client(_build_app()) as client:
         with use_request_id("req-test-0001"):
             response = await client.get("/raise/not-found")
@@ -307,6 +325,10 @@ async def test_create_app_registers_the_handlers() -> None:
     body = response.json()
     assert body["code"] == "probe.note.not_found"
     assert set(body) == {"code", "message", "details", "request_id"}
+    # Depuis BACK-11 ce test prouve aussi le critere 3 de bout en bout : le
+    # meme identifiant dans l'en-tete et dans le corps, sur le cablage reel.
+    assert body["request_id"] == response.headers["x-request-id"]
+    assert body["request_id"] is not None
 
 
 async def test_create_app_unknown_route_shares_the_format() -> None:
@@ -314,6 +336,7 @@ async def test_create_app_unknown_route_shares_the_format() -> None:
         response = await client.get("/api/v1/inexistant")
     assert response.status_code == 404
     assert response.json()["code"] == "http.request.not_found"
+    assert response.json()["request_id"] is not None
 
 
 async def test_create_app_health_live_is_untouched() -> None:
@@ -322,6 +345,9 @@ async def test_create_app_health_live_is_untouched() -> None:
         response = await client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "alive"}
+    # Le temoin du nominal prouve aussi que l'identifiant sort sur une reponse
+    # SAINE, et pas seulement sur les erreurs.
+    assert response.headers["x-request-id"]
 
 
 async def test_create_app_ready_without_lifespan_does_not_leak() -> None:
@@ -333,6 +359,11 @@ async def test_create_app_ready_without_lifespan_does_not_leak() -> None:
     assert body["code"] == "http.server.internal_error"
     assert body["message"] == "Une erreur interne est survenue."
     assert "lifespan" not in response.text
+    # LE test qui rencontre en premier les deux pieges de `ServerErrorMiddleware`
+    # (BACK-11) : il repond avec le `send` d'origine, hors de toute enveloppe de
+    # sortie, et apres que la contextvar a ete remise. Sans la cle de `scope`,
+    # cette assertion echoue sur un `KeyError` ou sur un `None`.
+    assert body["request_id"] == response.headers["x-request-id"]
 
 
 async def test_openapi_schema_still_serves() -> None:

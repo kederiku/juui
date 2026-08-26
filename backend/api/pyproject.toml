@@ -288,6 +288,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "tenant_isolation: tests d'isolation multi-tenant (BACK-06b)",
     "pagination: tests de la convention de pagination (BACK-24)",
+    "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
 ]
 
 # ---------------------------------------------------------------------------
@@ -384,6 +385,13 @@ forbidden_modules = [
     # tout paquet qu'un adaptateur importe par son nom s'ajoute ici.
     "botocore",
     "pydantic_settings",
+    # Applications de la meme regle, decouvertes en BACK-11 : `starlette` etait
+    # importe par son nom depuis BACK-09 (`starlette.exceptions` dans les
+    # handlers d'erreur) sans figurer ici, et les intergiciels de BACK-11 en
+    # importent deux modules de plus (`starlette.types`, `starlette.middleware`).
+    # Interdire `fastapi` sans lui laissait au domaine un chemin ouvert vers
+    # exactement la meme technologie.
+    "starlette",
     "asyncpg",
     "alembic",
     "jwt",
