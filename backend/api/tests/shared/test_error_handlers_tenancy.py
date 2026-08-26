@@ -75,8 +75,10 @@ async def test_cross_group_response_is_indistinguishable_from_absence(
     assert absent.status_code == 404
     assert cross.status_code == 404
     absent_body, cross_body = absent.json(), cross.json()
-    # Le jour ou BACK-11 genere un identifiant par requete, il differera par
-    # construction : on compare tout le reste, qui doit etre identique.
+    # BACK-11 genere un identifiant par requete : des que ce fichier passera sur
+    # `create_app()`, les deux corps differeront par construction. On compare
+    # tout le reste, qui doit rester indistinguable -- c'est le critere de
+    # NON-DIVULGATION qui se joue ici, pas celui de correlation.
     absent_body.pop("request_id")
     cross_body.pop("request_id")
     assert absent_body == cross_body

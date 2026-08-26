@@ -1,8 +1,9 @@
 """Briques transverses du service d'API.
 
 `core/` porte ce dont toutes les couches ont besoin sans que ce soit du metier :
-la configuration (BACK-03), le contexte de correlation (`correlation.py`, livre
-par BACK-15 en anticipation), puis la journalisation (BACK-11). Rien de ce qui s'y
+la configuration (BACK-03), le contexte de requete (`correlation.py`, livre par
+BACK-15 en anticipation et complete par BACK-11) et la journalisation du
+processus (`logging.py`, BACK-11). Rien de ce qui s'y
 trouve ne doit connaitre le domaine, et le domaine ne doit rien y importer d'autre
 que des reglages.
 
@@ -27,6 +28,7 @@ from app.core.config import (
     SettingsDep,
     get_settings,
 )
+from app.core.logging import LogContextProvider, configure_logging
 
 # Re-export EXPLICITE : Mypy tourne avec `no_implicit_reexport` (implique par
 # `strict`), un simple import ne suffirait donc pas a rendre ces noms
@@ -36,9 +38,11 @@ __all__ = [
     "ConfigurationError",
     "DatabaseSettings",
     "JWTSettings",
+    "LogContextProvider",
     "RedisSettings",
     "S3Settings",
     "Settings",
     "SettingsDep",
+    "configure_logging",
     "get_settings",
 ]

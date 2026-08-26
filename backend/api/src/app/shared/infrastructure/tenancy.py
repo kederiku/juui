@@ -125,6 +125,37 @@ def require_current_group_id() -> UUID:
             assert_never(scope)
 
 
+def current_group_label() -> str | None:
+    """Rend le perimetre de tenance courant sous la forme attendue par les journaux.
+
+    Fournisseur de contexte pour `core/logging.py` (BACK-11) : `core` ne peut pas
+    importer `shared`, ce sont donc les points d'entree du processus -- le
+    `lifespan` de `main.py` et `worker_startup()` -- qui passent cette fonction a
+    `configure_logging()`. Une seule source de verite, la contextvar ci-dessus,
+    et aucune copie a tenir synchrone.
+
+    Le `match` est exhaustif A DESSEIN : un fournisseur ecrit en supposant un
+    `UUID` leverait sous le mode « tous groupes » -- dans le seed d'INFRA-08 ou
+    la CLI superadmin --, c'est-a-dire dans un formateur de journal, l'endroit du
+    service ou une exception est la plus difficile a voir.
+
+    Returns:
+        L'identifiant du groupe actif, `"*"` sous le mode « tous groupes »
+        (dont la raison, elle, n'a pas sa place sur chaque ligne de journal), ou
+        `None` hors de tout contexte de tenance.
+    """
+    scope = current_group_id.get()
+    match scope:
+        case UUID():
+            return str(scope)
+        case AllGroups():
+            return "*"
+        case None:
+            return None
+        case _:
+            assert_never(scope)
+
+
 @contextmanager
 def use_group(group_id: UUID | None) -> Iterator[None]:
     """Pose le groupe actif pour la duree du bloc, puis remet le precedent.

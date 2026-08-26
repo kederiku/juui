@@ -366,12 +366,12 @@ class RedisCache(Cache):
         if not self._degraded:
             return
         self._degraded = False
-        # WARNING et non INFO, alors que c'est une bonne nouvelle : tant que
-        # BACK-11 n'a pas configure la journalisation, le `lastResort` de la
-        # bibliotheque standard ne relaie QUE les WARNING et au-dela. En INFO, la
-        # fin d'une panne serait invisible -- et une panne dont on ne voit pas la
-        # fin se lit comme une panne qui dure.
-        _LOGGER.warning("Cache Redis de nouveau joignable sur %s.", self._target)
+        # INFO, et c'est BACK-11 qui l'a rendu possible : la reprise est une
+        # bonne nouvelle, pas un avertissement. Elle etait en WARNING tant
+        # qu'aucune journalisation n'etait configuree, parce que le `lastResort`
+        # de la bibliotheque standard ne relaie QUE les WARNING et au-dela -- une
+        # panne dont on ne voit pas la fin se lit comme une panne qui dure.
+        _LOGGER.info("Cache Redis de nouveau joignable sur %s.", self._target)
 
 
 def build_cache(settings: Settings) -> RedisCache:

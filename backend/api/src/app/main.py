@@ -22,16 +22,18 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 
-from app.core import AppSettings, get_settings
+from app.core import AppSettings, configure_logging, get_settings
 from app.modules.identity import router as identity_router
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.health import router as health_router
+from app.shared.infrastructure.api.middlewares import register_middlewares
 from app.shared.infrastructure.api.router import build_api_router
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY, build_cache
 from app.shared.infrastructure.clients.s3_storage import STORAGE_STATE_KEY, build_file_storage
 from app.shared.infrastructure.db.base import Base, check_schema
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
+from app.shared.infrastructure.tenancy import current_group_label
 
 
 @asynccontextmanager
@@ -60,6 +62,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # effet de bord, et un `import app.main` -- ce que font Mypy et les futurs
     # exports d'OpenAPI -- ne doit pas exiger un fichier .env.
     settings = get_settings()
+
+    # Second geste, et avant toute ressource : la journalisation (BACK-11).
+    # Ici plutot que dans `create_app()` pour deux raisons. `import app.main`
+    # doit rester sans effet de bord, et reconfigurer la racine de `logging` en
+    # est un -- en test, il arracherait le handler de `caplog` en plein cas. Et
+    # a cette place, TOUTES les lignes d'ouverture des ressources ci-dessous
+    # sortent deja au bon format.
+    #
+    # `current_group_label` passe en argument parce que `core` ne peut pas
+    # importer `shared` (contrat `service-spaces`) : ce fichier est l'un des deux
+    # points d'entree du processus, avec `worker_startup()`, et c'est a lui de
+    # faire le pont. Une seule source de verite -- la contextvar de `tenancy.py`
+    # --, et tout ce qui pose un groupe apparait des lors dans les journaux.
+    configure_logging(settings.app, context_providers={"group_id": current_group_label})
 
     # Seconde ressource : le moteur PostgreSQL (BACK-05). Le construire n'ouvre
     # aucune connexion ; `verify_connectivity` en ouvre une et la referme.
@@ -235,6 +251,11 @@ def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
     # de savoir repondre tout court. Fonctionnellement l'ordre est indifferent,
     # la lecture ne l'est pas.
     register_error_handlers(application)
+
+    # Puis les intergiciels (BACK-11) : identifiant de requete, journal d'acces
+    # et CORS. Leur ORDRE compte et s'explique dans `middlewares.py` -- ce
+    # fichier n'en connait que le point d'entree, comme pour les handlers.
+    register_middlewares(application, settings=settings)
 
     # Les sondes se montent SUR l'application, hors du routeur v1 : leur URL
     # est un contrat d'exploitation, pas un contrat d'API.

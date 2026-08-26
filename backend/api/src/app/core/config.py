@@ -130,7 +130,13 @@ class AppSettings(_SettingsSection):
 
     @property
     def is_production(self) -> bool:
-        """Vrai en production, ou /docs se ferme (BACK-08) et ou les logs passent en JSON."""
+        """Vrai en production, ou /docs se ferme entierement (BACK-08).
+
+        NE PAS s'en servir pour choisir le format des journaux : BACK-11 rend du
+        JSON des que l'environnement n'est pas `development`, pre-production
+        comprise -- celle-ci existe pour REPETER la production, et c'est la
+        qu'on valide l'ingestion des journaux.
+        """
         return self.environment == "production"
 
 
