@@ -83,6 +83,7 @@ foi.
 | Les Settings Pydantic et le `.env` strict           | [Configuration](https://kederiku.github.io/juui/backend/configuration)                         |
 | Le moteur SQLAlchemy, les mixins, la tenance        | [Persistance](https://kederiku.github.io/juui/backend/persistance)                             |
 | Le port UnitOfWork et le dépôt générique            | [Unité de travail](https://kederiku.github.io/juui/backend/unite-de-travail)                   |
+| Les doublures en mémoire et la conformité           | [Doublures en mémoire](https://kederiku.github.io/juui/backend/doublures-en-memoire)           |
 | Alembic et le cycle d'une migration                 | [Migrations](https://kederiku.github.io/juui/backend/migrations)                               |
 | Le port de cache Redis                              | [Cache](https://kederiku.github.io/juui/backend/cache)                                         |
 | Le port S3/MinIO et les URLs pré-signées            | [Stockage objet](https://kederiku.github.io/juui/backend/stockage-objet)                       |
@@ -97,8 +98,7 @@ foi.
 
 ## Ce qui n'est pas encore là
 
-| Sujet                                                                                                 | Ticket   |
-| ----------------------------------------------------------------------------------------------------- | -------- |
-| Doublures en mémoire (fakes)                                                                          | BACK-06c |
-| Harnais de tests complet (BACK-06b a ouvert `tests/` avec la suite `tenant_isolation` et `make test`) | BACK-12  |
-| Pipeline CI complet du backend                                                                        | QA-01    |
+| Sujet                                                                                                 | Ticket  |
+| ----------------------------------------------------------------------------------------------------- | ------- |
+| Harnais de tests complet (BACK-06b a ouvert `tests/` avec la suite `tenant_isolation` et `make test`) | BACK-12 |
+| Pipeline CI complet du backend                                                                        | QA-01   |

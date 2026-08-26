@@ -75,8 +75,8 @@ class AbstractUnitOfWork(ABC):
 
         CONCRETE DANS LE PORT, A DESSEIN. Le rollback automatique est LA
         promesse de l'unite de travail ; une methode-gabarit l'impose a tous
-        les adaptateurs -- celui de SQLAlchemy comme la doublure en memoire de
-        BACK-06c -- plutot que de la confier a leur discipline. Apres un
+        les adaptateurs -- celui de SQLAlchemy comme `InMemoryUnitOfWork`
+        (BACK-06c) -- plutot que de la confier a leur discipline. Apres un
         `commit()` reussi, ce rollback ne trouve rien a annuler et reste sans
         effet.
 

@@ -100,5 +100,7 @@ async def get_medical_records_uow(request: Request) -> MedicalRecordsUnitOfWork:
 
 # Alias a annoter les parametres de route : `uow: MedicalRecordsUowDep`. Le
 # type expose est le PORT : une route ne sait pas quelle technologie la sert,
-# et BACK-06c pourra y substituer sa doublure sans toucher aux signatures.
+# et une doublure en memoire s'y substitue sans toucher aux signatures. Celle
+# de ce module reste a ecrire -- BACK-06c n'a livre que les modules ayant un
+# consommateur reel, sur un socle qui rend la suivante mecanique.
 MedicalRecordsUowDep = Annotated[MedicalRecordsUnitOfWork, Depends(get_medical_records_uow)]

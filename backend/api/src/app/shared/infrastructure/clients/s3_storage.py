@@ -107,12 +107,19 @@ _MAX_ATTEMPTS: Final = 3
 # Constante de module et non variable d'environnement, meme arbitrage qu'en
 # BACK-05 et BACK-14 : chaque variable coute deux gabarits, une ligne de compose
 # et une ligne de documentation, et l'appelant peut deja passer `expires_in`.
-_DEFAULT_PRESIGNED_EXPIRE_SECONDS: Final = 15 * 60
+#
+# PUBLIQUE DEPUIS BACK-06c, comme `environment_slug` l'est devenue en BACK-17 :
+# la doublure en memoire applique le MEME defaut, faute de quoi le test de
+# conformite comparerait deux durees differentes en croyant comparer un contrat.
+DEFAULT_PRESIGNED_EXPIRE_SECONDS: Final = 15 * 60
 
 # Plafond de la signature V4, impose par le protocole et non par ce service : sept
 # jours. Une valeur superieure produirait une URL que le stockage refuserait, avec
 # un message qui ne nomme pas la cause.
-_MAX_PRESIGNED_EXPIRE_SECONDS: Final = 7 * 24 * 60 * 60
+#
+# PUBLIQUE DEPUIS BACK-06c, meme motif que la constante ci-dessus : une borne
+# recopiee dans la doublure derive au premier ajustement de l'une des deux.
+MAX_PRESIGNED_EXPIRE_SECONDS: Final = 7 * 24 * 60 * 60
 
 # Codes d'erreur signifiant « cet objet n'existe pas ».
 #
@@ -155,7 +162,7 @@ class S3FileStorage(FileStorage):
         bucket: str,
         target: str,
         policy: UploadPolicy = DEFAULT_UPLOAD_POLICY,
-        default_expires_in: int = _DEFAULT_PRESIGNED_EXPIRE_SECONDS,
+        default_expires_in: int = DEFAULT_PRESIGNED_EXPIRE_SECONDS,
     ) -> None:
         """Assemble l'adaptateur autour d'un client deja construit.
 
@@ -287,10 +294,10 @@ class S3FileStorage(FileStorage):
                 f"positive, recu {seconds} : une URL qui n'expire pas n'est pas exprimable."
             )
             raise ValueError(message)
-        if seconds > _MAX_PRESIGNED_EXPIRE_SECONDS:
+        if seconds > MAX_PRESIGNED_EXPIRE_SECONDS:
             message = (
                 f"Duree de validite de {seconds} secondes refusee : la signature V4 "
-                f"plafonne a {_MAX_PRESIGNED_EXPIRE_SECONDS} secondes (sept jours). "
+                f"plafonne a {MAX_PRESIGNED_EXPIRE_SECONDS} secondes (sept jours). "
                 "Au-dela, le stockage refuserait l'URL sans en dire la raison."
             )
             raise ValueError(message)
@@ -481,7 +488,7 @@ def get_file_storage(request: Request) -> FileStorage:
     """Retourne le stockage ouvert par le `lifespan`.
 
     Meme forme que `get_database` (BACK-05) et `get_cache` (BACK-14). L'`isinstance`
-    porte sur le PORT et non sur `S3FileStorage` : c'est ce qui laissera BACK-06c
+    porte sur le PORT et non sur `S3FileStorage` : c'est ce qui laisse BACK-06c
     ranger une doublure en memoire dans `app.state` sans toucher a ce fichier. Il
     est de toute facon obligatoire, `app.state` etant type `Any`.
 

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "documentation",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "documentation", "start"],
+      "port": 3004
+    }
+  ]
+}

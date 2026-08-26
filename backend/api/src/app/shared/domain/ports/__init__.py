@@ -14,6 +14,7 @@ CE QUE CHAQUE TICKET APPORTE ICI
 
 | Fichier             | Port                                | Ticket   |
 | ------------------- | ----------------------------------- | -------- |
+| `breach_checker.py` | `BreachChecker`                     | BACK-06c |
 | `cache.py`          | `Cache`                             | BACK-14  |
 | `email.py`          | `EmailTransport`                    | BACK-22  |
 | `file_storage.py`   | `FileStorage`                       | BACK-13  |
@@ -21,10 +22,16 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `unit_of_work.py`   | `AbstractUnitOfWork`                | BACK-06a |
 | `repository.py`     | `Repository` (protocole generique)  | BACK-06a |
 
-BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Cinq
+BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Six
 sont livres -- `cache.py` par BACK-14, `email.py` par BACK-22, `file_storage.py`
-par BACK-13, `unit_of_work.py` et `repository.py` par BACK-06a ; seul
-`token_service.py` reste une place reservee.
+par BACK-13, `unit_of_work.py` et `repository.py` par BACK-06a, `breach_checker.py`
+par BACK-06c ; seul `token_service.py` reste une place reservee.
+
+`breach_checker.py` EST LE SECOND CAS LIMITE. Son adaptateur appartient a
+BACK-10b, qui n'est pas livre : le port nait quand meme, parce qu'une doublure
+repond a un contrat et n'en invente pas un -- `FakeBreachChecker` (BACK-06c)
+n'aurait eu personne a qui repondre. Ecrire un port sans son adaptateur reste
+l'exception, pas la regle : ici c'est un ticket ANTERIEUR qui en avait besoin.
 
 `email.py` EST LE CAS LIMITE QUI VALIDE LA REGLE. Le transport de courriel
 appartenait a `notifications` par sa carte, et il est ici parce qu'`identity`
@@ -42,10 +49,13 @@ qu'un stockage absent change les resultats -- un upload silencieux est un
 fichier perdu ; `EmailTransport` LEVE pour la meme raison, un message perdu en
 silence etant un message dont personne n'apprendra jamais l'absence ;
 `AbstractUnitOfWork` LEVE ET ANNULE -- un commit en echec remonte, une sortie de
-bloc sans commit n'ecrit rien. Un port ne se contente
+bloc sans commit n'ecrit rien ; `BreachChecker` DEGRADE, mais pour un motif qui
+n'est PAS celui du cache -- refuser une inscription parce qu'un service tiers est
+muet coute plus cher que le risque couvert. Un port ne se contente
 donc pas de nommer des operations : il dit ce qui se passe quand le service
 qu'il masque ne repond plus, et cette reponse ne s'herite pas du port
-precedent.
+precedent -- deux ports qui degradent peuvent le faire pour des raisons sans
+rapport.
 
 CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
 Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard

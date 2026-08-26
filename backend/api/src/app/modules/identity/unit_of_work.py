@@ -89,6 +89,6 @@ async def get_identity_uow(request: Request) -> IdentityUnitOfWork:
 
 # Alias a annoter les parametres de route : `uow: IdentityUowDep`, sur le
 # modele de `SettingsDep` (BACK-08). Le type expose est le PORT : une route ne
-# sait pas quelle technologie la sert, et BACK-06c pourra y substituer sa
-# doublure sans toucher aux signatures.
+# sait pas quelle technologie la sert, et `InMemoryIdentityUnitOfWork` (BACK-06c)
+# s'y substitue sans toucher aux signatures.
 IdentityUowDep = Annotated[IdentityUnitOfWork, Depends(get_identity_uow)]

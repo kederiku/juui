@@ -93,6 +93,8 @@ async def get_organization_uow(request: Request) -> OrganizationUnitOfWork:
 
 
 # Alias a annoter les parametres de route : `uow: OrganizationUowDep`. Le type
-# expose est le PORT : une route ne sait pas quelle technologie la sert, et
-# BACK-06c pourra y substituer sa doublure sans toucher aux signatures.
+# expose est le PORT : une route ne sait pas quelle technologie la sert, et une
+# doublure en memoire s'y substitue sans toucher aux signatures. Celle de ce
+# module reste a ecrire -- BACK-06c n'a livre que les modules ayant un
+# consommateur reel, sur un socle qui rend la suivante mecanique.
 OrganizationUowDep = Annotated[OrganizationUnitOfWork, Depends(get_organization_uow)]

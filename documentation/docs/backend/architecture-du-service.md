@@ -157,59 +157,20 @@ app.shared.domain.exceptions -> app.shared.infrastructure.db.base
 app.shared.infrastructure.db.base -> sqlalchemy
 ```
 
-**Le trajet complet des trois modèles.** Le dépôt et l'unité de travail en mémoire sont définis
-_dans la sonde_ et non dans `src/` : les doublures de production appartiennent à BACK-06c.
+**Le trajet complet des trois modèles.** La sonde définissait ses propres doublures, avec un commit
+qui ne commitait pas ; depuis BACK-06c elle importe les **vraies**,
+[`InMemoryIdentityUnitOfWork`](./doublures-en-memoire.md) et son dépôt — celles dont une suite de
+conformité prouve qu'elles se comportent comme PostgreSQL. Le bloc `async with` et le `commit()`
+ci-dessous ne sont donc plus décoratifs : sans eux, rien ne serait écrit.
 
 ```bash
 uv run python - <<'PY'
 import asyncio
-from uuid import UUID
 
 from app.modules.identity.application.use_cases.create_account import CreateAccount
-from app.modules.identity.domain.entities import Account
-from app.modules.identity.domain.ports import AccountRepository, IdentityUnitOfWork
 from app.modules.identity.infrastructure.api.schemas import AccountCreate, AccountRead
 from app.modules.identity.infrastructure.db.repositories import SqlAlchemyAccountRepository
-
-
-class InMemoryAccountRepository(AccountRepository):
-    def __init__(self) -> None:
-        self.accounts: dict[UUID, Account] = {}
-
-    async def get(self, account_id: UUID) -> Account:
-        return self.accounts[account_id]
-
-    async def find_by_email(self, email: str) -> Account | None:
-        return next((a for a in self.accounts.values() if a.email == email), None)
-
-    async def add(self, account: Account) -> None:
-        self.accounts[account.id] = account
-
-    async def save(self, account: Account) -> None:
-        self.accounts[account.id] = account
-
-
-class InMemoryIdentityUnitOfWork(IdentityUnitOfWork):
-    # Doublure JETABLE : commit et rollback sans effet reel. La doublure de
-    # production, ou les deux gestes agissent sur l'etat, appartient a BACK-06c.
-    def __init__(self) -> None:
-        self._accounts = InMemoryAccountRepository()
-
-    @property
-    def accounts(self) -> AccountRepository:
-        return self._accounts
-
-    async def __aenter__(self) -> "InMemoryIdentityUnitOfWork":
-        return self
-
-    async def commit(self) -> None:
-        pass
-
-    async def rollback(self) -> None:
-        pass
-
-    async def _release(self) -> None:
-        pass
+from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
 
 
 async def walk_through() -> None:
@@ -225,8 +186,11 @@ async def walk_through() -> None:
     command = payload.to_command()
     print("2. commande (application) :", command)
 
-    account = await CreateAccount(InMemoryIdentityUnitOfWork()).execute(command)
+    uow = InMemoryIdentityUnitOfWork()
+    account = await CreateAccount(uow).execute(command)
     print("3. entite (domaine)       :", account)
+    # L'etat VALIDE, relu hors de tout bloc : la doublure commite pour de bon.
+    print("3b. commite               :", uow.accounts_store.committed_entity(account.id) is not None)
 
     # Aucune session n'est necessaire pour le sens entite -> modele : le depot
     # generique ne la touche pas dans `_to_model`.

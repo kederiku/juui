@@ -23,6 +23,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Configuration](./configuration.md)                         | Les Settings Pydantic et la validation au démarrage.                       |
 | [Persistance](./persistance.md)                             | Le moteur SQLAlchemy, la convention de nommage, les mixins, la tenance.    |
 | [Unité de travail](./unite-de-travail.md)                   | Le port UnitOfWork, le dépôt générique, l'injection par requête.           |
+| [Doublures en mémoire](./doublures-en-memoire.md)           | Les fakes du projet et la suite de conformité qui les tient au contrat.    |
 | [Migrations](./migrations.md)                               | Alembic piloté par Settings, un seul migrateur à la fois.                  |
 | [Cache](./cache.md)                                         | Le port de cache Redis et sa dégradation gracieuse.                        |
 | [Stockage objet](./stockage-objet.md)                       | Le port S3/MinIO et les URLs pré-signées.                                  |
@@ -40,10 +41,13 @@ La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
 désormais tenues par [Import Linter](./qualite-et-typage.md#import-linter) (BACK-04b), le socle de
 persistance est en place (BACK-05), l'[unité de travail](./unite-de-travail.md)
 avec son dépôt générique le coiffe (BACK-06a) et le schéma est sous contrôle de
-version par les [migrations](./migrations.md) (BACK-07), quatre des cinq ports
+version par les [migrations](./migrations.md) (BACK-07), six des sept ports
 techniques du noyau partagé sont livrés — [cache](./cache.md) (BACK-14),
-[stockage objet](./stockage-objet.md) (BACK-13), unité de travail et dépôt
-générique (BACK-06a), `TokenService` restant à BACK-10a —, la
+[stockage objet](./stockage-objet.md) (BACK-13), transport e-mail (BACK-22), unité
+de travail et dépôt générique (BACK-06a), contrôle de fuite de mot de passe
+(BACK-06c, son adaptateur restant à BACK-10b), `TokenService` restant à
+BACK-10a —, leurs [doublures en mémoire](./doublures-en-memoire.md) et la suite de
+conformité qui les tient au contrat (BACK-06c), la
 [surface HTTP](./surface-http.md) versionnée et ses sondes sont en place (BACK-08)
 et toute [erreur](./erreurs.md) y sort désormais au format unique, codes namespacés
 et 404-jamais-403 compris (BACK-09,

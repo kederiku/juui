@@ -149,65 +149,26 @@ L'invalidation est du côté écriture, par `invalidate_pattern`.
 
 Cinq sondes. Les deux premières ne demandent **aucun** conteneur.
 
-**1. Les cinq opérations, le TTL, le décorateur et la bascule de groupe — sans Redis.** La doublure
-est définie _dans la sonde_ et non dans `src/` (les doublures de production appartiennent à
-BACK-06c), mais elle compose ses clés avec le **vrai** `build_key_builder` : c'est ce qui fait que la
-sonde prouve le préfixage de production, et non le sien.
+**1. Les cinq opérations, le TTL, le décorateur et la bascule de groupe — sans Redis.** La sonde
+définissait sa propre doublure ; depuis BACK-06c elle importe la **vraie**,
+[`InMemoryCache`](./doublures-en-memoire.md), construite par `build_in_memory_cache` depuis la même
+configuration que la production — donc avec le même compositeur de clés, le même sérialiseur et le
+même TTL par défaut. Une suite de conformité la joue par ailleurs contre le vrai Redis : ce que la
+sonde montre ici est ce que l'adaptateur fait là-bas.
 
 ```bash
 uv run python - <<'PY'
-import asyncio, fnmatch, time
+import asyncio
 from uuid import UUID
 
 from app.core import get_settings
-from app.shared.domain.ports.cache import MISSING, Cache, CacheScope, JsonValue, Missing, cached
-from app.shared.infrastructure.clients.cache_keys import build_key_builder
+from app.shared.domain.ports.cache import MISSING, CacheScope, JsonValue, cached
+from app.shared.infrastructure.memory.cache import build_in_memory_cache
+from app.shared.infrastructure.memory.clock import FakeClock
 from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
 
 A = UUID("01931f2a-0000-7000-8000-00000000000a")
 B = UUID("01931f2a-0000-7000-8000-00000000000b")
-
-
-class InMemoryCache(Cache):
-    """Doublure du port, adossee au VRAI compositeur de cles."""
-
-    def __init__(self, settings, default_ttl_seconds=300):
-        self._keys = build_key_builder(settings)
-        self._default_ttl_seconds = default_ttl_seconds
-        self._entries: dict[str, tuple[JsonValue, float]] = {}
-
-    def physical_keys(self):
-        maintenant = time.monotonic()
-        return sorted(k for k, (_, fin) in self._entries.items() if fin > maintenant)
-
-    async def get(self, key, *, scope=CacheScope.TENANT) -> JsonValue | Missing:
-        physique = self._keys.key(key, scope)
-        entree = self._entries.get(physique)
-        if entree is None:
-            return MISSING
-        if entree[1] <= time.monotonic():
-            del self._entries[physique]
-            return MISSING
-        return entree[0]
-
-    async def set(self, key, value, *, ttl=None, scope=CacheScope.TENANT) -> None:
-        secondes = self._default_ttl_seconds if ttl is None else ttl
-        if secondes <= 0:
-            raise ValueError("Un TTL de cache doit etre strictement positif.")
-        self._entries[self._keys.key(key, scope)] = (value, time.monotonic() + secondes)
-
-    async def delete(self, key, *, scope=CacheScope.TENANT) -> bool:
-        return self._entries.pop(self._keys.key(key, scope), None) is not None
-
-    async def exists(self, key, *, scope=CacheScope.TENANT) -> bool:
-        return await self.get(key, scope=scope) is not MISSING
-
-    async def invalidate_pattern(self, pattern, *, scope=CacheScope.TENANT) -> int:
-        motif = self._keys.pattern(pattern, scope)
-        vises = [k for k in self.physical_keys() if fnmatch.fnmatchcase(k, motif)]
-        for cle in vises:
-            del self._entries[cle]
-        return len(vises)
 
 
 class LireLeDossier:
@@ -222,7 +183,9 @@ class LireLeDossier:
 
 
 async def main() -> None:
-    cache = InMemoryCache(get_settings(), default_ttl_seconds=1)
+    # L'horloge est pilotee : l'expiration se prouve sans dormir.
+    horloge = FakeClock()
+    cache = build_in_memory_cache(get_settings(), clock=horloge)
 
     with use_group(A):
         await cache.set("dossier:42", {"note": "vu par le groupe A"}, ttl=60)
@@ -231,8 +194,10 @@ async def main() -> None:
         await cache.set("liste:1", 1, ttl=60)
         await cache.set("liste:2", 2, ttl=60)
         print("3. invalidate_pattern   :", await cache.invalidate_pattern("liste:*"))
+        # Sans `ttl` : c'est le defaut configure (REDIS_CACHE_TTL_SECONDS) qui
+        # s'applique, celui-la meme que porte l'adaptateur Redis.
         await cache.set("ephemere", "x")
-        await asyncio.sleep(1.2)
+        horloge.advance(get_settings().redis.cache_ttl_seconds + 1)
         print("4. TTL par defaut expire:", await cache.get("ephemere") is MISSING)
         cas = LireLeDossier(cache)
         await cas.execute("rex")
@@ -249,7 +214,7 @@ async def main() -> None:
 
     await cache.set("otp:0612345678", "123456", ttl=60, scope=CacheScope.SHARED)
     try:
-        await cache.set("dossier:1", "x")
+        await cache.set("dossier:1", "x", ttl=60)
     except MissingTenantContextError as erreur:
         print("9. hors contexte de groupe            :", type(erreur).__name__)
 

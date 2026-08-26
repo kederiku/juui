@@ -25,16 +25,15 @@ from app.modules.identity.domain.exceptions import (
     OtpCodeInvalidError,
 )
 from app.modules.identity.domain.ports import OtpConsumption, OtpStoreUnavailableError
-from tests.modules.identity.otp_doubles import (
-    FakeClock,
+from app.modules.identity.infrastructure.memory.otp import (
     FakeOtpSender,
-    InMemoryIdentityUnitOfWork,
     InMemoryOtpStore,
     RecordingOtpDispatcher,
     UnavailableOtpStore,
-    an_account,
-    otp_rules,
 )
+from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
+from app.shared.infrastructure.memory.clock import FakeClock
+from tests.modules.identity.helpers import an_account, otp_rules, stored_account
 
 
 class _CountingOtpStore(InMemoryOtpStore):
@@ -80,7 +79,7 @@ async def test_the_right_code_verifies_the_address() -> None:
     assert verified.email_verified
     # L'etat VALIDE, et non celui que le bloc tenait en main : c'est la seule
     # lecture qui prouve le commit.
-    assert uow.stored(account.id).email_verified
+    assert stored_account(uow, account.id).email_verified
     assert uow.commits == 1
 
 
@@ -116,7 +115,7 @@ async def test_a_wrong_code_is_refused_without_verifying() -> None:
     with pytest.raises(OtpCodeInvalidError):
         await use_case.execute(VerifyEmailCommand(account_id=account.id, code="000000"))
 
-    assert not uow.stored(account.id).email_verified
+    assert not stored_account(uow, account.id).email_verified
     assert uow.commits == 0
 
 
@@ -190,7 +189,7 @@ async def test_three_wrong_attempts_destroy_the_code() -> None:
     # bloque -- sinon il suffirait d'attendre.
     with pytest.raises(OtpCodeInvalidError):
         await use_case.execute(VerifyEmailCommand(account_id=account.id, code=good_code))
-    assert not uow.stored(account.id).email_verified
+    assert not stored_account(uow, account.id).email_verified
 
 
 async def test_a_wrong_attempt_does_not_burn_the_others() -> None:
@@ -247,7 +246,7 @@ async def test_an_unreachable_store_verifies_nothing() -> None:
     with pytest.raises(OtpStoreUnavailableError):
         await use_case.execute(VerifyEmailCommand(account_id=account.id, code="000000"))
 
-    assert not uow.stored(account.id).email_verified
+    assert not stored_account(uow, account.id).email_verified
     assert uow.commits == 0
 
 
@@ -279,4 +278,4 @@ async def test_the_full_journey_from_request_to_verification() -> None:
     )
 
     assert verified.email_verified
-    assert uow.stored(account.id).email_verified
+    assert stored_account(uow, account.id).email_verified

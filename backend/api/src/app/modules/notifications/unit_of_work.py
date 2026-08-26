@@ -91,5 +91,6 @@ async def get_notifications_uow(request: Request) -> NotificationsUnitOfWork:
 
 # Alias a annoter les parametres de route : `uow: NotificationsUowDep`. Le type
 # expose est le PORT : une route ne sait pas quelle technologie la sert, et
-# BACK-06c pourra y substituer sa doublure sans toucher aux signatures.
+# `InMemoryNotificationsUnitOfWork` (BACK-06c) s'y substitue sans toucher aux
+# signatures.
 NotificationsUowDep = Annotated[NotificationsUnitOfWork, Depends(get_notifications_uow)]

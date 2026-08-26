@@ -22,8 +22,10 @@ L'evenement ORM global aurait filtre les SELECT, mais : il ne couvre pas
 l'identity map de `session.get` (aucun SQL emis, aucun critere applique) ; il
 ignore l'erreur d'absence du module, que seul le depot connait ; il serait
 invisible des doublures en memoire de BACK-06c, dont le test de conformite
-commun doit reproduire la meme tenance ; et il deplacerait le filtre hors du
-code que la revue lit -- a rebours d'ADR-0004, qui veut un choix visible. La
+commun reproduit la meme tenance -- ce que `InMemoryTenantRepository` fait en
+surchargeant les MEMES deux coutures que cette classe ; et il deplacerait le
+filtre hors du code que la revue lit -- a rebours d'ADR-0004, qui veut un choix
+visible. La
 seconde ceinture prevue est le RLS PostgreSQL, differee par ADR-0004.
 
 TOUTE REQUETE MAISON COMMENCE PAR `self._select()`
