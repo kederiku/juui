@@ -28,6 +28,8 @@ tenant. Seule la convention commune s'applique : `find_by_email` part de
 `self._select()`, la couture que le filtre surcharge chez les depots tenant.
 """
 
+from sqlalchemy import func
+
 from app.modules.identity.domain.entities import Account, AccountStatus, AccountType
 from app.modules.identity.domain.exceptions import AccountNotFoundError
 from app.modules.identity.domain.ports import AccountRepository
@@ -83,12 +85,18 @@ class SqlAlchemyAccountRepository(SqlAlchemyRepository[Account, AccountModel], A
     async def find_by_email(self, email: str) -> Account | None:
         """Cherche un compte par son adresse normalisee.
 
+        La comparaison passe par `lower(email)` : c'est la SEULE forme que
+        l'index `ix_accounts_email_lower` (INFRA-09) sait servir -- une
+        egalite sur la colonne nue repartirait en parcours de table. Le depot
+        ne re-normalise pas l'entree pour autant : la forme canonique est une
+        regle du domaine, deja appliquee par les appelants du port.
+
         Args:
             email: l'adresse, deja normalisee par le domaine.
 
         Returns:
             Le compte, ou None si l'adresse est libre.
         """
-        statement = self._select().where(AccountModel.email == email)
+        statement = self._select().where(func.lower(AccountModel.email) == email)
         model = (await self._session.execute(statement)).scalar_one_or_none()
         return None if model is None else self._to_entity(model)

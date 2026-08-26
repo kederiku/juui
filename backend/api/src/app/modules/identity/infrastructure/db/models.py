@@ -26,7 +26,7 @@ l'appartenance a un groupe est une relation N:M DATEE portee par le module
 groupes avec un seul compte.
 """
 
-from sqlalchemy import String
+from sqlalchemy import Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.shared.infrastructure.db.base import Base
@@ -37,15 +37,25 @@ class AccountModel(UUIDPrimaryKey, TimestampMixin, Base):
     """Table des comptes d'acces au service."""
 
     __tablename__ = "accounts"
+    __table_args__ = (
+        # Unicite d'e-mail INSENSIBLE A LA CASSE, rendue physique (INFRA-09,
+        # ADR-0016) : `Veto@x.fr` apres `veto@x.fr` echoue sur cet index. Le
+        # nom est EXPLICITE, seule entorse a `op.f()` : la convention de
+        # nommage (`column_0_N_name`) ne sait pas nommer une expression.
+        # Declare ICI et pas seulement en migration : les tests creent les
+        # tables par `Base.metadata.create_all`, qui ne lit que le modele.
+        Index("ix_accounts_email_lower", text("lower(email)"), unique=True),
+    )
 
     # 320 caracteres : la longueur maximale d'une adresse e-mail selon la RFC
     # 5321 (64 pour la partie locale, 255 pour le domaine, plus l'arobase).
     #
-    # `unique=True` pose l'index, mais il est SENSIBLE A LA CASSE. La garantie
-    # complete viendra d'INFRA-09 (citext ou index sur `lower(email)`) ; en
-    # attendant, c'est la normalisation du domaine qui tient la promesse --
-    # raison de plus pour qu'elle soit dans l'entite et non dans une route.
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # Pas de `unique=True` sur la colonne : l'index fonctionnel ci-dessus
+    # subsume l'unicite exacte, un second index sur la meme colonne ne serait
+    # qu'un cout d'ecriture de plus. L'index refuse le doublon, il ne
+    # normalise pas : la forme canonique reste posee par le domaine
+    # (`normalize_email`), qui seul sait repondre autre chose qu'un conflit.
+    email: Mapped[str] = mapped_column(String(320))
 
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
