@@ -54,18 +54,19 @@ complet, `GET /api/v1/search` filtre par destinataire et `DELETE /api/v1/message
 la vide entre deux cas. La documentation interactive est servie par l'instance
 elle-même, sur [http://localhost:8025/api/v1/](http://localhost:8025/api/v1/).
 
-C'est ce que feront BACK-17 et l'helper de lecture d'e-mails de QA-04 : lire le
-code **réellement émis**, plutôt que d'aller le chercher dans Redis. Un test qui
-lit Redis vérifie ce que le code a écrit ; il passerait au vert avec un envoi
-cassé, une adresse erronée ou un gabarit vide.
+C'est ce que fait [BACK-17](../backend/verification-email-otp.md), et ce que fera
+l'helper de lecture d'e-mails de QA-04 : lire le code **réellement émis**, plutôt
+que d'aller le chercher dans Redis. Un test qui lit Redis vérifie ce que le code a
+écrit ; il passerait au vert avec un envoi cassé, une adresse erronée ou un
+gabarit vide.
 
-:::note L'adaptateur SMTP appartient à BACK-22
-Ce ticket ne livre que l'infrastructure — le service, ses variables,
-sa sonde et cette page. L'adaptateur SMTP qui consommera `SMTP_HOST`,
-`SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_USE_TLS` et `MAIL_FROM`
-appartient à BACK-22, et ces six variables ne sont pas encore passées au
-service `api` : le fichier compose porte le bloc, en commentaires, à l'endroit
-où BACK-22 le décommentera.
+:::note Un adaptateur SMTP provisoire depuis BACK-17
+Ce ticket-ci ne livre que l'infrastructure — le service, ses variables, sa sonde
+et cette page. L'adaptateur SMTP appartient à BACK-22, avec le module
+`notifications` ; BACK-17 en a écrit un **provisoire** parce qu'un code de
+vérification qui ne part pas ne vérifie rien, et c'est lui qui a décommenté les
+six variables du bloc partagé du compose. BACK-22 reprendra ce code sans toucher
+à ces noms.
 :::
 
 Les écarts assumés avec le ticket INFRA-07 sont consignés au

@@ -1,12 +1,12 @@
 ---
 title: Configuration
-description: Les Settings Pydantic — cinq sous-modèles, valeurs dérivées, .env strict — et la validation au démarrage.
+description: Les Settings Pydantic — sept sous-modèles, valeurs dérivées, .env strict — et la validation au démarrage.
 ---
 
 # Configuration
 
 Le service ne lit jamais son environnement à la volée — toute la configuration passe par un
-objet `Settings` Pydantic, découpé en cinq sous-modèles et validé dès le démarrage. Cette
+objet `Settings` Pydantic, découpé en sept sous-modèles et validé dès le démarrage. Cette
 page décrit ce découpage, les valeurs dérivées, la strictesse du fichier `.env` et les sondes qui vérifient l'ensemble.
 
 Toute la configuration du service tient dans un objet unique,
@@ -19,7 +19,7 @@ recevra le conteneur d'INFRA-04, et le fichier `backend/api/.env` pour un lancem
 poste. Ce que signifie chaque variable est écrit dans `.env.example`, son
 gabarit ; cette page ne le recopie pas, pour éviter que les deux divergent.
 
-## Les cinq sous-modèles
+## Les sept sous-modèles
 
 | Sous-modèle        | Préfixe     | Ce qu'il porte                                    | Consommé par                                 |
 | ------------------ | ----------- | ------------------------------------------------- | -------------------------------------------- |
@@ -28,6 +28,8 @@ gabarit ; cette page ne le recopie pas, pour éviter que les deux divergent.
 | `RedisSettings`    | `REDIS_`    | connexion Redis, bases de cache et de broker      | BACK-14, BACK-15                             |
 | `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod | BACK-13                                      |
 | `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie       | BACK-10                                      |
+| `OtpSettings`      | `OTP_`      | validité, tentatives et quotas de renvoi d'un OTP | BACK-17                                      |
+| `SmtpSettings`     | `SMTP_`     | courriel sortant, plus `MAIL_FROM` sans préfixe   | BACK-17, puis BACK-22                        |
 
 Un préfixe par sous-modèle plutôt qu'un délimiteur de nesting : `POSTGRES_USER` et
 `MINIO_ROOT_USER` sont imposés par les images Docker, et la traduction n'aurait servi à rien.
@@ -35,7 +37,12 @@ L'arbitrage remonte à SETUP-05, il est consigné au
 [registre des écarts](../ecarts/setup.md#écarts-assumés-avec-le-ticket-setup-05).
 
 L'accès se fait par sous-modèle : `settings.app.environment`, `settings.db.host`,
-`settings.redis.cache_db`, `settings.s3.bucket`, `settings.jwt.algorithm`.
+`settings.redis.cache_db`, `settings.s3.bucket`, `settings.jwt.algorithm`,
+`settings.otp.ttl_seconds`, `settings.smtp.host`.
+
+`MAIL_FROM` est lu par `SmtpSettings` **sans** le préfixe `SMTP_`, par un alias — c'est le nom
+que publie le gabarit depuis INFRA-07, et le même mécanisme que `MINIO_ROOT_USER` chez
+`S3Settings`.
 
 **Sept variables n'ont aucun défaut**, et sont donc obligatoires : `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, `POSTGRES_DB`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET` et

@@ -58,10 +58,19 @@ défensif compris.
 Les tâches des **modules** (`modules/<m>/infrastructure/tasks/`) arrivent par `discovery.py` :
 le contrat `service-spaces` interdit à `shared` d'importer `app.modules.*`, et la commande du
 worker est figée sans argument de modules — l'import **dynamique** au démarrage du worker est
-le point d'assemblage qui résout la contradiction. BACK-17 et BACK-22 n'auront qu'à créer le
-sous-paquet, sans toucher ni au Dockerfile ni au compose. L'entorse à l'esprit du contrat est
-assumée et confinée à ce seul fichier, où un commentaire la déclare ; une erreur d'import dans
-un fichier de tâches tue le worker — seule l'**absence** du sous-paquet est silencieuse.
+le point d'assemblage qui résout la contradiction. BACK-17 a été le premier à créer le
+sous-paquet, sans toucher ni au Dockerfile ni au compose, et BACK-22 fera de même. L'entorse à
+l'esprit du contrat est assumée et confinée à ce seul fichier, où un commentaire la déclare ;
+une erreur d'import dans un fichier de tâches tue le worker — seule l'**absence** du
+sous-paquet est silencieuse.
+
+Une ressource **propre à un module** ne peut pas s'ouvrir dans `lifecycle.py`, pour la même
+raison de contrat : le module la construit à la première tâche qui en a besoin, la range dans
+l'état du broker, et la confie à `remember_module_resource` pour que l'arrêt du worker la
+referme — en ordre inverse, comme le reste. C'est le pendant, côté worker, de ce que `main.py`
+fait explicitement dans son `lifespan` : lui a le droit de nommer les modules, c'est le point
+d'assemblage. Le premier cas est le magasin d'OTP de
+[la vérification d'adresse](./verification-email-otp.md).
 
 ## Les règles qui engagent toute tâche
 
@@ -71,6 +80,16 @@ un fichier de tâches tue le worker — seule l'**absence** du sous-paquet est s
 `await send_welcome.kiq(group_id=account.group_id, account_id=account.id)` — et la tâche
 **recharge** l'agrégat par son identifiant, dans sa propre unité de travail construite depuis
 `get_task_database`, jamais via `get_identity_uow(request)`, qui suppose une requête HTTP.
+L'argument typé `UUID` part en chaîne sur le fil et le receiver le **retype** avant d'appeler
+la tâche : vérifié en BACK-17, formateur et `parse_params` à l'appui.
+
+**Et les dépendances se déclarent en valeur par défaut**, `uow: IdentityUnitOfWork =
+TaskiqDepends(...)`, non en `Annotated` comme dans `demo.record_ping` : le type de `kiq` est
+calqué sur la signature de la tâche, si bien qu'une dépendance annotée devient un argument
+**obligatoire à l'appel** — l'appelant devrait fournir l'unité de travail que le worker doit
+précisément construire lui-même. Le patron de BACK-15 ne s'en apercevait pas, aucun code typé
+ne le `kiq`. Ruff l'accepte par `extend-immutable-calls`, la même option que celle qui couvre
+`fastapi.Depends` partout ailleurs.
 Trois raisons, chacune suffisante : un objet ORM est détaché de sa session et ses accès
 paresseux lèvent ; son état date du `kiq` et peut être périmé à l'exécution ; le fil transporte
 du JSON, ce qui ne s'y sérialise pas ne part pas. Les annotations font le reste : un argument

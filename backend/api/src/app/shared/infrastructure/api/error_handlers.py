@@ -11,6 +11,7 @@ traduit.
 | `AlreadyExistsError`, `ConflictError` | 409    | handler `DomainError`       |
 | `ValidationError`                     | 422    | handler `DomainError`       |
 | `PermissionDeniedError`               | 403    | handler `DomainError`       |
+| `TooManyRequestsError`                | 429    | handler `DomainError`       |
 | `DomainError` non typee               | 400    | handler `DomainError`       |
 | `RequestValidationError` (Pydantic)   | 422    | handler dedie, reformate    |
 | `HTTPException` (routage, 405...)     | tel quel | handler dedie, meme format |
@@ -74,6 +75,7 @@ from app.shared.domain.exceptions import (
     DomainError,
     NotFoundError,
     PermissionDeniedError,
+    TooManyRequestsError,
     ValidationError,
 )
 from app.shared.domain.ports.file_storage import FileStorageUnavailableError
@@ -94,6 +96,7 @@ _STATUS_BY_TYPE: Final[tuple[tuple[type[DomainError], int], ...]] = (
     (ConflictError, 409),
     (ValidationError, 422),
     (PermissionDeniedError, 403),
+    (TooManyRequestsError, 429),
 )
 
 # Une `DomainError` levee sans categorie intermediaire : refus metier quand
@@ -175,7 +178,32 @@ async def _handle_domain_error(request: Request, error: Exception) -> JSONRespon
         code=error.code,
         message=error.message,
         details=error.details,
+        headers=_retry_after(error),
     )
+
+
+def _retry_after(error: DomainError) -> Mapping[str, str] | None:
+    """Rend l'en-tete `Retry-After` quand le refus sait dire dans combien de temps.
+
+    Seule `TooManyRequestsError` en porte un, et pas toujours : un quota sur
+    fenetre glissante ne sait pas toujours quand il rouvrira. L'en-tete est
+    standard (RFC 9110) et se lit par les clients HTTP comme par les navigateurs,
+    ce qu'un champ enfoui dans `details` ne ferait pas.
+
+    Args:
+        error: le refus metier en cours de traduction.
+
+    Returns:
+        L'en-tete a poser, ou `None` s'il n'y a pas de delai a annoncer.
+    """
+    if not isinstance(error, TooManyRequestsError):
+        return None
+    if error.retry_after_seconds is None:
+        return None
+    # Un entier de SECONDES, la forme la plus simple des deux que la RFC admet --
+    # l'autre etant une date HTTP, qui obligerait client et serveur a s'accorder
+    # sur l'heure.
+    return {"Retry-After": str(error.retry_after_seconds)}
 
 
 async def _handle_request_validation_error(request: Request, error: Exception) -> JSONResponse:

@@ -173,29 +173,39 @@ x-app-environment: &app-environment
   JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
   JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
 
-  # --- Courriel sortant : A DECOMMENTER EN BACK-22 ---
-  # Le service `mailpit` existe depuis INFRA-07, ses six variables sont
-  # documentees dans .env.example, mais AUCUNE LIGNE DE CODE ne les lit encore :
-  # l'adaptateur SMTP est l'objet de BACK-22.
-  #
-  #   SMTP_HOST: ${SMTP_HOST}
-  #   SMTP_PORT: ${SMTP_PORT}
-  #   SMTP_USER: ${SMTP_USER}
-  #   SMTP_PASSWORD: ${SMTP_PASSWORD}
-  #   SMTP_USE_TLS: ${SMTP_USE_TLS}
-  #   MAIL_FROM: ${MAIL_FROM}
+  # --- Courriel sortant (INFRA-07, lu depuis BACK-17) ---
+  # Le service `mailpit` existe depuis INFRA-07 ; ces six variables attendaient
+  # qu'une ligne de code les lise, ce que fait desormais l'adaptateur SMTP
+  # provisoire de BACK-17 (a reprendre par BACK-22 avec le module notifications).
   #
   # DANS CE BLOC PARTAGE, et non sur le seul service `api` ou INFRA-04 l'avait
   # laisse : ce qui envoie un courriel est une TACHE DE FOND (BACK-17, BACK-22),
-  # donc le worker. L'API en aura besoin aussi, ne serait-ce que pour construire
-  # ses reglages ; les deux le liront d'ici.
+  # donc le worker. L'API en a besoin aussi, ne serait-ce que pour construire ses
+  # reglages ; les deux les lisent d'ici.
   #
-  # POURQUOI PAS DES MAINTENANT, alors que Redis, S3 et JWT sont bien passes
-  # avant leurs tickets : ceux-la ont ete ajoutes par INFRA-04, qui les trouvait
-  # DEJA dans le .env.example de SETUP-05. Les six ci-dessus naissent avec
-  # INFRA-07, donc apres les .env deja crees sur les postes -- les referencer
-  # produirait six avertissements `variable is not set` a chaque `up`, pour des
-  # variables que personne ne lit.
+  # LES DEFAUTS `:-` NE SONT PAS DECORATIFS. Ces six variables naissent avec
+  # INFRA-07, donc APRES les .env deja crees sur les postes : les referencer
+  # nues produirait six avertissements `variable is not set` a chaque `up`, sur
+  # des postes dont le .env est par ailleurs valable. Les defauts reprennent
+  # ceux du gabarit -- meme geste que `FORWARDED_ALLOW_IPS` plus haut.
+  SMTP_HOST: ${SMTP_HOST:-mailpit}
+  SMTP_PORT: ${SMTP_PORT:-1025}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-false}
+  MAIL_FROM: ${MAIL_FROM:-no-reply@juui.test}
+
+  # --- Verification d'adresse par code OTP (BACK-17) ---
+  # Memes defauts `:-` et meme raison : ces six variables naissent avec BACK-17,
+  # donc apres les .env des postes. Les valeurs repetent celles du gabarit et
+  # celles de `OtpSettings` -- trois sources, une seule verite, et c'est le
+  # gabarit qui l'explique.
+  OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-600}
+  OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-3}
+  OTP_RESEND_MIN_INTERVAL_SECONDS: ${OTP_RESEND_MIN_INTERVAL_SECONDS:-60}
+  OTP_RESEND_WINDOW_SECONDS: ${OTP_RESEND_WINDOW_SECONDS:-3600}
+  OTP_RESEND_MAX_PER_EMAIL: ${OTP_RESEND_MAX_PER_EMAIL:-5}
+  OTP_RESEND_MAX_PER_IP: ${OTP_RESEND_MAX_PER_IP:-20}
 
 # --- Contexte de build des trois images de frontend --------------------------
 # UN SEUL Dockerfile pour trois applications (INFRA-05a) : ce qui les distingue

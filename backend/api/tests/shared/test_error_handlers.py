@@ -36,6 +36,7 @@ from app.shared.domain.exceptions import (
     DomainError,
     NotFoundError,
     PermissionDeniedError,
+    TooManyRequestsError,
     ValidationError,
 )
 from app.shared.domain.ports.file_storage import FileStorageUnavailableError
@@ -77,6 +78,12 @@ class _ProbePermissionDeniedError(PermissionDeniedError):
     code = "probe.note.forbidden"
 
 
+class _ProbeTooManyRequestsError(TooManyRequestsError):
+    """Cadence de sonde depassee (categorie ajoutee par BACK-17)."""
+
+    code = "probe.note.too_many"
+
+
 class _ProbePayload(BaseModel):
     """Corps de sonde : un champ contraint et aucun champ inconnu tolere."""
 
@@ -109,6 +116,14 @@ def _build_app() -> FastAPI:
     @application.get("/raise/permission")
     async def raise_permission() -> None:
         raise _ProbePermissionDeniedError("La sonde n'a pas ce droit.")
+
+    @application.get("/raise/too-many")
+    async def raise_too_many() -> None:
+        raise _ProbeTooManyRequestsError("Trop de sondes, trop vite.", retry_after_seconds=42)
+
+    @application.get("/raise/too-many-without-delay")
+    async def raise_too_many_without_delay() -> None:
+        raise _ProbeTooManyRequestsError("Trop de sondes, trop vite.")
 
     @application.get("/raise/untyped")
     async def raise_untyped() -> None:
@@ -153,6 +168,7 @@ def _client(application: FastAPI) -> AsyncClient:
         ("/raise/conflict", 409, "probe.note.conflict"),
         ("/raise/validation", 422, "probe.note.invalid"),
         ("/raise/permission", 403, "probe.note.forbidden"),
+        ("/raise/too-many", 429, "probe.note.too_many"),
         ("/raise/untyped", 400, "shared.domain.error"),
     ],
 )
@@ -167,6 +183,33 @@ async def test_each_typed_error_maps_to_its_status(
     assert body["code"] == expected_code
     assert body["message"]
     assert body["details"] is None
+
+
+async def test_a_rate_limit_refusal_carries_retry_after() -> None:
+    """Le delai sort en EN-TETE standard, pas enfoui dans `details` (BACK-17).
+
+    `Retry-After` (RFC 9110) se lit par les clients HTTP et par les navigateurs :
+    c'est la seule information qu'un 429 doit donner, et la seule qui aide
+    l'appelant sans renseigner un attaquant sur le compteur restant.
+    """
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/too-many")
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "42"
+
+
+async def test_a_rate_limit_refusal_without_a_known_delay_omits_the_header() -> None:
+    """Un quota sur fenetre glissante ne sait pas toujours quand il rouvrira.
+
+    Mieux vaut pas d'en-tete qu'un `Retry-After: 0`, qui inviterait a reessayer
+    immediatement -- et donc a se faire refuser de nouveau.
+    """
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/too-many-without-delay")
+
+    assert response.status_code == 429
+    assert "retry-after" not in response.headers
 
 
 async def test_all_error_responses_share_the_same_shape() -> None:

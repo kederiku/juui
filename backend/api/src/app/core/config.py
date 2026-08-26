@@ -2,7 +2,7 @@
 
 Tout ce que l'API lit de son environnement passe par ici, et par nulle part
 ailleurs : aucun `os.getenv` n'a sa place dans le reste du code. Le module expose
-un objet unique, `Settings`, compose de cinq sous-modeles thematiques, et la
+un objet unique, `Settings`, compose de sept sous-modeles thematiques, et la
 fonction `get_settings()` qui le construit une fois pour toutes.
 
 DEUX SOURCES, DEUX COMPORTEMENTS
@@ -18,8 +18,8 @@ declares ici. Voir `_OrphanKeyDotEnvSource` pour le detail du mecanisme.
 
 NOMMAGE DES VARIABLES
 Chaque sous-modele porte son propre `env_prefix` (`POSTGRES_`, `REDIS_`, `S3_`,
-`JWT_`) plutot que le `env_nested_delimiter` prevu par la carte : `POSTGRES_USER`
-et `MINIO_ROOT_USER` sont imposes par les images Docker, et un delimiteur
+`JWT_`, `OTP_`, `SMTP_`) plutot que le `env_nested_delimiter` prevu par la carte :
+`POSTGRES_USER` et `MINIO_ROOT_USER` sont imposes par les images Docker, et un delimiteur
 imposerait une couche de traduction pour rien. L'ecart est inscrit au registre
 des ecarts du site de documentation, ou il a ete arbitre des SETUP-05.
 """
@@ -73,15 +73,15 @@ class ConfigurationError(RuntimeError):
 
 
 class _SettingsSection(BaseSettings):
-    """Socle commun aux cinq sous-modeles thematiques.
+    """Socle commun aux sept sous-modeles thematiques.
 
     Les trois reglages qui comptent :
 
-    - `env_file` : les cinq classes lisent le MEME fichier, chacune n'y prenant
+    - `env_file` : les sept classes lisent le MEME fichier, chacune n'y prenant
       que son prefixe.
     - `dotenv_filtering="only_existing"` : sans lui, `DatabaseSettings` verrait
       `REDIS_HOST` comme une cle surnumeraire et refuserait de se construire --
-      la cohabitation de cinq sous-modeles dans un seul fichier tient a cette
+      la cohabitation de sept sous-modeles dans un seul fichier tient a cette
       ligne.
     - `extra="forbid"` : le defaut de pydantic-settings, conserve. Il ne porte
       plus sur le fichier (voir ci-dessus) mais toujours sur les arguments passes
@@ -101,7 +101,7 @@ class _SettingsSection(BaseSettings):
 class AppSettings(_SettingsSection):
     """Reglages generaux de l'application. Sans prefixe (BACK-03, BACK-11)."""
 
-    # Prefixe vide EXPLICITE, alors que c'est deja le defaut : les cinq
+    # Prefixe vide EXPLICITE, alors que c'est deja le defaut : les sept
     # sous-modeles annoncent ainsi tous leur prefixe au meme endroit, et
     # `ENVIRONMENT` ou `LOG_LEVEL` se lisent pour ce qu'ils sont -- des variables
     # nues, et non un oubli.
@@ -308,6 +308,98 @@ class JWTSettings(_SettingsSection):
     refresh_token_expire_days: int = Field(default=7, gt=0)
 
 
+class OtpSettings(_SettingsSection):
+    """Verification d'adresse e-mail par code a usage unique. Prefixe `OTP_` (BACK-17).
+
+    Six variables la ou SETUP-08 en annoncait trois : la duree de validite, le
+    nombre de tentatives et le delai minimal entre deux renvois ne disent rien du
+    NOMBRE de renvois admis sur une periode. Sans ce plafond, le delai minimal se
+    contourne en attendant : une minute entre deux codes, mille codes par nuit.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="OTP_")
+
+    # Duree de validite d'un code. Courte par construction : c'est la fenetre
+    # pendant laquelle un code intercepte -- boite mail ouverte, courriel
+    # transfere -- reste utilisable.
+    ttl_seconds: int = Field(default=600, gt=0)
+
+    # Tentatives admises sur un MEME code avant invalidation. Trois essais sur un
+    # espace de 10^6 : la force brute est hors de portee, et l'utilisateur qui se
+    # trompe garde de la marge.
+    max_attempts: int = Field(default=3, gt=0)
+
+    # Delai minimal entre deux demandes de code pour un meme compte. `ge=0` et non
+    # `gt=0` : zero desactive la garde, ce qu'une suite de tests a le droit de
+    # vouloir -- les deux plafonds ci-dessous, eux, restent en place.
+    resend_min_interval_seconds: int = Field(default=60, ge=0)
+
+    # Fenetre glissante des deux plafonds de renvoi.
+    resend_window_seconds: int = Field(default=3600, gt=0)
+
+    # Plafonds par ADRESSE et par IP sur cette fenetre. Deux compteurs distincts,
+    # et il en faut deux : le premier protege le titulaire de l'adresse du
+    # harcelement par courriel, le second empeche un seul appelant d'arroser mille
+    # adresses. Celui par IP est plus large -- un cabinet entier sort par une seule
+    # adresse publique.
+    resend_max_per_email: int = Field(default=5, gt=0)
+    resend_max_per_ip: int = Field(default=20, gt=0)
+
+
+class SmtpSettings(_SettingsSection):
+    """Courriel sortant. Prefixe `SMTP_`, plus `MAIL_FROM` (INFRA-07, BACK-17).
+
+    LE PASSAGE EN PRODUCTION NE DOIT DEMANDER AUCUN CHANGEMENT DE CODE, et c'est
+    la seule raison d'etre de ces six champs : pointer `SMTP_HOST` sur un vrai
+    fournisseur, renseigner l'utilisateur et le mot de passe, activer
+    `SMTP_USE_TLS`. Meme principe que le `S3_ENDPOINT_URL` d'INFRA-03.
+
+    L'ADAPTATEUR QUI LES LIT EST PROVISOIRE. BACK-22 revendique le code SMTP avec
+    le module `notifications` ; BACK-17 en ecrit le strict minimum parce qu'un OTP
+    qui ne part pas ne verifie rien. Ces reglages, eux, ne bougeront pas : c'est
+    l'implementation d'`OtpSender` qui se rebranchera.
+    """
+
+    # `validate_by_name` pour la meme raison que dans `S3Settings` : `mail_from`
+    # n'est atteignable que par son alias sans lui, et une surcharge de test
+    # devrait ecrire `SmtpSettings(MAIL_FROM=...)`.
+    model_config = SettingsConfigDict(env_prefix="SMTP_", validate_by_name=True)
+
+    # `localhost` et non `mailpit` : le defaut sert le poste hors Docker. Dans la
+    # pile, le compose passe le nom du service, resolu dans app_network -- meme
+    # dualite que `S3_ENDPOINT_URL`.
+    host: str = "localhost"
+    port: int = Field(default=1025, ge=1, le=65535)
+
+    # Identifiants VIDES par defaut : Mailpit n'exige aucune authentification. Une
+    # chaine vide vaut « pas d'authentification », et c'est `user` qui en decide --
+    # un mot de passe sans utilisateur n'a personne a authentifier.
+    user: str = ""
+    password: SecretStr | None = None
+
+    # Mailpit ne presente aucun certificat : une negociation TLS contre lui
+    # echouerait. A passer a `true` devant un fournisseur reel, qui l'exigera.
+    use_tls: bool = False
+
+    # Adresse d'expedition des messages transactionnels. Sans prefixe `SMTP_` :
+    # c'est ce que .env.example publie depuis INFRA-07, et l'alias le lit tel
+    # quel (`env_prefix_target` vaut « variable » par defaut).
+    mail_from: str = Field(
+        default="no-reply@juui.test",
+        validation_alias=AliasChoices("MAIL_FROM"),
+    )
+
+    @property
+    def requires_authentication(self) -> bool:
+        """Vrai si un utilisateur est declare, donc si l'adaptateur doit s'annoncer.
+
+        Le test porte sur l'UTILISATEUR seul : un mot de passe sans utilisateur
+        n'authentifie personne, et tenter un `login` contre Mailpit ferait echouer
+        un envoi qui serait autrement passe.
+        """
+        return bool(self.user)
+
+
 # Ordre d'affichage dans les messages d'erreur, et source unique du jeu de cles
 # admises dans le fichier .env.
 _SETTINGS_SECTIONS: tuple[type[BaseSettings], ...] = (
@@ -316,6 +408,8 @@ _SETTINGS_SECTIONS: tuple[type[BaseSettings], ...] = (
     RedisSettings,
     S3Settings,
     JWTSettings,
+    OtpSettings,
+    SmtpSettings,
 )
 
 
@@ -366,7 +460,7 @@ class _OrphanKeyDotEnvSource(DotEnvSettingsSource):
     La source dotenv de pydantic-settings verse dans le dictionnaire de
     validation toute cle du fichier qui ne correspond a aucun champ de la classe
     -- charge a l'`extra` du modele de l'accepter ou non. Sur `Settings`, qui ne
-    declare que cinq sous-modeles, cela reviendrait a refuser le fichier entier.
+    declare que sept sous-modeles, cela reviendrait a refuser le fichier entier.
     On retire donc d'abord les cles qu'un sous-modele revendique ; ce qui reste
     n'appartient a personne et tombe sur `extra="forbid"`, avec le nom de la cle
     fautive dans l'erreur.
@@ -389,7 +483,7 @@ class _OrphanKeyDotEnvSource(DotEnvSettingsSource):
 
 
 class Settings(BaseSettings):
-    """Configuration complete du service, assemblee a partir des cinq sous-modeles.
+    """Configuration complete du service, assemblee a partir des sept sous-modeles.
 
     S'obtient par `get_settings()` -- ne pas instancier directement en dehors des
     tests, sous peine de relire l'environnement a chaque appel.
@@ -414,6 +508,8 @@ class Settings(BaseSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     s3: S3Settings = Field(default_factory=S3Settings)
     jwt: JWTSettings = Field(default_factory=JWTSettings)
+    otp: OtpSettings = Field(default_factory=OtpSettings)
+    smtp: SmtpSettings = Field(default_factory=SmtpSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -517,7 +613,7 @@ def _explicit_message(error: ValidationError) -> str:
     """
     # `Settings` s'arrete a la PREMIERE fabrique de sous-modele en defaut : une
     # configuration vide ne signalerait que PostgreSQL, puis JWT au lancement
-    # suivant, et ainsi de suite. On reinterroge donc les cinq sous-modeles pour
+    # suivant, et ainsi de suite. On reinterroge donc les sept sous-modeles pour
     # tout dire d'un coup. S'ils sont tous sains, la faute est a la racine -- une
     # cle orpheline dans le fichier .env -- et l'erreur d'origine fait foi.
     faults: dict[str, str] = {}

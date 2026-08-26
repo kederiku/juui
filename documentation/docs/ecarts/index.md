@@ -54,6 +54,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)       | Le port de cache Redis                                       |
 | [BACK-15](./back.md#écarts-assumés-avec-le-ticket-back-15)       | Le broker TaskIQ et la tâche de démonstration                |
 | [BACK-16](./back.md#écarts-assumés-avec-le-ticket-back-16)       | Le socle du module organization                              |
+| [BACK-17](./back.md#écarts-assumés-avec-le-ticket-back-17)       | La vérification d'adresse par code OTP                       |
 | [BACK-19](./back.md#écarts-assumés-avec-le-ticket-back-19)       | Le socle du module medical_records                           |
 | [BACK-24](./back.md#écarts-assumés-avec-le-ticket-back-24)       | La convention de pagination des listes                       |
 | [SHARED-01](./shared.md#écarts-assumés-avec-le-ticket-shared-01) | La bibliothèque @repo/ui                                     |

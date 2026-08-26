@@ -9,7 +9,9 @@ l'application. Il expose deux choses, et rien d'autre :
 C'est aussi le POINT D'ASSEMBLAGE des modules metier (BACK-04) : le seul endroit
 du service qui ait le droit de connaitre plus d'un module a la fois. Chaque
 module publie son routeur, ce fichier les monte, et c'est tout -- les modules,
-eux, restent etanches les uns aux autres.
+eux, restent etanches les uns aux autres. C'est a ce titre, et a ce titre seul,
+qu'il ouvre le magasin d'OTP d'`identity` (BACK-17) : une ressource de module que
+`shared` n'a pas le droit de nommer.
 
 L'application sert les sondes de sante (`/health/live`, `/health/ready`,
 BACK-08) ; les routes METIER, elles, vivront sous `/api/v1` -- le routeur
@@ -24,6 +26,10 @@ from fastapi import APIRouter, FastAPI
 
 from app.core import AppSettings, configure_logging, get_settings
 from app.modules.identity import router as identity_router
+from app.modules.identity.infrastructure.clients.redis_otp_store import (
+    OTP_STORE_STATE_KEY,
+    build_otp_store,
+)
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.health import router as health_router
 from app.shared.infrastructure.api.middlewares import register_middlewares
@@ -42,11 +48,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Tout ce qui doit vivre aussi longtemps que le serveur -- et non le temps
     d'une requete -- se cree ici : le pool de connexions PostgreSQL (BACK-05),
-    le client Redis (BACK-14), le client S3 (BACK-13). Ces ressources se
-    rangent ensuite dans `app.state`, d'ou les dependances FastAPI les
-    recuperent via `request.app.state`. Le broker TaskIQ (BACK-15) est a part :
-    il demarre et s'arrete ici aussi, mais les routes qui declenchent une tache
-    importent la tache elle-meme -- rien a ranger dans `app.state`.
+    le client Redis (BACK-14), le client S3 (BACK-13), le magasin des codes de
+    verification (BACK-17). Ces ressources se rangent ensuite dans `app.state`,
+    d'ou les dependances FastAPI les recuperent via `request.app.state`. Le
+    broker TaskIQ (BACK-15) est a part : il demarre et s'arrete ici aussi, mais
+    les routes qui declenchent une tache importent la tache elle-meme -- rien a
+    ranger dans `app.state`.
 
     Le point d'accroche fixe une contrainte que le reste du code doit respecter :
     aucune connexion ne s'ouvre a l'import du module, tout passe par ici. Ce qui
@@ -127,25 +134,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 # fichiers en silence. `ping()` journalise, les operations levent.
                 await storage.ping()
 
-                # Cinquieme ressource : le broker TaskIQ (BACK-15). Import
-                # LOCAL et non en tete de module : importer `tasks.broker`
-                # construit le broker, donc lit la configuration -- or `import
-                # app.main` doit rester possible sans fichier .env (voir plus
-                # haut). Construire n'ouvre aucune connexion, comme partout.
-                from app.shared.infrastructure.tasks.broker import broker
-
-                # Cote API, seul le versant CLIENT demarre : le backend de
-                # resultats, necessaire au `kiq`. Le worker -- qui IMPORTE ce
-                # module -- a son propre cycle de vie (WORKER_STARTUP) : la
-                # garde `is_worker_process` evite le double demarrage.
-                if not broker.is_worker_process:
-                    await broker.startup()
+                # Cinquieme ressource : le magasin des codes de verification
+                # (BACK-17), sur la meme instance Redis que le cache mais avec
+                # son propre pool. Deux pools et non un seul, parce que les deux
+                # contrats sont opposes : le cache degrade en silence, ce magasin
+                # echoue ferme. Les melanger reviendrait a choisir l'un des deux.
+                otp_store = build_otp_store(settings)
                 try:
-                    yield
-                finally:
-                    # Ferme en premier : le broker est ouvert en dernier.
+                    setattr(app.state, OTP_STORE_STATE_KEY, otp_store)
+
+                    # `ping()` journalise et ne leve pas, comme pour le cache --
+                    # mais pour une raison de plus : un Redis absent au demarrage
+                    # ne doit pas priver le service de TOUT ce qui ne touche pas
+                    # a la verification d'adresse. Les operations du magasin,
+                    # elles, LEVENT : l'asymetrie est le sujet de son module.
+                    await otp_store.ping()
+
+                    # Sixieme ressource : le broker TaskIQ (BACK-15). Import
+                    # LOCAL et non en tete de module : importer `tasks.broker`
+                    # construit le broker, donc lit la configuration -- or `import
+                    # app.main` doit rester possible sans fichier .env (voir plus
+                    # haut). Construire n'ouvre aucune connexion, comme partout.
+                    from app.shared.infrastructure.tasks.broker import broker
+
+                    # Cote API, seul le versant CLIENT demarre : le backend de
+                    # resultats, necessaire au `kiq`. Le worker -- qui IMPORTE ce
+                    # module -- a son propre cycle de vie (WORKER_STARTUP) : la
+                    # garde `is_worker_process` evite le double demarrage.
                     if not broker.is_worker_process:
-                        await broker.shutdown()
+                        await broker.startup()
+                    try:
+                        yield
+                    finally:
+                        # Ferme en premier : le broker est ouvert en dernier.
+                        if not broker.is_worker_process:
+                            await broker.shutdown()
+                finally:
+                    # Toujours en ordre inverse : le magasin d'OTP, puis le
+                    # stockage, puis le cache, puis le moteur.
+                    await otp_store.aclose()
             finally:
                 # Toujours en ordre inverse : le stockage, puis le cache, puis le
                 # moteur. `aclose()` n'echoue pas -- une exception levee ici

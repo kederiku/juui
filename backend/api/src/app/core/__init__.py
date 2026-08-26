@@ -22,10 +22,12 @@ from app.core.config import (
     ConfigurationError,
     DatabaseSettings,
     JWTSettings,
+    OtpSettings,
     RedisSettings,
     S3Settings,
     Settings,
     SettingsDep,
+    SmtpSettings,
     get_settings,
 )
 from app.core.logging import LogContextProvider, configure_logging
@@ -39,10 +41,12 @@ __all__ = [
     "DatabaseSettings",
     "JWTSettings",
     "LogContextProvider",
+    "OtpSettings",
     "RedisSettings",
     "S3Settings",
     "Settings",
     "SettingsDep",
+    "SmtpSettings",
     "configure_logging",
     "get_settings",
 ]

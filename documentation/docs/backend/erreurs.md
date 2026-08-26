@@ -17,7 +17,7 @@ traduit.
 
 ## La hiérarchie et sa correspondance
 
-`shared/domain/exceptions.py` pose la racine `DomainError` et cinq catégories, en Python standard
+`shared/domain/exceptions.py` pose la racine `DomainError` et six catégories, en Python standard
 pur — le contrat `domain-purity` interdit Pydantic dans le domaine, c'est pourquoi la hiérarchie
 et le schéma du corps de réponse vivent dans deux fichiers séparés.
 
@@ -28,11 +28,21 @@ et le schéma du corps de réponse vivent dans deux fichiers séparés.
 | `ConflictError`         | 409    | l'opération est incompatible avec l'état courant      |
 | `ValidationError`       | 422    | une règle **métier** refuse la valeur                 |
 | `PermissionDeniedError` | 403    | l'appelant est identifié mais n'a pas ce droit        |
+| `TooManyRequestsError`  | 429    | un quota de **cadence** est atteint                   |
 | `DomainError` non typée | 400    | refus métier sans catégorie — un signal de revue      |
 
 Chaque module spécialise ces catégories chez lui (`AccountNotFoundError` chez `identity`) ; le
 dépôt générique déclare son erreur d'absence en `type[NotFoundError]`, ce qui **verrouille par le
 typage** qu'une absence sorte toujours en 404.
+
+La sixième catégorie est arrivée avec BACK-17 : aucun parcours n'était limité en cadence avant les
+renvois de code de vérification. Elle est volontairement distincte de `ConflictError`, qui aurait
+été le refuge facile — un 409 dit « l'état de la ressource s'y oppose », alors qu'ici l'état est bon
+et c'est le **rythme** qui ne l'est pas ; le client n'en tire pas la même conduite. Elle porte un
+`retry_after_seconds` facultatif, que l'adaptateur traduit en en-tête `Retry-After` (RFC 9110) — la
+seule information qu'un 429 doit donner, et la seule qui aide l'appelant sans lui apprendre combien
+d'essais il lui reste. Voir
+[Vérification d'adresse (OTP)](./verification-email-otp.md).
 
 ## Les codes se lisent en production
 
