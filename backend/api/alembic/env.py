@@ -53,6 +53,7 @@ if context.config.config_file_name is not None:
 # coup d'oeil.
 _MODEL_MODULES: Final[tuple[str, ...]] = (
     "app.modules.identity.infrastructure.db.models",
+    "app.modules.medical_records.infrastructure.db.models",
     "app.modules.organization.infrastructure.db.models",
 )
 

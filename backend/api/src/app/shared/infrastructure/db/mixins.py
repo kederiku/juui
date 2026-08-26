@@ -144,8 +144,9 @@ class TenantMixin:
     OPT-IN, AGREGAT PAR AGREGAT
     Le mixin ne se declare que sur les agregats PRODUITS par un groupe et
     conserves sous sa garde. Les deux contre-exemples valent regle : une
-    `Consultation` le porte, un `Animal` non -- l'animal est cree a l'inscription
-    d'un particulier, avant qu'un groupe existe dans sa vie. Un compte non plus :
+    `Consultation` (a venir) le portera, un `Animal` non -- l'animal est cree a
+    l'inscription d'un particulier, avant qu'un groupe existe dans sa vie, et
+    BACK-19 a livre `animals` et `custodies` sans le mixin. Un compte non plus :
     l'appartenance a un groupe est une relation N:M DATEE portee par le module
     `organization` (BACK-16), parce qu'un veterinaire remplacant intervient dans
     plusieurs groupes avec un seul compte.

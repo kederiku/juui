@@ -159,8 +159,9 @@ déclenche pas. `server_onupdate` ne réglerait rien, il est purement informatif
 ## La tenance est opt-in, et la garde est mécanique
 
 `TenantMixin` ne se déclare que sur les agrégats **produits par un groupe et conservés sous sa
-garde** — les contre-exemples qui valent règle (`Consultation` le porte, `Animal` et le compte
-non) et leurs motifs sont consignés dans les ADR
+garde** — les contre-exemples qui valent règle (`Consultation` le portera ; `Animal`, livré sans
+mixin par BACK-19 avec sa détention datée, et le compte non) et leurs motifs sont consignés dans
+les ADR
 [0004](../adr/0004-tenance-par-groupe.md),
 [0005](../adr/0005-appartenance-datee.md) et
 [0006](../adr/0006-dossier-medical-animal.md). Le filtre correspondant n'est

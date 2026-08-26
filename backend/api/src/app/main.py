@@ -160,7 +160,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # fichier.
 #
 # `organization` (BACK-16) n'a pas de routeur : son premier arrivera avec les
-# routes d'administration de BACK-25. Les modules suivants s'ajouteront ici.
+# routes d'administration de BACK-25. Meme silence pour `medical_records`
+# (BACK-19) : ses routes arriveront avec BACK-30. Les suivants s'ajouteront ici.
 _MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
 
 
