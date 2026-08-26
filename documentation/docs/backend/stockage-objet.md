@@ -168,8 +168,9 @@ C'est la question à se poser en branchant la ressource suivante dans le `lifesp
 
 Le stockage est le seul des trois à se comporter différemment au démarrage et à l'appel. Refuser de
 partir priverait le service de tout ce qui n'a rien à voir avec les fichiers ; se taire à l'appel
-ferait perdre des fichiers en silence. `ping()` journalise, les opérations lèvent — et l'avertissement
-part en `WARNING`, donc visible tant que BACK-11 n'a pas configuré la journalisation.
+ferait perdre des fichiers en silence. `ping()` journalise, les opérations lèvent — et
+l'avertissement part en `WARNING`, au format posé par BACK-11
+([Journalisation](./journalisation.md)).
 
 ## Vérifier que le stockage tient
 

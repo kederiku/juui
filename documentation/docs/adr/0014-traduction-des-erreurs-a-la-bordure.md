@@ -5,9 +5,9 @@ description: Le domaine lève des exceptions typées à code namespacé ; un ada
 
 # ADR-0014 — Les erreurs métier se traduisent en HTTP à la bordure, en un format unique
 
-| Statut      | Date       | Tickets                                       |
-| ----------- | ---------- | --------------------------------------------- |
-| **Accepté** | 2026-08-25 | BACK-09, BACK-11 (à venir), BACK-28 (à venir) |
+| Statut      | Date       | Tickets                             |
+| ----------- | ---------- | ----------------------------------- |
+| **Accepté** | 2026-08-25 | BACK-09, BACK-11, BACK-28 (à venir) |
 
 ## Contexte
 
@@ -88,7 +88,8 @@ prouvée au niveau HTTP, plus seulement au niveau dépôt.
 
 **Ce que cela coûte.** Chaque nouvelle erreur doit choisir sa catégorie et son code — une classe
 levée sans catégorie sort en 400 générique, et c'est un signal de revue, pas un confort. Le champ
-`request_id` vaut `null` tant que BACK-11 n'a pas posé l'intergiciel de corrélation. Le schéma
+`request_id` vaut `null` hors de toute requête HTTP — une `DomainError` levée depuis une tâche de
+fond ou un script —, et l'intergiciel de BACK-11 le renseigne partout ailleurs. Le schéma
 OpenAPI n'annonce le format réel que sur le 422 du routeur v1 ; l'alignement complet viendra avec
 les premières routes métier (BACK-28). Et uvicorn journalise la stack des 500 une seconde fois —
 `ServerErrorMiddleware` re-lève après la réponse, doublon assumé.

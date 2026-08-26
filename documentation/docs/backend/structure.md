@@ -26,7 +26,8 @@ backend/api/
     ├── main.py             assemblage de l'application et des routeurs
     ├── core/               réglages du processus, ni domaine ni infrastructure
     │   ├── config.py       configuration typée (BACK-03)
-    │   └── correlation.py  contextvar de l'identifiant de requête (BACK-15)
+    │   ├── correlation.py  contextvars du contexte de requête (BACK-15, BACK-11)
+    │   └── logging.py      formateurs, masquage, `configure_logging` (BACK-11)
     ├── shared/             noyau partagé — pas un module métier
     │   ├── domain/
     │   │   ├── exceptions.py   hiérarchie des erreurs métier, codes namespacés (BACK-09)
@@ -55,10 +56,12 @@ backend/api/
     │       │   ├── lifecycle.py    ressources du worker (`WORKER_STARTUP`)
     │       │   ├── discovery.py    import des tâches déclarées par les modules
     │       │   └── demo.py         patron de référence : `record_ping`
-    │       └── api/            socle HTTP (BACK-08, BACK-09 ; puis BACK-11)
+    │       └── api/            socle HTTP (BACK-08, BACK-09, BACK-11)
     │           ├── health.py       sondes `/health/live` et `/health/ready`
     │           ├── router.py       routeur racine `/api/v1`, assemblé par `main.py`
     │           ├── error_handlers.py traduction `DomainError` → HTTP, format unique (BACK-09)
+    │           ├── middlewares.py  identifiant de requête, journal d'accès, CORS (BACK-11)
+    │           ├── pagination.py   `PageParams`, `sort_param`, enveloppe `Page` (BACK-24)
     │           └── schemas/error.py  corps d'erreur { code, message, details, request_id }
     └── modules/            contextes métier, étanches les uns aux autres
         ├── identity/       module pilote — le seul complet à ce stade

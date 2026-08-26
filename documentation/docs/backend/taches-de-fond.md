@@ -90,10 +90,12 @@ en l'écrivant par un SET absolu. Les anti-patrons : incrémenter un compteur, �
 horodatage, relire-puis-écrire sans verrou.
 
 **L'identifiant de requête suit, sans qu'on l'y aide.** `CorrelationMiddleware` lit la
-contextvar `current_request_id` (`core/correlation.py`) au `kiq` et la repose dans le worker —
-BACK-11 branchera l'intergiciel HTTP qui la pose à l'entrée de chaque requête et le format de
-journal qui l'écrit ; la plomberie, elle, est en place, et les messages de reprise la portent
-déjà.
+contextvar `current_request_id` (`core/correlation.py`) au `kiq` et la repose dans le worker.
+L'intergiciel HTTP qui la pose à l'entrée de chaque requête et le format de journal qui l'écrit sont
+livrés par BACK-11 ([Journalisation](./journalisation.md)) : les journaux du worker portent donc
+l'identifiant de la requête qui a demandé la tâche, y compris sur les lignes de TaskIQ lui-même. Le
+worker hérite de la même configuration par `worker_startup()`, et ses deux commandes portent
+`--no-configure-logging` pour que le `basicConfig` de TaskIQ ne pose pas un second handler.
 
 ## La politique de reprise : relances, repli, rejets
 

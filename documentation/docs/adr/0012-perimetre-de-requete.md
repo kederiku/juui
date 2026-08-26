@@ -80,8 +80,8 @@ dit **où tu travailles en ce moment**.
 **Ce que cela coûte.** Chaque route à périmètre clinique devra lire l'en-tête et vérifier son
 appartenance au groupe du jeton — un oubli de vérification ferait de `X-Clinic-Id` une
 autorisation de fait, c'est LE point de vigilance de BACK-10c. L'intercepteur HTTP des frontends
-devra propager l'en-tête (SHARED-03, FRONT-08), CORS devra l'autoriser et les journaux devront
-porter `clinic_id` (BACK-11). Enfin, tant que BACK-10c n'est pas livré, la convention n'est
+devra propager l'en-tête (SHARED-03, FRONT-08) ; le CORS l'autorise et les journaux portent
+`clinic_id` depuis BACK-11. Enfin, tant que BACK-10c n'est pas livré, la convention n'est
 tenue que par ce document.
 
 ## Références

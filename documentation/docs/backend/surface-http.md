@@ -68,7 +68,21 @@ Le groupe actif voyage dans le **jeton** (claim `active_group_id`), la clinique 
 l'**en-tête** `X-Clinic-Id`, jamais l'inverse — et l'en-tête n'autorise rien. La convention, ses
 alternatives écartées et ce qu'elle coûte sont consignés dans
 l'[ADR-0012](../adr/0012-perimetre-de-requete.md) ; son application
-revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe).
+revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe). Le CORS
+autorise déjà cet en-tête, et les journaux portent déjà `clinic_id`.
+
+## Les intergiciels, et le CORS
+
+Toute requête traverse trois intergiciels, montés par `create_app()` du plus extérieur au plus
+intérieur : l'**identifiant de requête**, le **journal d'accès**, puis le **CORS**. L'ordre n'est
+pas indifférent, et le détail — avec la politique CORS complète — vit sur la page
+[Journalisation](./journalisation.md).
+
+Ce qu'il faut en retenir ici : la liste blanche d'origines vient de `CORS_ORIGINS`,
+`allow_credentials=True` interdit le joker `*` — qui fait **refuser le démarrage** —, et
+`X-Request-ID` est exposé au JavaScript des frontends. Toute réponse porte cet en-tête, y compris
+les erreurs ; une réponse **500**, elle, ne porte pas les en-têtes CORS, limite de Starlette
+consignée au [registre des écarts](../ecarts/back.md).
 
 ## La pagination
 

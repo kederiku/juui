@@ -29,6 +29,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Tâches de fond](./taches-de-fond.md)                   | TaskIQ : le broker, le worker, la politique de reprise.                    |
 | [Surface HTTP](./surface-http.md)                       | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
 | [Erreurs](./erreurs.md)                                 | La hiérarchie `DomainError`, le format d'erreur unique, le 404-jamais-403. |
+| [Journalisation](./journalisation.md)                   | Les deux formats, l'identifiant de requête, le masquage, le CORS.          |
 | [Dépendances](./dependances.md)                         | Les dépendances déclarées, `--frozen`/`--locked`, la version d'`uv`.       |
 | [Qualité et typage](./qualite-et-typage.md)             | Ruff, Mypy strict et les contrats Import Linter.                           |
 
@@ -47,7 +48,12 @@ et toute [erreur](./erreurs.md) y sort désormais au format unique, codes namesp
 et 404-jamais-403 compris (BACK-09,
 [ADR-0014](../adr/0014-traduction-des-erreurs-a-la-bordure.md)),
 les [tâches de fond](./taches-de-fond.md) ont leur broker, leur worker et leur
-politique de reprise (BACK-15), le filtrage multi-tenant est mécanique et prouvé
+politique de reprise (BACK-15), le service est
+[observable](./journalisation.md) — journaux structurés, identifiant de requête
+propagé de bout en bout, contexte de tenance automatique, secrets masqués — et
+joignable depuis les trois frontends (BACK-11,
+[ADR-0018](../adr/0018-journalisation-bibliotheque-standard.md)),
+le filtrage multi-tenant est mécanique et prouvé
 par les premiers tests du service — la suite `tenant_isolation`, `make test` —
 (BACK-06b, [ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md)), Ruff et
 Mypy sont configurés (BACK-02). Ce qui
