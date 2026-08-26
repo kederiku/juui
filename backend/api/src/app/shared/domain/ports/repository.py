@@ -5,7 +5,8 @@ cinq operations, exprimees en entites du domaine. Le depot SQLAlchemy de
 BACK-06a les fournit, la doublure en memoire de BACK-06c les fournira, et le
 test de conformite commun des deux s'ecrira contre ce protocole. C'est aussi
 l'appui des machineries transverses : le filtre de tenance (BACK-06b) raisonne
-sur ce vocabulaire, la pagination (BACK-24) fera de meme -- jamais sur un depot
+sur ce vocabulaire, et la pagination (BACK-24) fait de meme -- `list` echange
+les objets-valeurs de `shared/domain/pagination.py`, jamais ceux d'un depot
 particulier.
 
 UN PROTOCOLE STRUCTUREL, PAS UN PORT A HERITER
@@ -24,9 +25,10 @@ appel par mot-cle traverserait le typage et casserait a l'execution. Le `/`
 ferme ce trou en interdisant le mot-cle des deux cotes.
 """
 
-from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
+
+from app.shared.domain.pagination import PageRequest, PageResult
 
 
 class Identified(Protocol):
@@ -80,15 +82,29 @@ class Repository[EntityT: Identified](Protocol):
         """
         ...
 
-    async def list(self) -> Sequence[EntityT]:
-        """Retourne toutes les entites, dans leur ordre de creation.
+    async def list(self, page: PageRequest, /) -> PageResult[EntityT]:
+        """Retourne UNE page d'entites et le total du perimetre courant.
 
-        SANS BORNE, ET C'EST ASSUME : la pagination -- parametres, enveloppe,
-        maximum impose -- est une convention de BACK-24, pas un choix a figer
-        ici en douce.
+        BORNE DESORMAIS, ET C'EST LE POINT (BACK-24) : une page par appel,
+        jamais toute la table -- les bornes vivent dans `PageRequest`, qui
+        refuse plutot que de tronquer. L'ordre est deterministe : le tri
+        public demande, puis la cle primaire en depart des egalites ; sans
+        tri demande, la cle primaire seule -- UUIDv7 oblige, l'ordre par
+        defaut reste chronologique. « Tout lister » n'est plus une capacite
+        generique : c'est un choix qu'un depot concret ecrit, et que la
+        revue lit.
+
+        Args:
+            page: la fenetre demandee -- numero, taille, tri eventuel.
 
         Returns:
-            Les entites, de la plus ancienne a la plus recente.
+            La page d'entites, avec le total du perimetre courant. Une page
+            au-dela de la fin est vide et porte le total reel, jamais une
+            erreur d'absence.
+
+        Raises:
+            ValidationError: si le champ de tri n'est pas dans la liste
+                blanche de l'implementation (`UnknownSortFieldError`).
         """
         ...
 

@@ -9,6 +9,10 @@ pytest ne le collecte pas, et conftest comme tests importent les memes classes
 Les tables portent le suffixe `_test` et ne sont creees que dans la base de
 test, par la fixture moteur du conftest. `alembic/env.py` n'importe jamais ce
 module : l'autogeneration et `alembic check` ne voient pas ces tables.
+
+Les tests de la convention de pagination (BACK-24) reutilisent la meme paire :
+les deux depots declarent `label` triable, ce qui suffit a prouver fenetrage,
+liste blanche et tenance du total.
 """
 
 from dataclasses import dataclass
@@ -80,6 +84,7 @@ class TenantNoteRepository(TenantSqlAlchemyRepository[TenantNote, TenantNoteMode
     _model_type = TenantNoteModel
     _not_found_error = TenantNoteNotFoundError
     _not_found_message = "Aucune note tenant ne porte l'identifiant {entity_id}."
+    _sortable: ClassVar = {"label": TenantNoteModel.label}
 
     def _to_entity(self, model: TenantNoteModel) -> TenantNote:
         """Reconstitue l'entite depuis la ligne."""
@@ -96,6 +101,7 @@ class PlainNoteRepository(SqlAlchemyRepository[PlainNote, PlainNoteModel]):
     _model_type = PlainNoteModel
     _not_found_error = PlainNoteNotFoundError
     _not_found_message = "Aucune note partagee ne porte l'identifiant {entity_id}."
+    _sortable: ClassVar = {"label": PlainNoteModel.label}
 
     def _to_entity(self, model: PlainNoteModel) -> PlainNote:
         """Reconstitue l'entite depuis la ligne."""
