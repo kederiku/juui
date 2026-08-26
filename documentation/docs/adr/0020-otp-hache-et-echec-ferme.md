@@ -5,9 +5,9 @@ description: Le code de vérification n'est jamais stocké en clair ni transport
 
 # ADR-0020 — Un code OTP se hache et se poivre, son magasin échoue fermé, et il naît dans le worker
 
-| Statut      | Date       | Tickets                                                          |
-| ----------- | ---------- | ---------------------------------------------------------------- |
-| **Accepté** | 2026-08-26 | BACK-17, BACK-28 (à venir), BACK-31 (à venir), BACK-22 (à venir) |
+| Statut      | Date       | Tickets                                                |
+| ----------- | ---------- | ------------------------------------------------------ |
+| **Accepté** | 2026-08-26 | BACK-17, BACK-22, BACK-28 (à venir), BACK-31 (à venir) |
 
 ## Contexte
 
@@ -112,5 +112,11 @@ plus dans le domaine d'`identity`, et une dépendance de la validité des codes 
 des jetons.
 
 Ce qui reste ouvert : la [réinitialisation de mot de passe](../backend/verification-email-otp.md)
-(BACK-31) doit traiter son jeton exactement comme un OTP — la carte du ticket le dit déjà — et
-BACK-22 reprendra l'adaptateur SMTP provisoire écrit ici, sans toucher au port `OtpSender`.
+(BACK-31) doit traiter son jeton exactement comme un OTP — la carte du ticket le dit déjà.
+
+**BACK-22 a repris l'adaptateur SMTP provisoire écrit ici**, sans toucher au port `OtpSender`,
+comme annoncé : le dialogue est descendu en port technique de `shared/`
+([ADR-0022](./0022-transport-email-partage.md)). Il a en revanche confirmé, plutôt qu'infirmé, ce
+que cet ADR pose : le code de vérification **ne passe pas** par le module `notifications`, un
+événement de notification voyageant par cette même file sans TTL
+([ADR-0021](./0021-notification-par-evenement.md)).

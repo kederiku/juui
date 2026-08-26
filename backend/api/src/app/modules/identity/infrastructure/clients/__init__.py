@@ -1,18 +1,24 @@
-"""Adaptateurs sortants du module identity (BACK-17).
+"""Adaptateurs sortants du module identity (BACK-17, transport revu par BACK-22).
 
 Ce que le module APPELLE, par opposition a `db/` -- ce qu'il persiste -- et a
 `api/` -- ce par quoi on l'appelle. Deux adaptateurs y vivent :
 
 - `redis_otp_store.py` -- le magasin des codes de verification et de leurs
   quotas, adosse a Redis, ECHOUANT FERME ;
-- `smtp_otp_sender.py` -- la remise du code par courriel.
+- `email_otp_sender.py` -- la composition du message de verification, remise
+  confiee au port `EmailTransport` de `shared/`.
 
-LE SECOND EST PROVISOIRE, ET IL FAUT LE SAVOIR AVANT D'Y AJOUTER QUOI QUE CE SOIT
-Le code SMTP appartient a BACK-22, avec le module `notifications` et son port
-d'envoi unique ; BACK-17 en ecrit le minimum vital parce qu'un code qui ne part
-pas ne verifie rien, et parce que sa propre carte l'y autorise expressement (« a
-defaut, directement l'adaptateur SMTP, a rebrancher ensuite »). Quand BACK-22
-existera, `SmtpOtpSender` devra ceder la place a une implementation d'`OtpSender`
-qui delegue au `NotificationSender`, en gardant la regle qui compte : un OTP est
-TRANSACTIONNEL, il part quelles que soient les preferences de notification.
+CE QUE BACK-22 A REPRIS, ET CE QU'IL A LAISSE
+BACK-17 avait ecrit ici son propre dialogue SMTP, a titre provisoire et en le
+declarant. Le dialogue est parti dans `shared/infrastructure/clients/` derriere
+un port technique (ADR-0022) ; ce qui reste est la composition du message, qui
+appartient bien a identity. Le port `OtpSender` n'a pas bouge, comme promis.
+
+CE QUI N'A PAS EU LIEU, ET POURQUOI : l'OTP ne transite PAS par le module
+`notifications`. Un evenement de notification passe par la file, ou tout argument
+voyage en clair dans un stream sans TTL ; un code de verification est un secret
+engendre dans le worker et remis depuis le worker (ADR-0020). La regle qui compte
+survit telle quelle : un OTP est TRANSACTIONNEL, il part quelles que soient les
+preferences de notification -- ce que la distinction posee par BACK-22 nomme
+desormais explicitement.
 """

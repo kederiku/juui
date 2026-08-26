@@ -309,6 +309,7 @@ markers = [
     "pagination: tests de la convention de pagination (BACK-24)",
     "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
     "otp: tests de la verification d'adresse par code OTP (BACK-17)",
+    "notifications: tests des preferences et de la remise de notifications (BACK-22)",
 ]
 
 # ---------------------------------------------------------------------------

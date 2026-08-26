@@ -40,19 +40,26 @@ l'[ADR-0020](../adr/0020-otp-hache-et-echec-ferme.md).
 | Port            | Ce qu'il promet                                            | Adaptateur                           |
 | --------------- | ---------------------------------------------------------- | ------------------------------------ |
 | `OtpStore`      | ranger, dépenser une tentative, tenir les quotas de renvoi | `RedisOtpStore` — base 0, pool dédié |
-| `OtpSender`     | faire parvenir six chiffres à une adresse                  | `SmtpOtpSender` — **provisoire**     |
+| `OtpSender`     | faire parvenir six chiffres à une adresse                  | `EmailOtpSender` — via `shared`      |
 | `OtpDispatcher` | faire partir une demande hors du fil de la requête         | `TaskOtpDispatcher` — TaskIQ         |
 
 La carte du ticket en annonçait deux ; le troisième est le prix de la décision ci-dessus. Sans lui,
 un cas d'usage devrait importer `infrastructure/tasks/`, ce que le contrat `module-layers`
 ([Qualité et typage](./qualite-et-typage.md)) refuse.
 
-`SmtpOtpSender` est explicitement **provisoire** : le code SMTP appartient à BACK-22, avec le module
-`notifications` et son port d'envoi unique. BACK-17 en écrit le minimum vital — un code qui ne part
-pas ne vérifie rien — et la carte du ticket l'y autorise en toutes lettres. Ce qui ne bougera pas,
-c'est le port : une implémentation qui déléguera au `NotificationSender` s'y substituera sans qu'une
-ligne de métier change. Avec une règle à ne pas perdre en chemin : **un OTP est transactionnel**, il
-part quelles que soient les préférences de notification.
+BACK-17 avait écrit son propre dialogue SMTP dans `identity`, à titre **provisoire** et en le
+déclarant. **BACK-22 l'a repris** : le dialogue vit désormais dans
+`shared/infrastructure/clients/smtp_mailer.py`, derrière le port technique `EmailTransport`
+([ADR-0022](../adr/0022-transport-email-partage.md)). Ce qui reste dans `identity` est la
+composition du message de vérification, et le port `OtpSender` n'a pas bougé d'une ligne — c'est
+exactement ce qu'un port doit permettre.
+
+**L'OTP ne passe pas pour autant par le module [`notifications`](./notifications.md)**, contrairement
+à ce que la carte de BACK-17 annonçait, et le motif est celui de cette page : un événement de
+notification voyage par la file, où tout argument reste lisible en clair dans un stream sans TTL.
+Un code de vérification est un secret ; il est engendré dans le worker et remis depuis le worker.
+La règle qu'il illustre, elle, est bien celle de `notifications` : **un OTP est transactionnel**, il
+part quelles que soient les préférences — et son expéditeur n'en consulte aucune.
 
 ## Ce que Redis tient, et ce qu'il ne tient pas
 

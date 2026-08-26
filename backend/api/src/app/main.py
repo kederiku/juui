@@ -49,7 +49,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Tout ce qui doit vivre aussi longtemps que le serveur -- et non le temps
     d'une requete -- se cree ici : le pool de connexions PostgreSQL (BACK-05),
     le client Redis (BACK-14), le client S3 (BACK-13), le magasin des codes de
-    verification (BACK-17). Ces ressources se rangent ensuite dans `app.state`,
+    verification (BACK-17). Le transport de courriel (BACK-22) n'y figure PAS, et
+    ce n'est pas un oubli : une session SMTP nait et meurt avec chaque message, il
+    n'y a rien a ouvrir ni a refermer. Ces ressources se rangent dans `app.state`,
     d'ou les dependances FastAPI les recuperent via `request.app.state`. Le
     broker TaskIQ (BACK-15) est a part : il demarre et s'arrete ici aussi, mais
     les routes qui declenchent une tache importent la tache elle-meme -- rien a
@@ -204,7 +206,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 #
 # `organization` (BACK-16) n'a pas de routeur : son premier arrivera avec les
 # routes d'administration de BACK-25. Meme silence pour `medical_records`
-# (BACK-19) : ses routes arriveront avec BACK-30. Les suivants s'ajouteront ici.
+# (BACK-19) : ses routes arriveront avec BACK-30, et pour `notifications`
+# (BACK-22), dont la lecture et l'ecriture des preferences supposent
+# `get_current_active_account` (BACK-10c) et la surface de composition de
+# BACK-23. Les suivants s'ajouteront ici.
 _MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
 
 

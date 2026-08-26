@@ -21,8 +21,8 @@ déclencher. `make mail` l'ouvre directement — et sur un poste sans navigateur
 la cible affiche l'URL au lieu d'échouer.
 
 Pour un aller-retour complet — envoi sur le port SMTP, relecture par l'API HTTP —
-depuis le conteneur `api`, c'est-à-dire par le chemin exact qu'empruntera
-l'adaptateur de BACK-22. `smtplib` et `urllib` sont dans la bibliothèque standard
+depuis le conteneur `api`, c'est-à-dire par le chemin exact qu'emprunte
+le transport de BACK-22. `smtplib` et `urllib` sont dans la bibliothèque standard
 de Python : il n'y a rien à installer, et l'image `python:3.14-slim` n'a de toute
 façon ni `curl` ni `wget`.
 
@@ -60,13 +60,17 @@ que d'aller le chercher dans Redis. Un test qui lit Redis vérifie ce que le cod
 écrit ; il passerait au vert avec un envoi cassé, une adresse erronée ou un
 gabarit vide.
 
-:::note Un adaptateur SMTP provisoire depuis BACK-17
+:::note Où vit le code SMTP, et comment il est arrivé là
 Ce ticket-ci ne livre que l'infrastructure — le service, ses variables, sa sonde
-et cette page. L'adaptateur SMTP appartient à BACK-22, avec le module
-`notifications` ; BACK-17 en a écrit un **provisoire** parce qu'un code de
-vérification qui ne part pas ne vérifie rien, et c'est lui qui a décommenté les
-six variables du bloc partagé du compose. BACK-22 reprendra ce code sans toucher
-à ces noms.
+et cette page. Le code SMTP appartenait à BACK-22 ; BACK-17 en a écrit un
+**provisoire** parce qu'un code de vérification qui ne part pas ne vérifie rien,
+et c'est lui qui a décommenté les six variables du bloc partagé du compose.
+
+**BACK-22 l'a repris**, sans toucher à ces noms : le dialogue vit désormais dans
+`shared/infrastructure/clients/smtp_mailer.py`, derrière le port technique
+`EmailTransport`. Il n'est ni dans `identity` ni dans `notifications` parce que
+les deux en ont besoin sans avoir le droit de se connaître
+([ADR-0022](../adr/0022-transport-email-partage.md)).
 :::
 
 Les écarts assumés avec le ticket INFRA-07 sont consignés au

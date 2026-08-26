@@ -42,4 +42,12 @@ LES MODULES
 
 `identity` est le module PILOTE de BACK-04 : il est le seul complet a ce stade,
 et sert de reference de structure aux suivants.
+
+`notifications` (BACK-22) est le premier a avoir eprouve la regle d'independance
+pour de bon, et sa reponse fait jurisprudence. Deux modules avaient besoin du
+meme dialogue SMTP ; ni l'un ni l'autre ne pouvait importer l'autre. Le besoin
+TECHNIQUE est donc descendu dans `shared/domain/ports/`, ou les deux
+l'atteignent sans se connaitre (ADR-0022) -- et non l'inverse, qui aurait fait
+du premier arrive une dependance du second. Ce que `notifications` garde pour
+lui est ce qui parle METIER : les evenements, les preferences, le choix du canal.
 """

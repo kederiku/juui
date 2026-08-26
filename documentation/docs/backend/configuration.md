@@ -29,7 +29,7 @@ gabarit ; cette page ne le recopie pas, pour éviter que les deux divergent.
 | `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod | BACK-13                                      |
 | `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie       | BACK-10                                      |
 | `OtpSettings`      | `OTP_`      | validité, tentatives et quotas de renvoi d'un OTP | BACK-17                                      |
-| `SmtpSettings`     | `SMTP_`     | courriel sortant, plus `MAIL_FROM` sans préfixe   | BACK-17, puis BACK-22                        |
+| `SmtpSettings`     | `SMTP_`     | courriel sortant, plus `MAIL_FROM` sans préfixe   | BACK-17, repris par BACK-22                  |
 
 Un préfixe par sous-modèle plutôt qu'un délimiteur de nesting : `POSTGRES_USER` et
 `MINIO_ROOT_USER` sont imposés par les images Docker, et la traduction n'aurait servi à rien.

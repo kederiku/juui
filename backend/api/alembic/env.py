@@ -54,6 +54,7 @@ if context.config.config_file_name is not None:
 _MODEL_MODULES: Final[tuple[str, ...]] = (
     "app.modules.identity.infrastructure.db.models",
     "app.modules.medical_records.infrastructure.db.models",
+    "app.modules.notifications.infrastructure.db.models",
     "app.modules.organization.infrastructure.db.models",
 )
 

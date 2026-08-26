@@ -10,13 +10,15 @@ BACK-14 pour recevoir `Settings` en argument precisement dans ce but.
 PAS D'ABSTRACTION « LIFESPAN COMMUN », ET C'EST UN CHOIX
 Les fabriques SONT la factorisation : les deux cycles divergent reellement
 (`app.state` contre `TaskiqState`, pas de stockage objet cote worker tant
-qu'aucune tache n'en a besoin -- BACK-22 l'ajoutera ici), et une abstraction
-qui les couvrirait tous deux n'aurait qu'un seul consommateur chacun.
+qu'aucune tache n'en a besoin -- BACK-22 n'en a pas eu besoin, son transport de
+courriel n'ouvrant aucune ressource durable), et une abstraction qui les
+couvrirait tous deux n'aurait qu'un seul consommateur chacun.
 
-LES RESSOURCES DES MODULES NE PEUVENT PAS S'OUVRIR ICI (BACK-17)
+LES RESSOURCES DES MODULES NE PEUVENT PAS S'OUVRIR ICI (BACK-17, BACK-22)
 Le contrat `service-spaces` interdit a `shared` d'importer `app.modules.*` : ce
-fichier ne peut donc pas construire le magasin d'OTP d'`identity`, ni ce que les
-modules suivants ouvriront. Chaque module construit donc SA ressource a la
+fichier ne peut donc pas construire le magasin d'OTP d'`identity`, ni les
+adaptateurs de canal de `notifications`, ni ce que les modules suivants
+ouvriront. Chaque module construit donc SA ressource a la
 premiere tache qui en a besoin, et la confie a `remember_module_resource` pour
 que la fermeture ci-dessous la retrouve. C'est le pendant, cote worker, de ce que
 `main.py` fait explicitement dans son `lifespan` -- lui a le droit de nommer les

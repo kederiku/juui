@@ -290,13 +290,20 @@ class OtpSender(ABC):
     Le port ne sait ni engendrer un code, ni decider s'il faut l'envoyer : on lui
     donne une adresse et six chiffres, il les fait parvenir. C'est ce qui rend la
     doublure des tests triviale -- elle retient le dernier code emis -- et ce qui
-    permettra a BACK-22 de glisser son `NotificationSender` a la place de
-    l'adaptateur SMTP provisoire sans qu'une ligne de metier bouge.
+    a permis a BACK-22 de deplacer le dialogue SMTP hors du module sans qu'une
+    ligne de metier bouge : le port n'a pas change, seule son implementation
+    delegue desormais au port technique `EmailTransport` de `shared/`.
+
+    CE PORT SURVIT A BACK-22, IL N'EST PAS REMPLACE PAR LUI. Le module
+    `notifications` recoit ses evenements PAR LA FILE, ou tout argument voyage en
+    clair dans un stream sans TTL ; un code de verification est un secret et ne
+    traverse rien (ADR-0020). Il est engendre dans le worker et remis depuis le
+    worker.
 
     UN OTP PART TOUJOURS, quelles que soient les preferences de notification : ce
     n'est pas un message de confort mais un message TRANSACTIONNEL, sans lequel le
     compte reste inutilisable. La distinction est posee par BACK-22 ; elle se
-    traduira ici par le fait que cet appel ne consulte aucune preference.
+    traduit ici par le fait que cet appel ne consulte aucune preference.
     """
 
     @abstractmethod
