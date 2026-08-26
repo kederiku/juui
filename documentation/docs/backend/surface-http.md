@@ -70,6 +70,27 @@ alternatives écartées et ce qu'elle coûte sont consignés dans
 l'[ADR-0012](../adr/0012-perimetre-de-requete.md) ; son application
 revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe).
 
+## La pagination
+
+Toute route de liste répond par l'**enveloppe unique** `{ items, total, page, page_size }` —
+jamais un tableau nu : un objet s'étend sans casser le contrat, et Orval le type proprement. Les
+paramètres sont normalisés : `page` (≥ 1, défaut 1), `page_size` (1 à 100, défaut 20), et un
+`page_size` au-delà du maximum vaut un **refus explicite** en 422
+(`http.request.validation_error`) — jamais une troncature silencieuse. Le tri s'écrit
+`sort=champ` ou `sort=-champ`, validé contre la **liste blanche de l'endpoint**
+(`sort_param(...)`) ; un champ hors liste sort en 422 `shared.pagination.unknown_sort`, et le nom
+public ne touche jamais le SQL — la correspondance nom → colonne vit dans le dépôt du module.
+
+Deux conventions d'écriture pour les routes à venir : les paramètres se reçoivent par
+`Annotated[PageParams, Depends()]` — pas la forme `Query()`, qui sérialise un unique paramètre
+objet dans l'OpenAPI — et chaque endpoint déclare sa **sous-classe nommée** de l'enveloppe
+(`class AccountPage(Page[AccountRead])`) : un `Page[...]` paramétré en signature sortirait sous le
+nom mutilé `Page_AccountRead_` dans le schéma, donc dans le client généré. L'offset est un choix
+écrit — « page 7 » et un total pour les écrans d'administration, le curseur restant réservé aux
+futurs flux volumineux ; le motif complet, les alternatives écartées et ce que cela coûte sont
+consignés dans l'[ADR-0017](../adr/0017-pagination-par-offset.md), et les tests de
+`tests/shared/test_pagination.py` verrouillent le tout — noms de composants propres compris.
+
 ## Le format d'erreur
 
 Toute réponse d'erreur de la surface — refus métier, validation, routage, 500 — porte le même

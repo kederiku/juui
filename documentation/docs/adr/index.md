@@ -49,6 +49,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0014](./0014-traduction-des-erreurs-a-la-bordure.md) | Les erreurs métier se traduisent en HTTP à la bordure, en un format unique | Accepté |
 | [ADR-0015](./0015-cles-etrangeres-frontiere-module.md)    | Les clés étrangères s'arrêtent à la frontière du module                    | Accepté |
 | [ADR-0016](./0016-unicite-email-insensible-casse.md)      | L'unicité d'e-mail tient par un index unique sur lower(email)              | Accepté |
+| [ADR-0017](./0017-pagination-par-offset.md)               | Les listes se paginent par offset, dans une enveloppe unique               | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

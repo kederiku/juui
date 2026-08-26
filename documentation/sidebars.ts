@@ -148,6 +148,7 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0016-unicite-email-insensible-casse',
           label: 'Unicité d’e-mail',
         },
+        { type: 'doc', id: 'adr/0017-pagination-par-offset', label: 'Pagination' },
       ],
     },
     {

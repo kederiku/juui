@@ -117,9 +117,12 @@ Quatre comportements valent d'être nommés, parce qu'ils se décident ici pour 
   `IntegrityError` au flush du second `add`, que BACK-09/BACK-28 traduiront ;
 - `save` modifie la **ligne suivie** (`session.get` puis `_apply_to_model`), jamais un
   `merge()` d'objet reconstruit qui coûterait un SELECT de plus ;
-- `list` suit la clé primaire : les identifiants **UUIDv7** étant horodatés, l'ordre est
-  chronologique et déterministe sans colonne de tri — et la sortie est **sans borne**, la
-  pagination étant une convention de BACK-24, pas un choix à figer ici en douce.
+- `list` rend **une page, jamais toute la table** : depuis BACK-24, il reçoit un `PageRequest` et
+  répond par un `PageResult` — items, total du périmètre courant, page et taille. Sans tri
+  demandé, l'ordre suit la clé primaire — les identifiants **UUIDv7** étant horodatés, il est
+  chronologique et déterministe sans colonne de tri ; avec un tri (liste blanche `_sortable`), la
+  clé primaire départage les égalités. La convention — bornes refusées, enveloppe, offset assumé —
+  est consignée dans l'[ADR-0017](../adr/0017-pagination-par-offset.md).
 
 ## La variante tenant : deux coutures, une classe mère
 
@@ -276,6 +279,7 @@ from app.core import get_settings
 from app.modules.identity.domain.entities import Account, AccountType
 from app.modules.identity.domain.exceptions import AccountNotFoundError
 from app.modules.identity.infrastructure.db.repositories import SqlAlchemyAccountRepository
+from app.shared.domain.pagination import PageRequest
 from app.shared.infrastructure.db.base import Base
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import build_sessionmaker
@@ -319,7 +323,8 @@ async def main() -> None:
             )
             await accounts.add(second)
             await session.commit()
-            print("liste        :", [account.email for account in await accounts.list()])
+            page = await accounts.list(PageRequest())
+            print("liste        :", [account.email for account in page.items], "total :", page.total)
 
             await accounts.delete(first.id)
             await session.commit()
@@ -338,9 +343,10 @@ PY
 ```
 
 Attendu : `aller-retour : True` — l'égalité de dataclass prouve le mapping dans les deux sens —
-puis `sauvegarde : True`, la liste dans l'**ordre de création** `['premier@example.com',
-'second@example.com']`, et la suppression suivie d'un `AccountNotFoundError` portant le message
-du module.
+puis `sauvegarde : True`, la première page dans l'**ordre de création**
+`['premier@example.com', 'second@example.com'] total : 2` — l'enveloppe de BACK-24
+([ADR-0017](../adr/0017-pagination-par-offset.md)) —, et la suppression suivie d'un
+`AccountNotFoundError` portant le message du module.
 
 La quatrième joue le cas d'usage complet à travers une route, et prouve « une instance par
 requête ». L'application est définie **dans la sonde** : les vraies routes appartiennent à
