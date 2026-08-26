@@ -70,10 +70,11 @@ poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 `openssl rand -hex 32`.
 
 :::note Gabarits des frontends
-Des trois gabarits `frontend/*/.env.local.example`, seul celui de
-`frontend-professional` a aujourd'hui une application pour le lire. Sa copie
-n'est d'ailleurs pas nécessaire pour démarrer : les deux variables qu'il porte
-désignent l'API, que l'interface n'appelle pas encore (SHARED-03).
+Les trois gabarits `frontend/*/.env.local.example` ont chacun leur application
+depuis FRONT-03. Leur copie n'est pas nécessaire pour démarrer : les deux
+variables qu'ils portent désignent l'API, que lit le mutator du client généré
+(SHARED-03) mais qu'aucun écran n'appelle encore — le fournisseur de requêtes
+arrive avec FRONT-04.
 :::
 
 Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre

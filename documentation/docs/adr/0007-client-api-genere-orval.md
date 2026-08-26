@@ -5,15 +5,16 @@ description: Types, hooks TanStack Query et schémas Zod sont générés depuis 
 
 # ADR-0007 — Le client d'API des frontends est généré par Orval
 
-| Statut      | Date       | Tickets             |
-| ----------- | ---------- | ------------------- |
-| **Accepté** | 2026-08-25 | SHARED-03 (à venir) |
+| Statut      | Date       | Tickets   |
+| ----------- | ---------- | --------- |
+| **Accepté** | 2026-08-25 | SHARED-03 |
 
 ## Contexte
 
-Décision portée par SHARED-03, dont l'application est à venir — mais elle est prise, et le dépôt
-en porte déjà les traces : la configuration ESLint et le `.prettierignore` excluent nommément la
-future sortie générée, et le scope de commit `api-client` lui est réservé.
+Décision consignée avant son application, et appliquée depuis par SHARED-03. Le dépôt en portait
+déjà les traces au moment de l'écrire : la configuration ESLint et le `.prettierignore` excluaient
+nommément une sortie générée qui n'existait pas encore, et le scope de commit `api-client` lui était
+réservé. Les trois lignes ont trouvé leur objet.
 
 Trois frontends consomment la même API. FastAPI produit déjà un schéma OpenAPI exact, dérivé des
 routes et des modèles Pydantic. Écrire à la main les types TypeScript et les appels — trois fois —
@@ -74,6 +75,19 @@ le prix de la visibilité. La qualité du client généré dépend de la rigueur
 
 ## Références
 
+- `packages/api-client/orval.config.ts` — la configuration de génération : l'entrée, le découpage
+  par étiquette, le client TanStack Query et les schémas Zod, chaque option motivée sur place.
+- `packages/api-client/src/mutator.ts` — l'unique porte de sortie HTTP : base URL, en-têtes,
+  erreurs normalisées. Ses deux voisins, `errors.ts` et `runtime.ts`, portent le format d'erreur et
+  les points d'extension laissés à FRONT-07.
+- `packages/api-client/src/generated/` — la sortie versionnée, jamais éditée à la main.
 - `.prettierignore` — l'exclusion du dossier généré, motivée sur place.
-- `eslint.config.mjs` — la même exclusion côté lint.
-- `commitlint.config.mjs` — le scope `api-client` réservé.
+- `eslint.config.mjs` — la même exclusion côté lint, que `packages/api-client/eslint.config.mjs`
+  re-déclare pour son propre workspace.
+- `commitlint.config.mjs` — le scope `api-client`, désormais employé.
+- [ADR-0019](./0019-contrat-openapi-exporte.md) — d'où vient le schéma que lit Orval, question que
+  cette décision-ci laissait ouverte.
+- [Le client d'API généré](../frontend/client-api-genere.md) — la régénération, les hooks, le
+  mutator et ses points d'extension.
+- [Surface HTTP](../backend/surface-http.md) — les étiquettes et les `operation_id` dont Orval
+  dérive les noms publics du client.

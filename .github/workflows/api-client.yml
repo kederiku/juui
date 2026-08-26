@@ -1,0 +1,135 @@
+# Verification anti-derive du client d'API genere (SHARED-03).
+#
+# CE WORKFLOW NE PRODUIT RIEN. Il rejoue la chaine de generation -- export du
+# schema OpenAPI depuis FastAPI, puis Orval -- et demande a git si le resultat
+# differe de ce qui est commite. C'est la mise en oeuvre litterale de
+# l'ADR-0007 : « le dossier genere est versionne, et interdit d'edition : la CI
+# echoue si une regeneration produit un diff ».
+#
+# UN FICHIER A PART, ET NON UN JOB DE ci-backend.yml. Les `paths` se declarent
+# par WORKFLOW, jamais par job : greffer ce job la-bas aurait oblige a y ajouter
+# `packages/api-client/**`, donc a relancer les contrats d'architecture sur une
+# pull request purement frontend -- ce que le commentaire de ce fichier-la
+# refuse nommement. Et l'inverse serait pire : s'en tenir a `backend/**`
+# laisserait passer une pull request qui edite `generated/` a la main, le cas
+# que l'ADR-0007 vise en premier.
+#
+# LE JOB NE LANCE QU'UNE CIBLE make, ET C'EST DELIBERE : `make
+# generate-api-check` sur le poste fait exactement ce que fait la CI, message
+# d'echec compris. Meme regle que le `check` de backend/api/Makefile -- « un
+# echec local reproduit ainsi exactement un echec de CI ».
+name: Client d'API
+
+# LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, comme dans
+# ci-backend.yml et documentation.yml, et pour la meme raison : GitHub Actions
+# n'interprete pas les ancres YAML. Les tenir alignees.
+#
+# `backend/**` couvre le contrat a la source -- routes, schemas Pydantic,
+# pyproject.toml, uv.lock ; `packages/api-client/**` couvre le schema exporte ET
+# la sortie generee, si bien qu'une edition a la main de l'un ou de l'autre passe
+# par ici. `pnpm-lock.yaml` est nomme parce que c'est la que vit la version
+# d'Orval : la monter change la sortie, donc doit la revalider.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'packages/api-client/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/api-client.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'packages/api-client/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/api-client.yml'
+
+# Lecture seule : ce workflow ne publie rien et n'ecrit dans aucun reglage. Il
+# REECRIT en revanche l'arbre de travail du runner -- c'est le principe meme de
+# la verification --, ce qui ne demande aucune permission : rien n'est pousse.
+permissions:
+  contents: read
+
+# Une execution a la fois par branche, et annulation de la precedente sur les
+# seules pull requests -- un nouveau commit rend la verification precedente sans
+# objet. Sur `main`, jamais : on veut l'historique complet des resultats.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  drift:
+    name: Client d'API a jour
+    runs-on: ubuntu-latest
+
+    # PAS de `defaults.run.working-directory`, contrairement a ci-backend.yml :
+    # la cible make et pnpm se lancent depuis la RACINE du depot. Seul `uv sync`
+    # a besoin de backend/api, et il le declare sur son etape.
+    env:
+      # Le `prepare: husky` du package.json racine tourne a chaque installation.
+      # Des hooks git n'ont aucun sens sur un agent de CI -- meme raison que le
+      # HUSKY=0 de documentation.yml et de docker/frontend/Dockerfile.
+      HUSKY: 0
+
+    steps:
+      # Profondeur 1 (le defaut) SUFFIT, et il faut le savoir pour ne pas se
+      # croire oblige d'ajouter `fetch-depth: 0` : la verification compare
+      # l'arbre de travail a l'INDEX, jamais a un commit anterieur. Aucun
+      # historique n'est lu.
+      - name: Recuperer le depot
+        uses: actions/checkout@v7
+
+      # AVANT setup-node, et pas apres : c'est ce qui rend le cache `pnpm` de
+      # l'etape suivante possible. L'action lit la version du champ
+      # `packageManager` du package.json racine -- aucune version a redire ici.
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          # La version de reference du depot, celle du poste et des images.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # QUATRIEME ENDROIT OU LA VERSION DE UV EST NOMMEE, apres le `version:` de
+      # ci-backend.yml, l'ARG UV_VERSION du Dockerfile d'INFRA-04 et le uv du
+      # poste. Ce n'est pas une quatrieme occasion de deriver : le
+      # `required-version = ">=0.12.5,<0.13"` de backend/api/pyproject.toml fait
+      # ECHOUER l'etape suivante des qu'un uv hors plage est en place. Cette
+      # ligne-ci choisit, celle-la verifie -- les deux se montent ensemble.
+      #
+      # Version exacte de l'action : setup-uv ne publie plus de tag flottant
+      # depuis la v8. Meme raisonnement que ci-backend.yml.
+      - name: Installer uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: '0.12.5'
+          enable-cache: true
+          cache-dependency-glob: backend/api/uv.lock
+
+      # BACKEND PUIS FRONTEND, l'ordre du depot -- et ici l'ordre de la chaine
+      # elle-meme : l'export precede Orval.
+      #
+      # `--locked` et non `--frozen` : les deux installent les versions du lock,
+      # `--locked` echoue en plus si uv.lock est desaccorde de pyproject.toml.
+      # C'est ce qui garantit que le schema exporte ici sort du meme FastAPI et
+      # du meme Pydantic que celui du poste.
+      - name: Synchroniser l'environnement Python
+        working-directory: backend/api
+        run: uv sync --locked
+
+      # `--filter @repo/api-client...` : le package et ce dont il depend, rien de
+      # plus. `--frozen-lockfile` interdit toute re-resolution -- c'est ce qui
+      # fige la version d'Orval, dont la sortie EST le fichier compare.
+      - name: Installer les dependances Node
+        run: pnpm install --frozen-lockfile --filter @repo/api-client...
+
+      # UNE SEULE ETAPE, et une cible make plutot que les commandes deroulees :
+      # le developpeur qui lit cet echec tape la meme chose sur son poste. Le
+      # message d'erreur est ecrit dans le Makefile de la racine, pas ici.
+      - name: Verifier que le client est a jour
+        run: make generate-api-check

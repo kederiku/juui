@@ -13,6 +13,14 @@ pnpm-lock.yaml
 # regenere a chaque modification d'un contrat — le reformater serait perdu.
 **/generated/
 
+# Contrat OpenAPI exporte depuis FastAPI par `make generate-api` (SHARED-03),
+# dans sa forme canonique : json.dumps trie les clefs et developpe tout, la ou
+# Prettier recolle les tableaux courts sur une ligne — mesure, 144 lignes contre
+# 125. Les deux se reecriraient indefiniment, et `make generate-api-check`
+# echouerait selon celui qui a tourne en dernier. Meme boucle que le
+# pnpm-lock.yaml ci-dessus.
+packages/api-client/openapi.json
+
 # Deja minifie.
 *.min.*
 

@@ -51,6 +51,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0016](./0016-unicite-email-insensible-casse.md)       | L'unicité d'e-mail tient par un index unique sur lower(email)              | Accepté |
 | [ADR-0017](./0017-pagination-par-offset.md)                | Les listes se paginent par offset, dans une enveloppe unique               | Accepté |
 | [ADR-0018](./0018-journalisation-bibliotheque-standard.md) | Les journaux se formatent avec la bibliothèque standard, deux rendus       | Accepté |
+| [ADR-0019](./0019-contrat-openapi-exporte.md)              | Le contrat OpenAPI est exporté dans un fichier versionné                   | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

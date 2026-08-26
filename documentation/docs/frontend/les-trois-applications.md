@@ -18,10 +18,12 @@ aucun. Seuls les distinguent leur port, leurs métadonnées, et ce que décriven
 les deux sections suivantes — le volet SEO de la seule application publique, et
 le back-office de la seule qui soit entièrement privée.
 
-1. Quatre dépendances de workspace — `@repo/ui`, `@repo/tailwind-config`,
-   `@repo/typescript-config` et `@repo/eslint-config`, toutes en `"workspace:*"`
-   — et `transpilePackages: ['@repo/ui']` dans `next.config.ts`, le package
-   étant livré en TypeScript non compilé.
+1. Cinq dépendances de workspace — `@repo/ui`, `@repo/api-client`,
+   `@repo/tailwind-config`, `@repo/typescript-config` et `@repo/eslint-config`,
+   toutes en `"workspace:*"` — et
+   `transpilePackages: ['@repo/api-client', '@repo/ui']` dans `next.config.ts`,
+   les deux packages étant livrés en TypeScript non compilé. Le client d'API est
+   arrivé avec SHARED-03 : [Le client d'API généré](./client-api-genere.md).
 2. `export { default } from '@repo/tailwind-config/postcss.config';` dans son
    `postcss.config.mjs`.
 3. Un `app/globals.css` à elle, qui ré-importe celui de `@repo/ui` et déclare
@@ -47,6 +49,9 @@ le back-office de la seule qui soit entièrement privée.
 6. Un `tsconfig.json` qui étend `@repo/typescript-config/nextjs.json` et déclare
    chez lui ce qu'un fichier partagé ne peut pas porter — ses `paths` (`@/*` et
    `"@repo/ui/*": ["../../packages/ui/src/*"]`), son `include` et son `exclude`.
+   `@repo/api-client` n'y figure pas, et c'est délibéré : la résolution
+   `bundler` du socle partagé lit la carte `exports` du package et n'a besoin
+   d'aucune entrée — vérifié plutôt que supposé (registre des écarts, SHARED-03).
 7. `output: 'standalone'` **et** un `outputFileTracingRoot` pointant la racine du
    dépôt. Le second n'est pas facultatif dans un monorepo : sans lui, le traçage
    part du dossier de l'application et n'embarque pas les dépendances atteintes

@@ -16,8 +16,9 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
-  // `@repo/ui` est publie en SOURCE TypeScript, sans etape de build.
-  transpilePackages: ['@repo/ui'],
+  // `@repo/api-client` et `@repo/ui` sont publies en SOURCE TypeScript, sans
+  // etape de build.
+  transpilePackages: ['@repo/api-client', '@repo/ui'],
 
   // Sortie autonome, reclamee par INFRA-05 pour produire une image legere.
   output: 'standalone',

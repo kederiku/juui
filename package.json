@@ -11,6 +11,7 @@
     "prepare": "husky",
     "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r --if-present run build",
+    "generate:api": "pnpm --filter @repo/api-client run generate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r --if-present run typecheck",

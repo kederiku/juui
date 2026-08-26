@@ -22,15 +22,16 @@ métier. Le cœur d'authentification leur est commun et n'est écrit qu'une fois
 | --------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [Configurations partagées](./configurations-partagees.md) | Les quatre packages de configuration et la chaîne de presets qui les relie. |
 | [La bibliothèque @repo/ui](./bibliotheque-ui.md)          | Les composants shadcn/ui partagés, le thème, la `DataTable`.                |
+| [Le client d'API généré](./client-api-genere.md)          | Le package `@repo/api-client` : régénérer, consommer un hook, le mutator.   |
 | [Les trois applications](./les-trois-applications.md)     | Le socle commun FRONT-01 à 03, le volet SEO, le back-office et sa garde.    |
 
 ## Ce qui viendra ici
 
-- Le **client d'API généré** depuis le contrat OpenAPI, et l'interdiction d'éditer son code
-  (SHARED-03).
 - Les conventions de **données côté client** : cache, formulaires, validation.
 - L'**accessibilité** au-delà du lint : parcours clavier et lecteurs d'écran.
 
 :::note Apportée par les tickets FRONT et SHARED
-Les tickets à venir — SHARED-03, FRONT-04 et suivants — rempliront ces sujets à leur livraison.
+Le client d'API généré est arrivé avec SHARED-03 et a désormais sa page,
+[Le client d'API généré](./client-api-genere.md). Les tickets à venir — FRONT-04 et suivants —
+rempliront les deux sujets restants à leur livraison.
 :::

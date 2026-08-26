@@ -5,9 +5,9 @@ description: Chaque module publie son routeur sur un routeur racine versionné ;
 
 # ADR-0011 — Un routeur par module, monté sous /api/v1
 
-| Statut      | Date       | Tickets                      |
-| ----------- | ---------- | ---------------------------- |
-| **Accepté** | 2026-08-25 | BACK-08, SHARED-03 (à venir) |
+| Statut      | Date       | Tickets            |
+| ----------- | ---------- | ------------------ |
+| **Accepté** | 2026-08-25 | BACK-08, SHARED-03 |
 
 ## Contexte
 

@@ -43,3 +43,11 @@ allowBuilds:
   # refuser n'enleve donc aucune fonctionnalite ; l'autoriser n'ajouterait que
   # du bruit a chaque installation, sur le poste comme en CI.
   core-js: false
+  # Binding natif d'`esbuild`, tire par @orval/core (SHARED-03). Le binaire est
+  # livre prebuild en dependance optionnelle selon la plateforme
+  # (@esbuild/darwin-arm64 sur le poste, @esbuild/linux-x64 en CI) ; ce script
+  # n'est que le repli qui le recompile quand ce mecanisme echoue. Refuse comme
+  # @parcel/watcher, et pour la meme raison : rien a y gagner tant que le
+  # prebuild arrive. Verifie -- `make generate-api` produit la meme sortie sans
+  # lui. A rouvrir si une plateforme se plaignait d'un binaire manquant.
+  esbuild: false

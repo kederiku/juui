@@ -27,8 +27,12 @@ export default {
     //
     // La liste suit les workspaces REELS, pas une nomenclature figee. Regle a
     // tenir : un nouveau workspace ajoute son scope ici, dans la PR qui le cree
-    // -- les deux packages de configuration l'ont fait en SHARED-02, reste
+    // -- les deux packages de configuration l'ont fait en SHARED-02, et
     // `api-client` en SHARED-03.
+    //
+    // Le scope suit le nom du DOSSIER, jamais le nom npm : `config-typescript`
+    // designe `@repo/typescript-config`, `config-tailwind`
+    // `@repo/tailwind-config`. Pour `packages/api-client` les deux coincident.
     'scope-enum': [
       2,
       'always',
@@ -40,6 +44,7 @@ export default {
         'ui', // packages/ui (SHARED-01)
         'config-typescript', // packages/config-typescript (SHARED-02)
         'config-tailwind', // packages/config-tailwind (SHARED-02)
+        'api-client', // packages/api-client (SHARED-03)
         'docker', // docker/
         'documentation', // documentation/ (DOC-01)
       ],

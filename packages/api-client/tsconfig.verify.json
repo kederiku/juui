@@ -1,0 +1,45 @@
+{
+  // Compilation JETABLE du package, pour la seule verification de SHARED-03
+  // (`make verify-api-client`). N'entre dans aucune chaine de build.
+  //
+  // POURQUOI COMPILER, PLUTOT QU'EXECUTER LE TYPESCRIPT DIRECTEMENT
+  // Node 24 sait effacer les types a la volee, mais il reste un resolveur ESM :
+  // il exige des extensions explicites dans les specificateurs. Or Orval ecrit
+  // ses imports relatifs SANS extension -- `from '../../../mutator'` -- ce que
+  // seul un resolveur de type bundler ou CommonJS accepte. D'ou cette passe.
+  //
+  // POURQUOI COMMONJS
+  // C'est le seul module dont la resolution accepte les imports sans extension
+  // sans rien demander a Orval. `bundler`, la resolution du socle, ne se marie
+  // qu'avec `module: esnext | preserve` -- elle est donc hors de portee ici.
+  //
+  // CE FICHIER DISPARAITRA AVEC QA-02, qui posera un vrai runner de test
+  // frontend : ce montage n'est que la maniere de tenir le critere
+  // d'acceptation sans prendre a ce ticket-la sa decision.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".verify",
+    "module": "commonjs",
+    // `node10` est deprecie et disparaitra en TypeScript 7 -- d'ou la
+    // derogation ci-dessous, ecrite ici et nulle part ailleurs. C'est la seule
+    // resolution qui accepte les imports sans extension d'Orval avec
+    // `module: commonjs`. Assume parce que ce fichier est jetable : QA-02 le
+    // remplacera par un vrai runner bien avant TypeScript 7.
+    "moduleResolution": "node10",
+    "ignoreDeprecations": "6.0",
+    // Le pendant TypeScript de `consistent-type-imports`, qui n'a pas de sens
+    // ici : en CommonJS, c'est au compilateur d'effacer les imports de type.
+    "verbatimModuleSyntax": false,
+    "declaration": false,
+    "sourceMap": false,
+    // La resolution `node10` ne retrouve pas seule les paquets de types que
+    // `bundler` decouvre : `process`, lu par runtime.ts, sort en TS2591 sans
+    // cette ligne.
+    "types": ["node"],
+    // Rien ne doit s'executer sur une compilation en echec : le message serait
+    // celui d'un appel HTTP rate, la cause un type faux.
+    "noEmitOnError": true
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts"]
+}

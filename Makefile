@@ -44,11 +44,12 @@ COMPOSE_DEV := $(COMPOSE) -f docker/docker-compose.override.yml
 
 .PHONY: help up dev down restart logs shell-api mail \
 	db-migrate db-upgrade db-downgrade db-reset seed \
+	generate-api generate-api-check verify-api-client \
 	lint format typecheck test test-back test-front
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-13s\033[0m %s\n", $$1, $$2}'
+		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 # -----------------------------------------------------------------------------
 # Pile conteneurisee
@@ -138,6 +139,65 @@ db-reset: ## Detruit le volume de la base, la recree, migre et injecte le seed (
 # remise a zero qui a reussi.
 seed: ## Injecte le jeu de donnees de demonstration (INFRA-08)
 	@echo 'INFRA-06 : aucun jeu de donnees a injecter -- le seed arrive avec INFRA-08.'
+
+# -----------------------------------------------------------------------------
+# Contrat d'API et client genere (SHARED-03)
+# -----------------------------------------------------------------------------
+# BACKEND PUIS FRONTEND, comme les cibles de qualite ci-dessous -- mais ici
+# l'ordre n'est pas une preference : la seconde etape LIT le fichier que la
+# premiere ecrit.
+#
+# `pnpm generate:api` seul reste utile, et c'est voulu : il regenere le client
+# depuis l'openapi.json COMMITE, sans `uv` sur le poste -- de quoi corriger un
+# reglage d'Orval ou le mutator. Ce qu'il ne fait pas, c'est VOIR un changement
+# de contrat : pour cela il faut reexporter, donc cette cible-ci. C'est ELLE,
+# l'etape obligatoire apres toute modification d'un contrat d'API.
+generate-api: ## Exporte le schema OpenAPI puis regenere le client (SHARED-03)
+	$(MAKE) --no-print-directory -C backend/api openapi
+	pnpm generate:api
+
+# LE PENDANT LOCAL DE LA CI, meme esprit que le `migrate-check` de
+# backend/api/Makefile : .github/workflows/api-client.yml ne lance rien d'autre
+# que cette cible, si bien qu'un echec de CI se reproduit ici sans deviner.
+#
+# `git add --intent-to-add` AVANT le diff, et ce n'est pas du zele : `git diff`
+# ne voit QUE les fichiers suivis. Une regeneration qui cree un fichier neuf --
+# une etiquette OpenAPI de plus, donc un fichier Orval de plus -- passerait
+# inapercue, et la CI validerait un client incomplet. Sur un fichier deja suivi
+# l'operation ne fait rien : en regime etabli, cette ligne est un no-op.
+#
+# `--exit-code` AFFICHE le patch en plus de sortir en 1 : le diff est la
+# premiere moitie du message d'erreur, le bloc `||` en est la seconde.
+#
+# Le pathspec borne la verification a ce que la chaine ecrit. C'est la raison
+# pour laquelle openapi.json vit dans ce dossier (ADR-0019) : le contrat et sa
+# traduction tiennent dans un seul chemin.
+generate-api-check: generate-api ## Echoue si le client genere ne correspond plus au contrat
+	@git add --intent-to-add -- packages/api-client
+	@git --no-pager diff --exit-code -- packages/api-client \
+		|| { echo ''; \
+		echo 'SHARED-03 : le client d API ne correspond plus au contrat OpenAPI.'; \
+		echo 'Le diff ci-dessus est ce que la regeneration vient de produire, et'; \
+		echo 'qui n est pas commite.'; \
+		echo ''; \
+		echo 'Deux causes, un seul geste :'; \
+		echo '  - un contrat d API a change : ce diff est ATTENDU, il appartient'; \
+		echo '    a la meme pull request que le changement de contrat ;'; \
+		echo '  - packages/api-client/src/generated/ a ete edite a la main :'; \
+		echo '    ADR-0007 interdit cette edition, la regeneration l a perdue.'; \
+		echo ''; \
+		echo 'Sur le poste :'; \
+		echo '    make generate-api'; \
+		echo '    git add packages/api-client'; \
+		echo ''; \
+		exit 1; }
+
+# La preuve du critere « un hook genere appelle reellement l API » (SHARED-03).
+# Exige la pile demarree (`make dev`) : elle appelle le VRAI backend, pas un
+# double. Hors CI pour cette raison meme -- le workflow n'a pas de service a
+# interroger, il se borne a verifier que le genere est a jour.
+verify-api-client: ## Appelle l API avec le client genere (pile demarree)
+	@sh scripts/verify-api-client.sh
 
 # -----------------------------------------------------------------------------
 # Qualite -- backend PUIS frontend

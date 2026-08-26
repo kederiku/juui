@@ -50,6 +50,13 @@ coverage.xml
 # personne ne s'en apercoive. QA-01 les lance hors conteneur.
 tests/
 
+# --- Outillage ---
+# L'exportateur du schema OpenAPI (SHARED-03). Meme raisonnement que tests/ :
+# c'est de l'outillage de poste et de CI, jamais du runtime -- il ecrit d'ailleurs
+# hors de ce contexte, dans packages/api-client/. Le conteneur, lui, sert le
+# schema par /openapi.json.
+scripts/
+
 # --- Metadonnees git ---
 # Sans objet ici -- le .git vit a la racine du depot, hors de ce contexte --
 # mais la ligne est demandee par le ticket et couvre le jour ou quelqu'un
