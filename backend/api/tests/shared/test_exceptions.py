@@ -22,6 +22,7 @@ from app.shared.domain.exceptions import (
     PermissionDeniedError,
     ValidationError,
 )
+from app.shared.domain.pagination import InvalidPageRequestError, UnknownSortFieldError
 from app.shared.domain.ports.file_storage import (
     FileStorageError,
     FileStorageUnavailableError,
@@ -82,6 +83,14 @@ def test_identity_errors_are_reparented() -> None:
     assert EmailAlreadyUsedError.code == "identity.account.email_already_used"
     assert EmailAlreadyVerifiedError.code == "identity.account.email_already_verified"
     assert InvalidStatusTransitionError.code == "identity.account.invalid_status_transition"
+
+
+def test_pagination_errors_are_reparented() -> None:
+    """Les refus de pagination (BACK-24) sont des erreurs de validation, en 422."""
+    assert issubclass(InvalidPageRequestError, ValidationError)
+    assert issubclass(UnknownSortFieldError, ValidationError)
+    assert InvalidPageRequestError.code == "shared.pagination.invalid"
+    assert UnknownSortFieldError.code == "shared.pagination.unknown_sort"
 
 
 def test_file_storage_errors_keep_their_family_and_gain_a_category() -> None:

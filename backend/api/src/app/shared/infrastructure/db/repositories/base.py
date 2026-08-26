@@ -29,16 +29,32 @@ que `get`, `save` et `delete` partagent. Ce sont les deux seuls endroits que le
 filtre de tenance (BACK-06b) surcharge, dans `tenant.py` : cette classe-ci
 reste vierge de tenance, comme `TenantMixin` l'exige -- le filtre ne s'applique
 qu'aux depots qui heritent de `TenantSqlAlchemyRepository`, jamais globalement.
+
+LA PAGINATION PASSE PAR `_paginate`, ET `_paginate` PART DE `_select`
+`list` sert la convention de BACK-24 -- une page par appel, enveloppe avec
+total, tri sur liste blanche -- et delegue a `_paginate`, la couture que les
+finders parametres des depots concrets reutilisent sur leurs propres requetes.
+Comme tout part de `self._select()`, le filtre de tenance s'applique au compte
+comme a la fenetre : `total` est le total du perimetre courant, mecaniquement.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping
+from typing import Any, ClassVar
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, UnaryExpression, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
 from app.shared.domain.exceptions import NotFoundError
+from app.shared.domain.pagination import (
+    PageRequest,
+    PageResult,
+    Sort,
+    SortDirection,
+    UnknownSortFieldError,
+)
 from app.shared.domain.ports.repository import Identified
 from app.shared.infrastructure.db.base import Base
 
@@ -59,6 +75,12 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
     _model_type: type[ModelT]
     _not_found_error: type[NotFoundError]
     _not_found_message: str
+
+    # Liste blanche du tri public (BACK-24) : nom expose par l'API -> colonne.
+    # Vide par defaut -- aucun champ n'est triable tant qu'un depot concret ne
+    # l'a pas ecrit, dans l'esprit opt-in du filtre de tenance. La garde du
+    # constructeur ne l'exige pas : l'absence de tri est un etat legitime.
+    _sortable: ClassVar[Mapping[str, InstrumentedAttribute[Any]]] = {}
 
     def __init__(self, session: AsyncSession) -> None:
         """Rattache le depot a la session du bloc en cours.
@@ -175,6 +197,85 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
             raise self._not_found(entity_id)
         return model
 
+    def _order_terms(self, sort: Sort | None) -> tuple[UnaryExpression[Any], ...]:
+        """Traduit le tri public en clauses ORDER BY, cle primaire en renfort.
+
+        Sans tri demande, la cle primaire seule : les identifiants UUIDv7
+        (BACK-05) sont horodates, l'ordre par defaut est donc chronologique ET
+        deterministe, sans colonne supplementaire. Avec un tri, la cle primaire
+        depart les egalites DANS LE MEME SENS que le tri (l'idiome de
+        `find_active_role`) : deux pages consecutives ne se recouvrent jamais,
+        meme quand toutes les lignes portent la meme valeur triee.
+
+        Args:
+            sort: le tri public demande, ou None pour l'ordre par defaut.
+
+        Returns:
+            Les clauses a passer telles quelles a `order_by`.
+
+        Raises:
+            UnknownSortFieldError: si le champ n'est pas dans `_sortable` --
+                defense en profondeur derriere la bordure HTTP, pour les
+                chemins qui ne la traversent pas.
+        """
+        primary_key = self._model_type.__mapper__.primary_key
+        if sort is None:
+            return tuple(column.asc() for column in primary_key)
+        attribute = self._sortable.get(sort.field)
+        if attribute is None:
+            raise UnknownSortFieldError(
+                f"Le champ de tri « {sort.field} » n'est pas triable sur cette ressource.",
+                details={"field": sort.field, "sortable_fields": sorted(self._sortable)},
+            )
+        if sort.direction is SortDirection.DESC:
+            return (attribute.desc(), *(column.desc() for column in primary_key))
+        return (attribute.asc(), *(column.asc() for column in primary_key))
+
+    async def _paginate(
+        self, statement: Select[tuple[ModelT]], page: PageRequest
+    ) -> PageResult[EntityT]:
+        """Compte puis fenetre une requete -- la couture commune des listes.
+
+        `statement` DOIT partir de `self._select()` et venir SANS `order_by` :
+        l'ordre appartient a la convention (tri public puis cle primaire), pas a
+        l'appelant. Les finders parametres des depots concrets (recherche,
+        filtres nommes) posent leurs WHERE puis delegent ici.
+
+        DEUX REQUETES, TOUJOURS : le compte porte sur la requete filtree mise
+        en sous-requete -- `order_by(None)` l'en depouille par precaution --
+        et reste juste si un `_select` surcharge ajoute un jour un DISTINCT ou
+        une jointure, la ou un `count(*)` plaque sur le SELECT d'origine se
+        tromperait. Pas de raccourci quand la page est courte : un seul chemin
+        de code, un compte toujours identique.
+
+        Args:
+            statement: la requete filtree, issue de `self._select()`.
+            page: la fenetre demandee -- numero, taille, tri eventuel.
+
+        Returns:
+            La page d'entites et le total du perimetre courant. Une page
+            au-dela de la fin est vide et porte le total reel : une page est
+            une fenetre, pas une ressource -- pas d'erreur d'absence.
+
+        Raises:
+            UnknownSortFieldError: si le champ de tri n'est pas dans
+                `_sortable`.
+        """
+        count_statement = select(func.count()).select_from(statement.order_by(None).subquery())
+        total: int = (await self._session.execute(count_statement)).scalar_one()
+        window = (
+            statement.order_by(*self._order_terms(page.sort))
+            .limit(page.page_size)
+            .offset(page.offset)
+        )
+        models = (await self._session.execute(window)).scalars().all()
+        return PageResult(
+            items=[self._to_entity(model) for model in models],
+            total=total,
+            page=page.page,
+            page_size=page.page_size,
+        )
+
     async def get(self, entity_id: UUID, /) -> EntityT:
         """Retourne l'entite portant cet identifiant.
 
@@ -190,20 +291,24 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         """
         return self._to_entity(await self._load(entity_id))
 
-    async def list(self) -> Sequence[EntityT]:
-        """Retourne toutes les entites, dans leur ordre de creation.
+    async def list(self, page: PageRequest, /) -> PageResult[EntityT]:
+        """Retourne UNE page d'entites et le total du perimetre courant.
 
-        Le tri suit la cle primaire : les identifiants UUIDv7 (BACK-05) sont
-        horodates, l'ordre est donc chronologique ET deterministe, sans
-        colonne de tri supplementaire. SANS BORNE, comme le protocole
-        l'assume : la pagination est une convention de BACK-24.
+        La convention de BACK-24, appliquee : `_paginate` sur la requete nue de
+        l'agregat. Bornes et defauts vivent dans `PageRequest`, l'ordre dans
+        `_order_terms` -- voir ces deux-la pour le detail.
+
+        Args:
+            page: la fenetre demandee -- numero, taille, tri eventuel.
 
         Returns:
-            Les entites, de la plus ancienne a la plus recente.
+            La page d'entites, avec le total du perimetre courant.
+
+        Raises:
+            UnknownSortFieldError: si le champ de tri n'est pas dans
+                `_sortable`.
         """
-        statement = self._select().order_by(*self._model_type.__mapper__.primary_key)
-        models = (await self._session.execute(statement)).scalars().all()
-        return [self._to_entity(model) for model in models]
+        return await self._paginate(self._select(), page)
 
     async def add(self, entity: EntityT, /) -> None:
         """Inscrit une entite neuve dans le bloc, sans valider la transaction.

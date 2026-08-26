@@ -14,6 +14,7 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `router.py`                | routeur racine `/api/v1`, assemble par `app.main` | BACK-08 |
 | `error_handlers.py`        | traduction `DomainError` -> reponse HTTP       | BACK-09 |
 | `schemas/error.py`         | format unique { code, message, details, ... }  | BACK-09 |
+| `pagination.py`            | parametres page/page_size/sort, enveloppe Page | BACK-24 |
 | `middlewares.py`           | CORS, journalisation, identifiant de requete   | BACK-11 |
 | `dependencies/audit.py`    | tracage des acces aux donnees personnelles     | BACK-27 |
 

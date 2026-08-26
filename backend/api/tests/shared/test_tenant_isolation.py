@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.shared.domain.pagination import PageRequest
 from app.shared.infrastructure.tenancy import (
     MissingTenantContextError,
     use_all_groups,
@@ -67,7 +68,7 @@ async def test_cross_group_rows_stay_out_of_list(
     await _seed(session, group_b, "note du groupe B")
     repository = TenantNoteRepository(session)
     with use_group(group_a):
-        notes = await repository.list()
+        notes = (await repository.list(PageRequest())).items
     assert [note.id for note in notes] == [note_a.id]
 
 
@@ -100,7 +101,7 @@ async def test_non_tenant_aggregate_works_without_group(session: AsyncSession) -
     note = PlainNote(id=uuid4(), label="notice partagee")
     await repository.add(note)
     assert (await repository.get(note.id)).label == "notice partagee"
-    assert [item.id for item in await repository.list()] == [note.id]
+    assert [item.id for item in (await repository.list(PageRequest())).items] == [note.id]
 
 
 async def test_cross_group_save_is_refused(
@@ -153,7 +154,7 @@ async def test_reads_without_group_raise_instead_of_returning_everything(
     with pytest.raises(MissingTenantContextError):
         await repository.get(uuid4())
     with pytest.raises(MissingTenantContextError):
-        await repository.list()
+        await repository.list(PageRequest())
 
 
 async def test_use_all_groups_reads_everything_but_writes_nowhere(
@@ -164,7 +165,8 @@ async def test_use_all_groups_reads_everything_but_writes_nowhere(
     note_b = await _seed(session, group_b, "note du groupe B")
     repository = TenantNoteRepository(session)
     with use_all_groups(reason="test : lecture transverse assumee"):
-        assert {note.id for note in await repository.list()} == {note_a.id, note_b.id}
+        listed = (await repository.list(PageRequest())).items
+        assert {note.id for note in listed} == {note_a.id, note_b.id}
         assert (await repository.get(note_b.id)).label == "note du groupe B"
         with pytest.raises(MissingTenantContextError):
             await repository.add(TenantNote(id=uuid4(), label="refusee"))
@@ -211,7 +213,8 @@ async def test_background_task_pattern_reapplies_the_filter(
 
     async def fake_task(group_id: UUID) -> list[str]:
         with use_group(group_id):
-            return [note.label for note in await TenantNoteRepository(session).list()]
+            result = await TenantNoteRepository(session).list(PageRequest())
+            return [note.label for note in result.items]
 
     assert await fake_task(group_a) == ["vue par la tache A"]
     assert await fake_task(group_b) == ["vue par la tache B"]
