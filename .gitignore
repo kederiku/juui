@@ -29,6 +29,18 @@ next-env.d.ts
 # Compilation jetable de `make verify-api-client` (SHARED-03). Le script la
 # supprime lui-meme en sortant ; cette ligne couvre l'interruption au clavier.
 .verify/
+# Cache de paquets de pnpm (le store), tombe DANS le depot : pnpm l'ecrit
+# normalement hors du projet, et bascule sur un `.pnpm-store/` local quand il
+# n'atteint pas celui du poste -- constate apres `make generate-api` et
+# `make generate-api-check`, les cibles qui lancent pnpm depuis la racine.
+# Reconstruit a la demande, donc jamais versionne.
+#
+# ET NON UN `store-dir` FIGE qui le sortirait du depot : le chemin vaudrait
+# aussi pour la CI et pour les images, ou l'etage `deps` de
+# docker/frontend/Dockerfile lance `pnpm fetch` AVANT d'avoir copie .npmrc --
+# le store rempli la ne serait plus celui que lit le `pnpm install` suivant, et
+# toutes les dependances se retelechargeraient.
+.pnpm-store/
 
 # --- Documentation (Docusaurus) ---
 # `.docusaurus/` = cache de build, `build/` = site genere : les deux sont
