@@ -5,9 +5,9 @@ description: Les traitements longs sortent des requêtes HTTP vers un worker Tas
 
 # ADR-0008 — TaskIQ exécute les tâches de fond
 
-| Statut      | Date       | Tickets                    |
-| ----------- | ---------- | -------------------------- |
-| **Accepté** | 2026-08-25 | BACK-15, BACK-22 (à venir) |
+| Statut      | Date       | Tickets                   |
+| ----------- | ---------- | ------------------------- |
+| **Accepté** | 2026-08-25 | BACK-15, BACK-17, BACK-22 |
 
 ## Contexte
 

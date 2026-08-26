@@ -5,9 +5,9 @@ description: Un seul service déployé, des modules métier étanches, et des fr
 
 # ADR-0003 — Un monolithe modulaire découpé en modules métier
 
-| Statut      | Date       | Tickets                                                        |
-| ----------- | ---------- | -------------------------------------------------------------- |
-| **Accepté** | 2026-08-25 | BACK-04, BACK-04b, BACK-16, BACK-19, BACK-21, BACK-22, BACK-32 |
+| Statut      | Date       | Tickets                                                                            |
+| ----------- | ---------- | ---------------------------------------------------------------------------------- |
+| **Accepté** | 2026-08-25 | BACK-04, BACK-04b, BACK-16, BACK-19, BACK-22, BACK-21 (à venir), BACK-32 (à venir) |
 
 ## Contexte
 

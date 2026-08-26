@@ -29,7 +29,7 @@ from app.modules.identity.application.use_cases.verify_otp import (
     VerifyEmailCommand,
     VerifyEmailOtp,
 )
-from app.modules.identity.infrastructure.clients.smtp_otp_sender import build_otp_sender
+from app.modules.identity.infrastructure.clients.email_otp_sender import build_otp_sender
 from app.modules.identity.infrastructure.tasks.otp import send_email_verification_otp
 from tests.modules.identity.otp_doubles import (
     InMemoryIdentityUnitOfWork,

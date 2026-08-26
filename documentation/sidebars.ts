@@ -65,6 +65,7 @@ const sidebars: SidebarsConfig = {
           id: 'backend/verification-email-otp',
           label: 'Vérification d’adresse (OTP)',
         },
+        { type: 'doc', id: 'backend/notifications', label: 'Notifications' },
         { type: 'doc', id: 'backend/surface-http', label: 'Surface HTTP' },
         { type: 'doc', id: 'backend/erreurs', label: 'Erreurs' },
         { type: 'doc', id: 'backend/journalisation', label: 'Journalisation' },
@@ -162,6 +163,17 @@ const sidebars: SidebarsConfig = {
           label: 'Journaux structurés',
         },
         { type: 'doc', id: 'adr/0019-contrat-openapi-exporte', label: 'Contrat OpenAPI exporté' },
+        { type: 'doc', id: 'adr/0020-otp-hache-et-echec-ferme', label: 'OTP haché' },
+        {
+          type: 'doc',
+          id: 'adr/0021-notification-par-evenement',
+          label: 'Notification par événement',
+        },
+        {
+          type: 'doc',
+          id: 'adr/0022-transport-email-partage',
+          label: 'Transport e-mail partagé',
+        },
       ],
     },
     {

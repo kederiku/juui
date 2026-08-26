@@ -8,8 +8,9 @@ d'importer `app.modules.*` : le broker ne peut pas connaitre statiquement les
 taches des modules. Ce fichier est le POINT D'ASSEMBLAGE qui resout la
 contradiction : au demarrage du worker -- et jamais a l'import du paquet --, il
 importe `app.modules.<module>.infrastructure.tasks` partout ou ce sous-paquet
-existe, ce qui enregistre leurs taches aupres du broker. BACK-17 et BACK-22
-n'auront qu'a creer le sous-paquet, sans toucher ni Dockerfile ni compose.
+existe, ce qui enregistre leurs taches aupres du broker. La promesse est tenue :
+BACK-17 puis BACK-22 n'ont eu qu'a creer le sous-paquet, sans toucher ni
+Dockerfile ni compose.
 
 C'est une entorse a l'ESPRIT du contrat, assumee et confinee : elle est
 invisible d'import-linter, donc elle n'existe QU'ICI, ou ce commentaire la

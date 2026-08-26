@@ -39,12 +39,12 @@ from app.modules.identity.domain.ports import (
     OtpSender,
     OtpStore,
 )
+from app.modules.identity.infrastructure.clients.email_otp_sender import build_otp_sender
 from app.modules.identity.infrastructure.clients.redis_otp_store import (
     OTP_STORE_STATE_KEY,
     build_otp_rules,
     build_otp_store,
 )
-from app.modules.identity.infrastructure.clients.smtp_otp_sender import build_otp_sender
 from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
 from app.shared.infrastructure.tasks.broker import broker
 from app.shared.infrastructure.tasks.lifecycle import (
@@ -89,8 +89,9 @@ def get_task_otp_store(context: Annotated[Context, TaskiqDepends()]) -> OtpStore
 def get_task_otp_sender(context: Annotated[Context, TaskiqDepends()]) -> OtpSender:
     """Retourne l'expediteur de codes du worker, en le construisant au premier appel.
 
-    Rien a refermer ici, contrairement au magasin : l'adaptateur SMTP ouvre et
-    referme une session par message, il ne detient aucune ressource entre deux.
+    Rien a refermer ici, contrairement au magasin : le transport de courriel
+    (BACK-22) ouvre et referme une session SMTP par message, il ne detient aucune
+    ressource entre deux.
 
     Args:
         context: le contexte d'execution de la tache, injecte par TaskIQ.

@@ -53,6 +53,8 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0018](./0018-journalisation-bibliotheque-standard.md) | Les journaux se formatent avec la bibliothèque standard, deux rendus       | Accepté |
 | [ADR-0019](./0019-contrat-openapi-exporte.md)              | Le contrat OpenAPI est exporté dans un fichier versionné                   | Accepté |
 | [ADR-0020](./0020-otp-hache-et-echec-ferme.md)             | Un code OTP se hache et se poivre, son magasin échoue fermé                | Accepté |
+| [ADR-0021](./0021-notification-par-evenement.md)           | Un module émet un événement, notifications choisit le canal                | Accepté |
+| [ADR-0022](./0022-transport-email-partage.md)              | Un besoin technique partagé par deux modules descend dans `shared`         | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

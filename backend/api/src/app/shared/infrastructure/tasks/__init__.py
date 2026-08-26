@@ -13,7 +13,7 @@ Ce que chaque ticket apporte ici :
 |         | (correlation, reprise, rejets), `lifecycle.py` (ressources du      |
 |         | worker), `discovery.py` (taches des modules), `demo.py` (le patron) |
 | BACK-17 | consommateur : codes OTP, via `identity/infrastructure/tasks/`     |
-| BACK-22 | consommateur : notifications, via un sous-paquet de meme forme     |
+| BACK-22 | consommateur : notifications, via `notifications/.../tasks/`       |
 
 LA REGLE QUI ENGAGE TOUTE TACHE : DES IDENTIFIANTS SERIALISABLES, JAMAIS D'ORM
 Une tache recoit des identifiants (`UUID`, `str`, nombres), JAMAIS une entite ni
