@@ -98,7 +98,17 @@ services:
     # PAS DE `--reload` : taskiq ne le propose qu'avec l'extra `taskiq[reload]`,
     # que le projet n'installe pas. Une modification de tache se prend par
     # `docker compose restart worker`, sans reconstruction.
-    command: ['taskiq', 'worker', 'app.shared.infrastructure.tasks.broker:broker']
+    #
+    # `--no-configure-logging` doit rester aligne sur le CMD de la cible
+    # `worker` : il empeche le `basicConfig` de TaskIQ de poser un second
+    # handler sur la racine par-dessus celui de BACK-11.
+    command:
+      [
+        'taskiq',
+        'worker',
+        '--no-configure-logging',
+        'app.shared.infrastructure.tasks.broker:broker',
+      ]
 
     volumes:
       # Meme montage que l'API ci-dessus, et pour les memes raisons -- les deux
