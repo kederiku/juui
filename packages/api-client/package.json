@@ -1,0 +1,43 @@
+{
+  "name": "@repo/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./mutator": "./src/mutator.ts",
+    "./errors": "./src/errors.ts",
+    "./runtime": "./src/runtime.ts",
+    "./api/*": "./src/generated/api/*/*.ts",
+    "./model/*": "./src/generated/api/model/*.ts",
+    "./zod/*": "./src/generated/zod/*/*.ts",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "openapi.json",
+    "orval.config.ts"
+  ],
+  "scripts": {
+    "generate": "orval --config ./orval.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.101.4",
+    "zod": "4.4.3"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "eslint": "10.9.0",
+    "orval": "8.26.0",
+    "react": "19.2.8",
+    "typescript": "6.0.3"
+  }
+}

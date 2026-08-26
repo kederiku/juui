@@ -26,6 +26,9 @@ coverage/
 next-env.d.ts
 *.tsbuildinfo
 *-debug.log*
+# Compilation jetable de `make verify-api-client` (SHARED-03). Le script la
+# supprime lui-meme en sortant ; cette ligne couvre l'interruption au clavier.
+.verify/
 
 # --- Documentation (Docusaurus) ---
 # `.docusaurus/` = cache de build, `build/` = site genere : les deux sont

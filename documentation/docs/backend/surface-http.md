@@ -6,12 +6,13 @@ description: Le routeur /api/v1, les deux sondes de santé, les operation_id du 
 # Surface HTTP
 
 Ce que le service expose au monde extérieur — le routeur versionné, les sondes de santé et le
-contrat OpenAPI dont Orval tirera le client des frontends.
+contrat OpenAPI dont Orval tire le client des frontends.
 
 La surface publique du service, posée par BACK-08 pour ses trois consommateurs **mécaniques** :
 le healthcheck du conteneur Docker, la CI, et Orval
-([ADR-0007](../adr/0007-client-api-genere-orval.md)), qui générera le
-client des frontends à partir du schéma OpenAPI (SHARED-03). Les conventions de routage sont
+([ADR-0007](../adr/0007-client-api-genere-orval.md)), qui génère depuis SHARED-03 le
+client des trois frontends à partir du schéma OpenAPI — voir
+[Le client d'API généré](../frontend/client-api-genere.md). Les conventions de routage sont
 consignées dans
 l'[ADR-0011](../adr/0011-routage-versionne-par-module.md) ; cette section
 dit comment elles se matérialisent ici.

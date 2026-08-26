@@ -11,11 +11,13 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   reactStrictMode: true,
 
-  // `@repo/ui` est publie en SOURCE TypeScript, sans etape de build : sans cette
-  // ligne, Next servirait du .tsx a un navigateur. C'est la contrepartie assumee
-  // du choix de SHARED-01 -- aucune compilation a orchestrer entre les packages,
-  // et le Fast Refresh traverse la frontiere du monorepo.
-  transpilePackages: ['@repo/ui'],
+  // `@repo/api-client` et `@repo/ui` sont publies en SOURCE TypeScript, sans
+  // etape de build : sans cette ligne, Next servirait du .tsx a un navigateur.
+  // C'est la contrepartie assumee des choix de SHARED-01 et SHARED-03 -- aucune
+  // compilation a orchestrer entre les packages, et le Fast Refresh traverse la
+  // frontiere du monorepo. Le premier porte le client genere par Orval, dont la
+  // sortie vit dans src/generated/.
+  transpilePackages: ['@repo/api-client', '@repo/ui'],
 
   // Sortie autonome : Next copie dans .next/standalone le serveur et les SEULS
   // modules qu'il a vu importer. C'est ce que reclame INFRA-05 pour produire une

@@ -1,0 +1,144 @@
+{
+  "components": {
+    "schemas": {
+      "LivenessReport": {
+        "description": "Reponse de la sonde de vie : le processus repond, rien de plus.",
+        "properties": {
+          "status": {
+            "const": "alive",
+            "default": "alive",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "LivenessReport",
+        "type": "object"
+      },
+      "ReadinessComponents": {
+        "description": "Etat de chaque dependance interrogee par la sonde de disponibilite.",
+        "properties": {
+          "postgres": {
+            "enum": [
+              "ok",
+              "unreachable"
+            ],
+            "title": "Postgres",
+            "type": "string"
+          },
+          "redis": {
+            "enum": [
+              "ok",
+              "unreachable"
+            ],
+            "title": "Redis",
+            "type": "string"
+          }
+        },
+        "required": [
+          "postgres",
+          "redis"
+        ],
+        "title": "ReadinessComponents",
+        "type": "object"
+      },
+      "ReadinessReport": {
+        "description": "Reponse de la sonde de disponibilite, composant par composant.",
+        "properties": {
+          "components": {
+            "$ref": "#/components/schemas/ReadinessComponents"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "unready"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "components"
+        ],
+        "title": "ReadinessReport",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "name": "Equipe Juui",
+      "url": "https://github.com/kederiku/juui"
+    },
+    "description": "API du SaaS veterinaire Juui. Les routes metier vivent sous `/api/v1` ; les sondes de sante sous `/health`, hors versionnage.",
+    "title": "Juui API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health/live": {
+      "get": {
+        "description": "Repond immediatement, sans toucher a aucune dependance externe.\n\nReturns:\n    Le rapport de vie -- toujours le meme : si cette fonction s'execute,\n    le processus est vivant.",
+        "operationId": "check_liveness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sonde de vie",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Interroge PostgreSQL et Redis, et repond 503 si l'un des deux manque.\n\nLes deux sondes partent EN PARALLELE : le pire cas vaut le maximum des deux\ndelais (10 s cote moteur, 2 s cote Redis), pas leur somme.\n\nLe parametre `response` est le mecanisme FastAPI qui laisse poser le code\n503 tout en gardant `ReadinessReport` comme modele de reponse unique -- le\ncorps a la meme forme en panne et en sante, seul le code change.\n\nArgs:\n    response: la reponse en construction, pour y poser le code.\n    database: les ressources de persistance du `lifespan`.\n    cache: le cache du `lifespan`, reduit a son PING.\n    settings: la configuration, pour nommer la cible en cas d'echec.\n\nReturns:\n    Le rapport, composant par composant.",
+        "operationId": "check_readiness",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessReport"
+                }
+              }
+            },
+            "description": "Au moins un composant est injoignable."
+          }
+        },
+        "summary": "Sonde de disponibilite",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Sondes de vie et de disponibilite du service, hors /api/v1.",
+      "name": "health"
+    },
+    {
+      "description": "Comptes et authentification : qui etes-vous, pouvez-vous le prouver.",
+      "name": "identity"
+    }
+  ]
+}

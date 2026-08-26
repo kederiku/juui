@@ -56,6 +56,12 @@ uv run uvicorn app.main:app --reload
 La documentation interactive répond alors sur <http://localhost:8000/docs>, et
 le contrat OpenAPI sur <http://localhost:8000/openapi.json>.
 
+> Ce contrat est la **source du client des trois frontends** : `@repo/api-client`
+> le régénère à la commande `make generate-api` (SHARED-03). Renommer une
+> étiquette ou un `operation_id` après coup se traite donc comme une migration de
+> schéma —
+> [Le client d'API généré](https://kederiku.github.io/juui/frontend/client-api-genere).
+
 > L'API sert les
 > [sondes de santé](https://kederiku.github.io/juui/backend/surface-http) (`/health/live`,
 > `/health/ready`, BACK-08) ; les routes **métier**, elles, restent à venir —

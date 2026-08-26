@@ -58,6 +58,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [BACK-24](./back.md#écarts-assumés-avec-le-ticket-back-24)       | La convention de pagination des listes                       |
 | [SHARED-01](./shared.md#écarts-assumés-avec-le-ticket-shared-01) | La bibliothèque @repo/ui                                     |
 | [SHARED-02](./shared.md#écarts-assumés-avec-le-ticket-shared-02) | Les configurations partagées                                 |
+| [SHARED-03](./shared.md#écarts-assumés-avec-le-ticket-shared-03) | Le client d'API généré par Orval                             |
 | [FRONT-01](./front.md#écarts-assumés-avec-le-ticket-front-01)    | L'application des professionnels                             |
 | [FRONT-02](./front.md#écarts-assumés-avec-le-ticket-front-02)    | L'application des particuliers                               |
 | [FRONT-03](./front.md#écarts-assumés-avec-le-ticket-front-03)    | Le back-office d'administration                              |

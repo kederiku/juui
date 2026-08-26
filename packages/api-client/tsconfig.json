@@ -1,0 +1,42 @@
+{
+  // Configuration TypeScript de `@repo/api-client` (SHARED-03).
+  //
+  // Preset `react-library` et non `base` : le package publie des HOOKS React, et
+  // le mutator manipule `fetch`, `Headers`, `RequestInit`, `Response` et
+  // `window` -- tous types de la bibliotheque DOM, que `base.json` n'inclut pas
+  // a dessein, « le socle servant aussi a du code Node ».
+  //
+  // Le package n'est PAS compile : les applications le consomment en source et
+  // le transpilent (`transpilePackages`). `tsc` ne sert ici qu'a verifier les
+  // types (`pnpm typecheck`).
+  //
+  // Le `moduleResolution: bundler` herite du socle est ICI LOAD-BEARING : Orval
+  // ecrit des imports relatifs SANS extension. Sous `nodenext`, la sortie
+  // generee ne resoudrait pas.
+  "extends": "@repo/typescript-config/react-library.json",
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+
+    // Le programme de verification de `make verify-api-client`. Il est ici pour
+    // la meme raison qu'orval.config.ts : le lint type-aware resout par
+    // `projectService`, et un .ts qui n'appartient a aucun tsconfig sort en
+    // « was not found by the project service ».
+    "scripts/**/*.ts",
+
+    // ORVAL.CONFIG.TS EST DANS LE PROJET, POUR DEUX RAISONS.
+    // 1. `defineConfig` est type : une cle mal orthographiee echoue a
+    //    `pnpm typecheck`, au lieu de produire en silence une sortie
+    //    incomplete que personne ne remarquerait avant l'appel manquant.
+    // 2. Le lint est type-aware (SETUP-06) et resout par `projectService` : un
+    //    fichier .ts qui n'appartient a AUCUN tsconfig sort en « Parsing error:
+    //    was not found by the project service », piege deja documente dans
+    //    packages/config-eslint/base.js.
+    "orval.config.ts"
+  ],
+
+  // src/generated/ EST DELIBEREMENT INCLUS. Le lint et Prettier l'ignorent, pas
+  // `tsc` : que le client genere compile sous les options strictes du socle est
+  // le critere d'acceptation lui-meme.
+  "exclude": ["node_modules"]
+}

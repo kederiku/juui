@@ -78,6 +78,7 @@ const sidebars: SidebarsConfig = {
           label: 'Configurations partagées',
         },
         { type: 'doc', id: 'frontend/bibliotheque-ui', label: 'Bibliothèque @repo/ui' },
+        { type: 'doc', id: 'frontend/client-api-genere', label: 'Client d’API généré' },
         { type: 'doc', id: 'frontend/les-trois-applications', label: 'Les trois applications' },
       ],
     },
@@ -155,6 +156,7 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0018-journalisation-bibliotheque-standard',
           label: 'Journaux structurés',
         },
+        { type: 'doc', id: 'adr/0019-contrat-openapi-exporte', label: 'Contrat OpenAPI exporté' },
       ],
     },
     {

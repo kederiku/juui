@@ -13,7 +13,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help lint lint-fix imports format format-check typecheck check test \
-	migration migrate downgrade history migrate-check
+	migration migrate downgrade history migrate-check openapi
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -43,7 +43,7 @@ format-check: ## Verifie le formatage sans rien reecrire
 	uv run ruff format --check .
 
 typecheck: ## Verifie le typage en mode strict
-	uv run mypy src alembic
+	uv run mypy src alembic scripts
 
 # Une seule cible pour l'instant (BACK-06b) : le decoupage par niveaux
 # (unit/integration/slow) arrive avec BACK-12. PostgreSQL docker doit tourner
@@ -76,6 +76,19 @@ history: ## Historique des migrations et revision courante
 # demarree ET a head.
 migrate-check: ## Echoue si modeles et migrations divergent
 	uv run alembic check
+
+# Contrat OpenAPI (SHARED-03). NI SERVEUR NI BASE DE DONNEES : le script importe
+# `app.main` et appelle `create_app().openapi()`. Le raisonnement complet est en
+# tete du script.
+#
+# `--locked`, alors que tout le reste de ce fichier ecrit `uv run` nu, et la
+# nuance compte : c'est la SEULE cible dont la sortie est COMMITEE. Un poste dont
+# le .venv aurait derive du lock -- un `uv sync -U` d'essai, une montee de
+# fastapi non commitee -- produirait un schema different de celui de la CI, donc
+# un diff qui ne vient d'aucun changement de contrat. `--locked` fait echouer ce
+# poste-la au lieu de le laisser produire.
+openapi: ## Exporte le schema OpenAPI vers packages/api-client/openapi.json
+	uv run --locked python scripts/export_openapi.py
 
 # Memes verifications, et dans le meme ordre, que le futur pipeline QA-01 : un
 # echec local reproduit ainsi exactement un echec de CI. La difference est que

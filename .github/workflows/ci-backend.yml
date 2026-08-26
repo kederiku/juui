@@ -84,11 +84,15 @@ jobs:
       # Le depot epinglait pourtant deja uv a l'exact dans le Dockerfile
       # d'INFRA-04 : la CI etait le seul des trois environnements a flotter.
       #
-      # Ce qui empeche desormais ces trois endroits de diverger en silence,
-      # c'est le `required-version` de backend/api/pyproject.toml : un uv hors
-      # plage fait ECHOUER l'etape suivante au lieu de la faire reussir avec un
+      # Ce qui empeche ces endroits de diverger en silence, c'est le
+      # `required-version` de backend/api/pyproject.toml : un uv hors plage fait
+      # ECHOUER l'etape suivante au lieu de la faire reussir avec un
       # avertissement. Cette ligne-ci choisit la version, celle-la verifie que
       # tout le monde a fait le meme choix. Les deux se montent ensemble.
+      #
+      # SHARED-03 en a ajoute un quatrieme : .github/workflows/api-client.yml,
+      # qui exporte le schema OpenAPI et a donc besoin du meme environnement
+      # Python. Le `required-version` le couvre au meme titre.
       - name: Installer uv
         uses: astral-sh/setup-uv@v10.0.1
         with:

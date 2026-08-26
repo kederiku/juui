@@ -249,9 +249,12 @@ mypy_path = "src"
 # Rend `uv run mypy` nu equivalent a la commande de `make typecheck`. alembic/
 # entre au perimetre avec BACK-07 : env.py est annote de bout en bout, et les
 # migrations sortent d'un gabarit annote -- les laisser dehors aurait fait des
-# premiers .py hors de src/ les seuls non verifies. tests/ reste volontairement
-# hors perimetre : c'est BACK-12 qui decidera de l'y faire entrer.
-files = ["src", "alembic"]
+# premiers .py hors de src/ les seuls non verifies. scripts/ y entre avec
+# SHARED-03, et pour une raison plus forte encore : c'est le seul code Python du
+# depot dont la SORTIE est commitee, il ne pouvait pas etre le seul non verifie.
+# tests/ reste volontairement hors perimetre : c'est BACK-12 qui decidera de l'y
+# faire entrer.
+files = ["src", "alembic", "scripts"]
 
 # Une seule derogation, et elle est declaree PAR MODULE -- jamais globalement,
 # ce qui aveuglerait Mypy sur tout le projet. BACK-02 pariait qu'aucune ne
