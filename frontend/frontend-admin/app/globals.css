@@ -10,18 +10,31 @@
  * L'application n'en redefinit rien.
  *
  * POURQUOI CE FICHIER EXISTE MALGRE TOUT
- * La detection automatique des sources de Tailwind v4 part du fichier qui porte
- * `@import 'tailwindcss'` -- celui du package partage. Elle balaie donc
- * `packages/`, jamais `frontend/`. Les `@source` ci-dessous reparent cela pour
- * l'application : sans eux, ses propres classes seraient purgees du CSS final,
- * alors meme que celles des composants de `@repo/ui` survivraient.
+ * Les `@source` ci-dessous ENUMERENT les dossiers de code de l'application. Les
+ * chemins sont resolus relativement a CE fichier, qui vit dans `app/` :
+ * `../app`, `../features`, `../components` et `../lib` designent bien les
+ * quatre espaces d'une application.
  *
- * Les chemins sont resolus relativement a CE fichier, qui vit dans `app/` :
- * `../app` et `../components` designent bien les deux dossiers de code de
- * l'application.
+ * `../features` EST ARRIVE AVEC FRONT-09, et il ne s'agit pas d'ajouter une
+ * ligne au hasard : une enumeration incomplete est pire que pas d'enumeration
+ * du tout, parce qu'elle donne a croire qu'elle est complete. Le jour ou la
+ * detection automatique ne suffirait plus, le dossier oublie serait le seul a
+ * perdre ses classes -- et sans la moindre erreur au build.
+ *
+ * CE QUE CES LIGNES NE FONT PAS, MESURE PLUTOT QUE SUPPOSE. Elles ne reparent
+ * rien aujourd'hui : construire cette application avec ce fichier PRIVE de ses
+ * trois `@source` produit un CSS qui contient encore les classes de `app/` et
+ * celles de `features/`. La detection automatique de Tailwind v4, telle que la
+ * chaine PostCSS de Next l'amorce, balaie deja le dossier de l'application.
+ * FRONT-01 avait annonce l'inverse ; la mesure a corrige la phrase, pas les
+ * lignes -- elles restent parce qu'elles disent explicitement ou vit le code,
+ * et qu'un reglage qui ne tient que par un comportement implicite se casse sans
+ * prevenir.
  */
 
 @import '@repo/ui/globals.css';
 
 @source '../app/**/*.{ts,tsx}';
+@source '../features/**/*.{ts,tsx}';
 @source '../components/**/*.{ts,tsx}';
+@source '../lib/**/*.{ts,tsx}';

@@ -112,8 +112,8 @@ export type DataTableColumns<TData extends RowData> = Array<
  * nouvelle reference de colonnes a chaque rendu invaliderait les modeles de
  * lignes, et le tri comme la pagination se recalculeraient sans fin.
  *
- *   const column = createDataTableColumnHelper<Clinique>();
- *   const columns = column.columns([column.accessor('nom', { header: 'Nom' })]);
+ *   const column = createDataTableColumnHelper<Clinic>();
+ *   const columns = column.columns([column.accessor('name', { header: 'Nom' })]);
  */
 export function createDataTableColumnHelper<TData extends RowData>() {
   return createColumnHelper<DataTableFeatures, TData>();

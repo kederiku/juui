@@ -6,7 +6,8 @@ import {
   CardTitle,
 } from '@repo/ui/components/card';
 
-import { getSession } from '@/lib/require-role';
+import { getSession } from '@/features/identity/require-role';
+import { ROLE_LABELS } from '@/lib/session';
 
 import type { Metadata } from 'next';
 
@@ -43,9 +44,11 @@ export default async function UtilisateursPage() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>
             Rôle de la session courante :{' '}
-            <span className="font-medium text-foreground">{session?.role ?? 'aucun'}</span>. C’est
-            lui que lit la garde du groupe <code className="font-mono">(protected)</code>, et lui
-            qui filtre les entrées de la navigation latérale.
+            <span className="font-medium text-foreground">
+              {session ? ROLE_LABELS[session.role] : 'aucun'}
+            </span>
+            . C’est lui que lit la garde du groupe <code className="font-mono">(protected)</code>,
+            et lui qui filtre les entrées de la navigation latérale.
           </p>
           <p>
             Il n’est pour l’instant pas vérifié : le jeton n’est pas décodé, sa présence suffit. La

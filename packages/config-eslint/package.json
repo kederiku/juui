@@ -15,8 +15,14 @@
     "base.js",
     "react.js",
     "next.js",
-    "rules.js"
+    "rules.js",
+    "boundaries.js",
+    "scripts",
+    "fixtures"
   ],
+  "scripts": {
+    "test": "node scripts/verify-boundaries.js"
+  },
   "dependencies": {
     "@eslint/js": "10.0.1",
     "@next/eslint-plugin-next": "16.3.2",

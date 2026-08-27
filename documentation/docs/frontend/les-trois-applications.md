@@ -26,18 +26,27 @@ le back-office de la seule qui soit entièrement privée.
    arrivé avec SHARED-03 : [Le client d'API généré](./client-api-genere.md).
 2. `export { default } from '@repo/tailwind-config/postcss.config';` dans son
    `postcss.config.mjs`.
-3. Un `app/globals.css` à elle, qui ré-importe celui de `@repo/ui` et déclare
-   ses propres sources — la détection automatique de Tailwind part du fichier
-   qui porte `@import 'tailwindcss'`, lequel vit dans `packages/config-tailwind` :
+3. Un `app/globals.css` à elle, qui ré-importe celui de `@repo/ui` et **énumère
+   ses dossiers de code** :
 
    ```css
    @import '@repo/ui/globals.css';
 
    @source '../app/**/*.{ts,tsx}';
+   @source '../features/**/*.{ts,tsx}';
    @source '../components/**/*.{ts,tsx}';
    ```
 
    C'est ce fichier-là, et non celui du package, que `app/layout.tsx` importe.
+   La troisième ligne est arrivée avec FRONT-09, en même temps que le dossier
+   qu'elle nomme. FRONT-01 présentait ces `@source` comme une réparation — sans
+   eux, les classes de l'application auraient été purgées. **La mesure dit
+   autre chose** : construire une application avec ce fichier privé de ses trois
+   lignes produit un CSS qui contient encore les classes de `app/` et de
+   `features/`, la détection automatique de Tailwind v4 balayant déjà le dossier
+   de l'application. Elles restent parce qu'une énumération vaut mieux qu'un
+   comportement implicite — et parce qu'une énumération **incomplète** serait le
+   pire des trois états.
 
 4. `<html lang="fr" suppressHydrationWarning>`, puis `<ThemeProvider>` et
    `<QueryProvider>` autour de l'arbre — sans `suppressHydrationWarning`,
@@ -61,23 +70,32 @@ le back-office de la seule qui soit entièrement privée.
    échoue au démarrage.
 
 Ni `src/`, ni `tailwind.config.ts`, ni `prettier.config.mjs` local : le code
-applicatif vit dans `app/` et `components/`, le thème est du CSS depuis
-Tailwind v4, et une configuration Prettier locale devrait redéfinir son
-`tailwindStylesheet` sous peine de trier les classes sans le thème.
+applicatif vit dans `app/`, `features/`, `components/` et `lib/`, le thème est
+du CSS depuis Tailwind v4, et une configuration Prettier locale devrait
+redéfinir son `tailwindStylesheet` sous peine de trier les classes sans le
+thème.
+
+Le partage entre ces quatre dossiers — et la règle ESLint qui l'impose — a sa
+page : [Structure par domaine](./structure-par-domaine.md).
 
 ## Le volet SEO de `frontend-individual`
 
 Des trois applications, `frontend-individual` est la seule à être **publique**
 et destinée à l'indexation — les deux autres sont des espaces authentifiés.
 C'est la seule différence de fond avec le patron, et elle tient dans quatre
-fichiers de `app/` :
+fichiers :
 
-| Fichier       | Rôle                                                                                                                       |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `site-url.ts` | L'URL canonique du site, lue une fois dans `SITE_URL`. Les trois autres s'y réfèrent au lieu d'en garder chacun une copie. |
-| `robots.ts`   | Sert `/robots.txt` : indexation autorisée, et renvoi vers le sitemap.                                                      |
-| `sitemap.ts`  | Sert `/sitemap.xml` : les pages publiques — l'accueil pour l'instant.                                                      |
-| `layout.tsx`  | `metadataBase`, balise canonique, Open Graph, carte Twitter, directives `robots` et `googlebot`.                           |
+| Fichier           | Rôle                                                                                                                       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `lib/site-url.ts` | L'URL canonique du site, lue une fois dans `SITE_URL`. Les trois autres s'y réfèrent au lieu d'en garder chacun une copie. |
+| `app/robots.ts`   | Sert `/robots.txt` : indexation autorisée, et renvoi vers le sitemap.                                                      |
+| `app/sitemap.ts`  | Sert `/sitemap.xml` : les pages publiques — l'accueil pour l'instant.                                                      |
+| `app/layout.tsx`  | `metadataBase`, balise canonique, Open Graph, carte Twitter, directives `robots` et `googlebot`.                           |
+
+`site-url.ts` a quitté `app/` avec FRONT-09 : ce n'est ni une route ni un
+fichier de métadonnées, c'est de la configuration que trois fichiers de routage
+partagent. `app/` ne porte plus que du routage, et le garde-fou tient la flèche
+dans ce sens-là — `app/` lit `lib/`, jamais l'inverse.
 
 Rien n'est routé à la main : dans l'App Router, `robots.ts` et `sitemap.ts` sont
 des **fichiers de métadonnées** — leur nom suffit à servir la route qui leur
@@ -168,13 +186,21 @@ hors de ce groupe, ne la porte pas : elle n'affiche rien de confidentiel.
 deux : `(auth)` pour la connexion, nue, et `(protected)` pour tout le reste,
 sous une barre latérale repliable, un fil d'Ariane et une zone de contenu.
 
-| Fichier                           | Rôle                                                                                                          |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `lib/session.ts`                  | Nom du cookie, type `Role`, lecture de la session. **Sans `next/headers`** : le proxy tourne en runtime Edge. |
-| `lib/require-role.ts`             | `getSession()` et la garde `requireRole('admin')` qu'appelle le layout protégé.                               |
-| `components/navigation.ts`        | Les sections du back-office, déclarées **une seule fois**.                                                    |
-| `components/admin-sidebar.tsx`    | La navigation latérale, ses entrées filtrées par rôle.                                                        |
-| `components/admin-breadcrumb.tsx` | Le fil d'Ariane, dérivé du chemin.                                                                            |
+| Fichier                                   | Rôle                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `lib/session.ts`                          | Nom du cookie, type `Role`, lecture de la session. **Sans `next/headers`** : le proxy lit le cookie sur sa `request`. |
+| `features/identity/require-role.ts`       | `getSession()` et la garde `requireRole('admin')` qu'appelle le layout protégé.                                       |
+| `features/organization/clinics-table.tsx` | Le tableau des cliniques, seul écran métier de l'application à ce stade.                                              |
+| `components/navigation.ts`                | Les sections du back-office, déclarées **une seule fois**.                                                            |
+| `components/admin-sidebar.tsx`            | La navigation latérale, ses entrées filtrées par rôle.                                                                |
+| `components/admin-breadcrumb.tsx`         | Le fil d'Ariane, dérivé du chemin.                                                                                    |
+
+Le partage entre `lib/` et `features/identity/` n'est pas arbitraire, et ce n'est
+pas nous qui l'avons choisi : `components/navigation.ts` lit le type `Role` pour
+filtrer les entrées de la barre latérale, et le garde-fou de FRONT-09 interdit à
+`components/` d'importer une feature. Le vocabulaire de session est donc
+transverse à l'application ; la garde de rôle, elle, est du métier d'identité.
+FRONT-07 fera monter le premier dans `@repo/api-client`.
 
 Le fil d'Ariane n'est jamais renseigné page par page : il se déduit de
 `usePathname()` et tire ses libellés de la même liste que la barre latérale.

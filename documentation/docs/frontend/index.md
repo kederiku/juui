@@ -18,13 +18,14 @@ métier. Le cœur d'authentification leur est commun et n'est écrit qu'une fois
 
 ## Les pages de cette section
 
-| Page                                                      | Ce qu'on y trouve                                                           |
-| --------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [Configurations partagées](./configurations-partagees.md) | Les quatre packages de configuration et la chaîne de presets qui les relie. |
-| [La bibliothèque @repo/ui](./bibliotheque-ui.md)          | Les composants shadcn/ui partagés, le thème, la `DataTable`.                |
-| [Le client d'API généré](./client-api-genere.md)          | Le package `@repo/api-client` : régénérer, consommer un hook, le mutator.   |
-| [Données côté client](./donnees-cote-client.md)           | Le `QueryProvider` partagé, la politique de cache, les clés et leur portée. |
-| [Les trois applications](./les-trois-applications.md)     | Le socle commun FRONT-01 à 03, le volet SEO, le back-office et sa garde.    |
+| Page                                                      | Ce qu'on y trouve                                                            |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| [Configurations partagées](./configurations-partagees.md) | Les quatre packages de configuration et la chaîne de presets qui les relie.  |
+| [La bibliothèque @repo/ui](./bibliotheque-ui.md)          | Les composants shadcn/ui partagés, le thème, la `DataTable`.                 |
+| [Le client d'API généré](./client-api-genere.md)          | Le package `@repo/api-client` : régénérer, consommer un hook, le mutator.    |
+| [Données côté client](./donnees-cote-client.md)           | Le `QueryProvider` partagé, la politique de cache, les clés et leur portée.  |
+| [Les trois applications](./les-trois-applications.md)     | Le socle commun FRONT-01 à 03, le volet SEO, le back-office et sa garde.     |
+| [Structure par domaine](./structure-par-domaine.md)       | Le rangement par sujet, la surface d'une feature, le garde-fou qui la tient. |
 
 ## Ce qui viendra ici
 

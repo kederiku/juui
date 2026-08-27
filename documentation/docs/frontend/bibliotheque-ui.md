@@ -108,10 +108,10 @@ pagination. L'appelant décrit ses colonnes, rien d'autre — l'état reste dans
 table :
 
 ```tsx
-const column = createDataTableColumnHelper<Clinique>();
-const columns = column.columns([column.accessor('nom', { header: 'Clinique' })]);
+const column = createDataTableColumnHelper<Clinic>();
+const columns = column.columns([column.accessor('name', { header: 'Clinique' })]);
 
-<DataTable columns={columns} data={CLINIQUES} filterColumnId="nom" pageSize={5} />;
+<DataTable columns={columns} data={CLINICS} filterColumnId="name" pageSize={5} />;
 ```
 
 **TanStack Table est en version 9, une réécriture** : les exemples que l'on

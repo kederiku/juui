@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { navigationForRole } from '@/components/navigation';
+import { ROLE_LABELS } from '@/lib/session';
 
 import type { Role } from '@/lib/session';
 
@@ -95,7 +96,8 @@ export function AdminSidebar({ role }: { role: Role }) {
 
       <SidebarFooter>
         <p className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-          Connecté en tant que <span className="font-medium text-foreground">{role}</span>
+          Connecté en tant que{' '}
+          <span className="font-medium text-foreground">{ROLE_LABELS[role]}</span>
         </p>
       </SidebarFooter>
 

@@ -42,7 +42,21 @@ la recherche de configuration partant du fichier analysé, ce fichier **remplace
 celui de la racine pour son workspace — ses exclusions comprises.
 
 Le socle de règles se modifie en un seul endroit :
-`packages/config-eslint/rules.js`.
+`packages/config-eslint/rules.js` — à une exception près, et elle est nommée
+juste en dessous.
+
+**La frontière entre features vit ailleurs, et il faut savoir pourquoi.** Depuis
+FRONT-09, le preset `next` pose aussi `import-x/no-restricted-paths`, qui
+interdit d'atteindre l'intérieur d'une feature, de dépendre d'une feature depuis
+`components/` ou `lib/`, et de remonter vers `app/`. Ses zones ne peuvent pas
+s'écrire à la main — « toutes les features sauf celle-ci » ne s'exprime qu'en
+nommant les sœurs — donc elles sont **développées depuis le disque** par
+`packages/config-eslint/boundaries.js`, exactement comme `base.js` développe la
+liste des `tsconfig`. Une feature créée demain est gardée sans une ligne de
+configuration de plus. Le rangement qu'elle impose est décrit sur la page
+[Structure par domaine](./structure-par-domaine.md), et il est prouvé par
+`pnpm --filter @repo/eslint-config test`, que le workflow `ci-frontend` rejoue
+sur chaque pull request.
 
 Le preset `base` y branche aussi le **résolveur d'imports** — la variante
 TypeScript, seule à lire les `paths` des `tsconfig` et la carte `exports` des
@@ -70,9 +84,13 @@ La frontière est nette — **tout `.ts` et `.tsx` est typé, aucun `.js` ni `.m
 ne l'est.** Ce n'est pas un arbitrage de confort, c'est l'état du dépôt : les
 `include` des trois applications ne retiennent que les `.ts` et les `.tsx`, celui
 de `packages/ui` et de `packages/api-client` que leurs sources sous `src/`, et
-**aucun des quatre packages de configuration** n'a de `tsconfig.json` —
-`config-typescript` ne porte que des presets, `base.json`, `nextjs.json` et
-`react-library.json`, qu'aucun projet ne désigne comme sien. Aucun fichier JavaScript n'appartient
+**aucun des quatre packages de configuration** n'a de `tsconfig.json` de
+workspace — `config-typescript` ne porte que des presets, `base.json`,
+`nextjs.json` et `react-library.json`, qu'aucun projet ne désigne comme sien.
+Le seul du dépôt, `packages/config-eslint/fixtures/tsconfig.json` (FRONT-09), ne
+sert qu'au résolveur de l'arborescence de démonstration : il vit deux niveaux
+plus bas que le motif `packages/*/tsconfig.json` de `base.js`, et n'entre donc
+dans la résolution d'aucun workspace. Aucun fichier JavaScript n'appartient
 donc à un projet TypeScript, et le bloc `base-untyped` de `base.js` les en
 dispense explicitement. Sans lui, chacun de ces fichiers JavaScript sort en
 `Parsing error: […] was not found by the project service` — le parseur s'arrête
