@@ -311,6 +311,7 @@ markers = [
     "otp: tests de la verification d'adresse par code OTP (BACK-17)",
     "notifications: tests des preferences et de la remise de notifications (BACK-22)",
     "conformance: suites jouees contre l'implementation reelle ET sa doublure (BACK-06c)",
+    "tokens: tests de l'emission et de la verification des jetons (BACK-10a)",
 ]
 
 # ---------------------------------------------------------------------------

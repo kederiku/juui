@@ -29,6 +29,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Stockage objet](./stockage-objet.md)                       | Le port S3/MinIO et les URLs pré-signées.                                  |
 | [Tâches de fond](./taches-de-fond.md)                       | TaskIQ : le broker, le worker, la politique de reprise.                    |
 | [Vérification d'adresse (OTP)](./verification-email-otp.md) | Le code à six chiffres : haché, poivré, à usage unique, borné.             |
+| [Jetons d'authentification](./jetons.md)                    | Les neuf claims, l'audience par application, l'appartenance vérifiée.      |
 | [Surface HTTP](./surface-http.md)                           | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
 | [Erreurs](./erreurs.md)                                     | La hiérarchie `DomainError`, le format d'erreur unique, le 404-jamais-403. |
 | [Journalisation](./journalisation.md)                       | Les deux formats, l'identifiant de requête, le masquage, le CORS.          |
@@ -41,12 +42,15 @@ La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
 désormais tenues par [Import Linter](./qualite-et-typage.md#import-linter) (BACK-04b), le socle de
 persistance est en place (BACK-05), l'[unité de travail](./unite-de-travail.md)
 avec son dépôt générique le coiffe (BACK-06a) et le schéma est sous contrôle de
-version par les [migrations](./migrations.md) (BACK-07), six des sept ports
+version par les [migrations](./migrations.md) (BACK-07), les sept ports
 techniques du noyau partagé sont livrés — [cache](./cache.md) (BACK-14),
 [stockage objet](./stockage-objet.md) (BACK-13), transport e-mail (BACK-22), unité
 de travail et dépôt générique (BACK-06a), contrôle de fuite de mot de passe
-(BACK-06c, son adaptateur restant à BACK-10b), `TokenService` restant à
-BACK-10a —, leurs [doublures en mémoire](./doublures-en-memoire.md) et la suite de
+(BACK-06c, son adaptateur restant à BACK-10b) et les
+[jetons d'authentification](./jetons.md), émis derrière un port avec une audience
+par application et une appartenance vérifiée à l'émission (BACK-10a,
+[ADR-0024](../adr/0024-jetons-audience-par-application.md)) —, leurs
+[doublures en mémoire](./doublures-en-memoire.md) et la suite de
 conformité qui les tient au contrat (BACK-06c), la
 [surface HTTP](./surface-http.md) versionnée et ses sondes sont en place (BACK-08)
 et toute [erreur](./erreurs.md) y sort désormais au format unique, codes namespacés

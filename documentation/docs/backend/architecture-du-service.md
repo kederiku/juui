@@ -123,11 +123,14 @@ l'[ADR-0003](../adr/0003-monolithe-modulaire.md) ; la docstring de
 Les dossiers vides ne le sont pas par oubli : chacun porte une docstring qui dit ce qui vient s'y
 ranger, et quel ticket l'apporte.
 
-| Emplacement                        | Ce qui manque                                            | Ticket                    |
-| ---------------------------------- | -------------------------------------------------------- | ------------------------- |
-| `shared/domain/ports/`             | `TokenService`                                           | BACK-10a                  |
-| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe | BACK-28, BACK-29, BACK-31 |
-| `modules/organization/`            | cas d'usage, invitations, routes d'administration        | BACK-25                   |
+| Emplacement                        | Ce qui manque                                              | Ticket                    |
+| ---------------------------------- | ---------------------------------------------------------- | ------------------------- |
+| `shared/infrastructure/api/…/`     | `get_current_account`, `require_role`, `get_active_clinic` | BACK-10c                  |
+| `modules/identity/…/api/routes.py` | inscription, connexion, réinitialisation de mot de passe   | BACK-28, BACK-29, BACK-31 |
+| `modules/organization/`            | cas d'usage, invitations, routes d'administration          | BACK-25                   |
+
+`shared/domain/ports/` n'y figure plus : BACK-10a a livré `TokenService`, le
+dernier des sept ports techniques. Le paquet n'a plus de place réservée.
 
 ## Vérifier que les règles tiennent
 
