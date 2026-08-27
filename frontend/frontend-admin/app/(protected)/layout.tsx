@@ -5,7 +5,7 @@ import { TooltipProvider } from '@repo/ui/components/tooltip';
 
 import { AdminBreadcrumb } from '@/components/admin-breadcrumb';
 import { AdminSidebar } from '@/components/admin-sidebar';
-import { requireRole } from '@/lib/require-role';
+import { requireRole } from '@/features/identity/require-role';
 
 import type { ReactNode } from 'react';
 

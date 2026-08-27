@@ -109,6 +109,7 @@ const sidebars: SidebarsConfig = {
         { type: 'doc', id: 'frontend/client-api-genere', label: 'Client d’API généré' },
         { type: 'doc', id: 'frontend/donnees-cote-client', label: 'Données côté client' },
         { type: 'doc', id: 'frontend/les-trois-applications', label: 'Les trois applications' },
+        { type: 'doc', id: 'frontend/structure-par-domaine', label: 'Structure par domaine' },
       ],
     },
     {
@@ -221,6 +222,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'adr/0027-portee-des-cles-de-cache',
           label: 'Portée des clés de cache',
+        },
+        {
+          type: 'doc',
+          id: 'adr/0028-frontieres-de-features',
+          label: 'Frontières de features',
         },
       ],
     },

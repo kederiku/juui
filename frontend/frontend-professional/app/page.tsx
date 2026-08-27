@@ -9,7 +9,7 @@ import {
 } from '@repo/ui/components/card';
 import { ThemeToggle } from '@repo/ui/components/theme-toggle';
 
-import { ServiceStatus } from '@/components/service-status';
+import { ServiceStatus } from '@/features/health/service-status';
 
 /**
  * Page d'accueil de frontend-professional (FRONT-01).

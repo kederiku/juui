@@ -7,17 +7,17 @@ d'administration côté plateforme.
 
 ## Arborescence du monorepo
 
-| Dossier                           | Rôle                                                                                                                                             |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.github/`                        | Workflows GitHub Actions : la CI du backend et la construction puis la publication du site de documentation (DOC-01).                            |
-| `docker/`                         | Configurations de conteneurisation : le `docker-compose.yml` qui assemble la pile, les Dockerfiles des services et les scripts d'initialisation. |
-| `scripts/`                        | Scripts shell appelés par le `Makefile` de la racine (INFRA-06) : ouverture de la boîte Mailpit, remise à zéro de la base.                       |
-| `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                                 |
-| `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                               |
-| `frontend/frontend-individual/`   | Interface **B2C** — application des propriétaires d'animaux.                                                                                     |
-| `frontend/frontend-admin/`        | Interface d'**administration** — back-office de la plateforme.                                                                                   |
-| `packages/`                       | Bibliothèques et composants partagés par les trois frontends (UI shadcn en mode monorepo, configurations communes, client API généré).           |
-| `documentation/`                  | Documentation technique du projet, publiée avec Docusaurus.                                                                                      |
+| Dossier                           | Rôle                                                                                                                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.github/`                        | Workflows GitHub Actions : la CI du backend, celle des frontends, la dérive du client d'API, et la construction puis la publication du site de documentation (DOC-01). |
+| `docker/`                         | Configurations de conteneurisation : le `docker-compose.yml` qui assemble la pile, les Dockerfiles des services et les scripts d'initialisation.                       |
+| `scripts/`                        | Scripts shell appelés par le `Makefile` de la racine (INFRA-06) : ouverture de la boîte Mailpit, remise à zéro de la base.                                             |
+| `backend/api/`                    | Service d'API backend (FastAPI, architecture hexagonale et DDD).                                                                                                       |
+| `frontend/frontend-professional/` | Interface **B2B** — application des cliniques et des vétérinaires.                                                                                                     |
+| `frontend/frontend-individual/`   | Interface **B2C** — application des propriétaires d'animaux.                                                                                                           |
+| `frontend/frontend-admin/`        | Interface d'**administration** — back-office de la plateforme.                                                                                                         |
+| `packages/`                       | Bibliothèques et composants partagés par les trois frontends (UI shadcn en mode monorepo, configurations communes, client API généré).                                 |
+| `documentation/`                  | Documentation technique du projet, publiée avec Docusaurus.                                                                                                            |
 
 Les dossiers encore vides contiennent un `.gitkeep` afin que l'arborescence soit
 versionnée dès maintenant : chacun sera rempli par le ticket qui lui correspond.

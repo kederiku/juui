@@ -1,0 +1,124 @@
+# Integration continue des applications frontend (FRONT-09, a completer par QA-02).
+#
+# CE FICHIER APPARTIENT A QA-02, qui le nomme dans sa portee et viendra y
+# ajouter `pnpm lint`, `pnpm typecheck`, les suites Vitest de FRONT-06 et le
+# `next build` des trois applications.
+#
+# FRONT-09 n'y pose que ce qu'il livre : les frontieres entre features. Les
+# poser ici plutot que d'attendre QA-02 est tout l'objet du ticket -- un
+# garde-fou qui ne tourne que sur le poste de celui qui ecrit le code n'est pas
+# un garde-fou. C'est mot pour mot le raisonnement de ci-backend.yml, cree par
+# BACK-04b alors que QA-01 n'etait pas livre non plus. Ce que verifie ce
+# workflow est declare dans packages/config-eslint/boundaries.js.
+name: CI frontend
+
+# LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, comme dans
+# ci-backend.yml, api-client.yml et documentation.yml, et pour la meme raison :
+# GitHub Actions n'interprete pas les ancres YAML. Les tenir alignees.
+#
+# `frontend/**` parce que c'est le code garde, et que la creation d'une feature
+# change a elle seule les zones engendrees. `packages/config-eslint/**` parce
+# que c'est le garde-fou lui-meme. Les deux fichiers de verrouillage parce
+# qu'une montee d'eslint-plugin-import-x change la regle qui rend le verdict.
+#
+# `packages/**` EN ENTIER, et ce n'est pas du zele. Aucun package ne peut
+# franchir une frontiere de feature -- mais le controle de conformite exige que
+# chaque import des applications SE RESOLVE, faute de quoi la regle ne verrait
+# rien et le programme annoncerait « conforme » a vide. Or ces imports touchent
+# de proche en proche les six packages : `@repo/ui` et `@repo/api-client` depuis
+# le code, `@repo/eslint-config` et `@repo/typescript-config` depuis les
+# configurations, `@repo/tailwind-config` depuis `postcss.config.mjs`. Nommer
+# trois d'entre eux -- ce que faisait la premiere version -- etait un pari sur ce
+# que le lint atteindrait, et le pari se reperd a chaque package ajoute.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'packages/**'
+      - 'eslint.config.mjs'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/ci-frontend.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'packages/**'
+      - 'eslint.config.mjs'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/ci-frontend.yml'
+
+# Lecture seule : ce workflow ne publie rien et n'ecrit dans aucun reglage.
+permissions:
+  contents: read
+
+# Une execution a la fois par branche, et annulation de la precedente sur les
+# seules pull requests -- un nouveau commit rend la verification precedente sans
+# objet. Sur `main`, jamais : on veut l'historique complet des resultats.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  boundaries:
+    name: Frontieres entre features
+    runs-on: ubuntu-latest
+
+    # PAS de `defaults.run.working-directory`, contrairement a ci-backend.yml :
+    # pnpm se lance depuis la RACINE du depot.
+    env:
+      # Le `prepare: husky` du package.json racine tourne a chaque installation.
+      # Des hooks git n'ont aucun sens sur un agent de CI -- meme raison que le
+      # HUSKY=0 d'api-client.yml et de documentation.yml.
+      HUSKY: 0
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v7
+
+      # AVANT setup-node, et pas apres : c'est ce qui rend le cache `pnpm` de
+      # l'etape suivante possible. L'action lit la version du champ
+      # `packageManager` du package.json racine -- aucune version a redire ici.
+      - name: Installer pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Installer Node
+        uses: actions/setup-node@v7
+        with:
+          # La version de reference du depot, celle du poste et des images.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # AUCUN FILTRE, ET C'EST UNE CORRECTION PAYEE COMPTANT.
+      #
+      # La premiere version installait `@repo/eslint-config...` et les trois
+      # applications avec leurs dependances. Le job est tombe des la premiere
+      # execution : `Scope: 8 of 11 workspace projects`, et vingt et une erreurs
+      # « Resolve error: File '@repo/typescript-config/base.json' not found ».
+      # Le programme analyse le depot REEL avec la configuration REELLE -- les
+      # `eslint.config.mjs` et `postcss.config.mjs` des applications compris,
+      # que la troisieme famille de zones vise aussi. Resoudre leurs imports
+      # demande de proche en proche le socle TypeScript, que le filtre laissait
+      # dehors.
+      #
+      # Filtrer, c'est donc PARIER sur ce que le lint atteindra -- et le pari se
+      # reperd a chaque package ajoute. L'installation complete ne se discute
+      # pas : c'est ce que fait un clone. Le seul cout est `documentation`, une
+      # trentaine de secondes, mises en cache par `setup-node` des la deuxieme
+      # execution.
+      #
+      # A NOTER : l'echec a ete PROPRE. Les vingt et une erreurs etaient des
+      # `no-unresolved`, que le programme refuse explicitement -- il a repere
+      # qu'il ne pouvait rien certifier plutot que d'annoncer « conforme » sur un
+      # depot qu'il n'avait pas su analyser. C'est exactement ce que ce refus
+      # existe pour attraper.
+      - name: Installer les dependances Node
+        run: pnpm install --frozen-lockfile
+
+      # UNE SEULE COMMANDE, rejouable a l'identique sur le poste -- meme regle
+      # que le `make generate-api-check` d'api-client.yml. Le message d'echec
+      # est ecrit dans le programme, pas ici.
+      - name: Verifier les frontieres entre features
+        run: pnpm --filter @repo/eslint-config test

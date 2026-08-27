@@ -90,7 +90,8 @@ TypeScript, ce qui porte sa passe ESLint de 0,5 s à 1,3 s, et un commit touchan
 trois workspaces à la fois de 0,6 s à 2,2 s. Un fichier `.mjs`, hors typage, ne
 bouge pas. C'est le seul endroit du dépôt où ces règles tournent avant une pull
 request : la CI existe, mais elle ne rejoue à ce jour que les
-[contrats d'architecture](../backend/qualite-et-typage.md#import-linter), la
+[contrats d'architecture](../backend/qualite-et-typage.md#import-linter), les
+[frontières entre features](../frontend/structure-par-domaine.md), la
 régénération du client d'API et le build du site. Ruff, Mypy et pytest y entreront
 avec QA-01 et QA-02. Dispenser les hooks de ces règles les rendrait donc
 facultatives, pour de bon.
@@ -155,8 +156,9 @@ point final :
 | `build`    | Build, conteneurs, publication.                       |
 
 Le scope est **facultatif** ; s'il est présent, il désigne un workspace : `api`,
-`professional`, `individual`, `admin`, `ui`, `config-typescript`,
-`config-tailwind`, `docker`, `documentation`. La liste
+`professional`, `individual`, `admin`, `ui`, `api-client`, `config-typescript`,
+`config-tailwind`, `config-eslint`, `config-prettier`, `docker`,
+`documentation`. La liste
 suit l'arborescence réelle — **un nouveau workspace ajoute son scope à
 `commitlint.config.mjs` dans la pull request qui le
 crée**.

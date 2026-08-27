@@ -32,15 +32,17 @@ section de cette page dit ce que BACK-12 changera ; le reste décrit ce qui tour
 
 Deux `make test` existent, et ils ne couvrent pas la même chose :
 
-| Commande                          | Ce qu'elle lance                                         |
-| --------------------------------- | -------------------------------------------------------- |
-| `make test` à la racine           | `make test-back` **puis** `make test-front`              |
-| `make test-back` à la racine      | délègue à `backend/api/Makefile`                         |
-| `make test` depuis `backend/api/` | `uv run pytest` — la suite Python, et rien d'autre       |
-| `make test-front` à la racine     | `pnpm test`, qui ne trouve aucun script `test` à ce jour |
+| Commande                          | Ce qu'elle lance                                       |
+| --------------------------------- | ------------------------------------------------------ |
+| `make test` à la racine           | `make test-back` **puis** `make test-front`            |
+| `make test-back` à la racine      | délègue à `backend/api/Makefile`                       |
+| `make test` depuis `backend/api/` | `uv run pytest` — la suite Python, et rien d'autre     |
+| `make test-front` à la racine     | `pnpm test`, qui exécute les deux programmes de preuve |
 
-Autrement dit : **tant que QA-02 n'a pas donné de suite aux workspaces pnpm, `make test` à la
-racine ne teste que le backend**, et affiche une ligne pour le dire. Les deux formes se valent ;
+Autrement dit : **`make test` à la racine enchaîne la suite Python et les deux programmes de preuve
+des workspaces pnpm** — la portée des clés de cache (FRONT-04) et les frontières entre features
+(FRONT-09). Aucun n'est une suite de tests au sens de QA-02 : ce sont des programmes Node hors
+ligne, branchés sur le script `test` de leur package en attendant Vitest (FRONT-06). Les deux formes se valent ;
 celle de `backend/api/` est celle qu'on garde sous la main, parce qu'elle accepte les arguments de
 pytest.
 

@@ -14,6 +14,14 @@
  * Volontairement des objets de REGLES NUS, sans cle `plugins` : l'enregistrement
  * des plugins reste dans les presets, ce fichier ne porte que des arbitrages.
  *
+ * UNE TROISIEME PORTEE VIT AILLEURS, ET IL FAUT LE DIRE ICI. Depuis FRONT-09, la
+ * frontiere entre les features d'une application est tenue par
+ * `import-x/no-restricted-paths`, dont les zones ne peuvent pas s'ecrire a la
+ * main : elles sont ENGENDREES depuis le disque, application par application, et
+ * vivent donc dans `boundaries.js`. Ce n'est pas une entorse a la regle du seul
+ * endroit -- c'est la meme distinction qu'entre ce fichier et `base.js` : ici les
+ * arbitrages, la-bas ce qui se calcule.
+ *
  * Le socle est TYPE-AWARE depuis SETUP-06 : `base.js` applique
  * `tseslint.configs.recommendedTypeChecked` et branche le service de projet de
  * TypeScript. Les regles qui exigent un programme sont donc disponibles ici --

@@ -17,13 +17,20 @@ import type { Role, Session } from '@/lib/session';
  *
  * L'ecrire noir sur blanc a l'endroit ou l'on serait tente de croire l'inverse :
  * c'est le seul interet de ce commentaire.
+ *
+ * DANS `features/identity/` DEPUIS FRONT-09, et plus dans `lib/`. Une garde de
+ * role est du METIER d'identite : elle sait ce qu'est un role, ce qu'est une
+ * session, et ou renvoyer qui n'en a pas. Le nom de la feature suit celui du
+ * module backend `identity` -- et non `auth`, qui n'existe cote API que comme
+ * prefixe d'URL. Le vocabulaire de session, lui, est reste dans `lib/session.ts`
+ * : ce fichier-ci explique pourquoi.
  */
 
 /**
  * Session de la requete courante, lue dans le cookie.
  *
  * Fonction serveur : `cookies()` n'existe ni dans le navigateur ni dans le
- * middleware.
+ * proxy.
  */
 export async function getSession(): Promise<Session | null> {
   const cookieStore = await cookies();
@@ -37,7 +44,7 @@ export async function getSession(): Promise<Session | null> {
  * Pas de page 403 : un back-office n'a personne a qui expliquer qu'il existe.
  * Session absente ou role insuffisant menent au meme endroit, et le `next`
  * ramene a la page demandee une fois la connexion faite -- meme parametre que
- * celui du middleware, pour qu'un seul mecanisme de retour existe.
+ * celui du proxy, pour qu'un seul mecanisme de retour existe.
  */
 export async function requireRole(...allowed: Array<Role>): Promise<Session> {
   const session = await getSession();

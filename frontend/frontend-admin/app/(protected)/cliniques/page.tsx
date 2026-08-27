@@ -1,4 +1,4 @@
-import { CliniquesTable } from '@/components/cliniques-table';
+import { ClinicsTable } from '@/features/organization/clinics-table';
 
 import type { Metadata } from 'next';
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
  * niveau. Un fil d'Ariane qui n'affiche jamais qu'un seul element ne prouve
  * rien.
  */
-export default function CliniquesPage() {
+export default function ClinicsPage() {
   return (
     <>
       <header className="space-y-2">
@@ -25,7 +25,7 @@ export default function CliniquesPage() {
         </p>
       </header>
 
-      <CliniquesTable />
+      <ClinicsTable />
     </>
   );
 }

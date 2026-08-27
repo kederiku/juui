@@ -28,6 +28,13 @@ import { Badge } from '@repo/ui/components/badge';
  * A SAVOIR : un service degrade repond 503, que le mutator normalise en
  * ApiError -- il arrive donc par `isError`, jamais par `data`. Le cas
  * `status !== 'ready'` reste ecrit parce que le contrat l'autorise (BACK-08).
+ *
+ * DANS `features/health/` DEPUIS FRONT-09. Le nom de la feature est celui du
+ * dossier qu'Orval produit en `tags-split` et que ce composant consomme --
+ * `@repo/api-client/api/health`. C'est la seule correspondance qui existe
+ * aujourd'hui, et elle vaut demonstration : la frontiere metier devient visible
+ * des deux cotes. `health` est une etiquette OpenAPI et non un module backend,
+ * ce qui est consigne au registre des ecarts.
  */
 export function ServiceStatus() {
   const { data, isPending, isError, fetchStatus } = useCheckReadiness({

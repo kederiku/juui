@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 
 import './globals.css';
 
-import { SITE_URL } from './site-url';
+import { SITE_URL } from '@/lib/site-url';
 
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
@@ -102,7 +102,7 @@ export const metadata: Metadata = {
    * ecrira l'inverse au meme endroit, et la comparaison des deux fichiers doit
    * suffire a comprendre lequel des deux est public.
    *
-   * Les directives `googleBot` relevent l'aperçu autorise : sans elles, Google
+   * Les directives `googleBot` relevent l'apercu autorise : sans elles, Google
    * se limite a un extrait court et a une vignette d'image.
    */
   robots: {

@@ -2,6 +2,7 @@ import nextPlugin from '@next/eslint-plugin-next';
 import { defineConfig } from 'eslint/config';
 import eslintConfigPrettier from 'eslint-config-prettier';
 
+import { featureBoundaries } from './boundaries.js';
 import react from './react.js';
 
 /**
@@ -29,6 +30,14 @@ import react from './react.js';
  * peer a ^9. Ce que SETUP-03 avait ecrit ici est donc leve, et le motif du
  * retrait a bien ete verifie avant de l'etre.
  *
+ * IL PORTE AUSSI LA FRONTIERE DES FEATURES (FRONT-09), et c'est le bon etage :
+ * seules les applications Next ont un `features/`. La regle est engendree depuis
+ * le disque par `boundaries.js` -- une quatrieme application, ou une feature
+ * ajoutee demain, est gardee sans une ligne de configuration de plus. Le ticket
+ * nommait les trois `eslint.config.mjs` des applications ; trois copies du meme
+ * arbitrage auraient ete le contraire de son propre mot d'ordre, « trois
+ * applications, une seule convention ».
+ *
  * Reste non repris de `eslint-config-next` : `eslint-plugin-react`, dont la
  * peer plafonne toujours a ^9.7. Il n'en existe pas de fork « -x » : le seul
  * substitut maintenu, `@eslint-react/eslint-plugin`, n'est pas une reprise mais
@@ -51,6 +60,13 @@ export default defineConfig([
       // cette regle n'a plus d'objet — elle ne produirait que du bruit.
       '@next/next/no-html-link-for-pages': 'off',
     },
+  },
+
+  {
+    name: '@repo/eslint-config/next-feature-boundaries',
+    // Pas de cle `plugins` : `import-x` est enregistre par base.js, dont le bloc
+    // apparie les memes fichiers. Meme mecanique que le bloc ci-dessus.
+    rules: featureBoundaries(),
   },
 
   // Toujours en dernier — voir base.js.

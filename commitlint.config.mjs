@@ -30,6 +30,13 @@ export default {
     // -- les deux packages de configuration l'ont fait en SHARED-02, et
     // `api-client` en SHARED-03.
     //
+    // DEUX MANQUAIENT, et FRONT-09 les ajoute : `config-eslint` et
+    // `config-prettier` existent depuis SETUP-03 sans avoir jamais eu leur
+    // entree. Un `chore(config-eslint): ...` etait donc refuse par le hook
+    // `commit-msg`, ce qui poussait a commiter sans scope -- exactement ce que
+    // cette liste existe pour eviter. La regle ci-dessus vaut aussi
+    // retroactivement.
+    //
     // Le scope suit le nom du DOSSIER, jamais le nom npm : `config-typescript`
     // designe `@repo/typescript-config`, `config-tailwind`
     // `@repo/tailwind-config`. Pour `packages/api-client` les deux coincident.
@@ -44,6 +51,8 @@ export default {
         'ui', // packages/ui (SHARED-01)
         'config-typescript', // packages/config-typescript (SHARED-02)
         'config-tailwind', // packages/config-tailwind (SHARED-02)
+        'config-eslint', // packages/config-eslint (SETUP-03)
+        'config-prettier', // packages/config-prettier (SETUP-03)
         'api-client', // packages/api-client (SHARED-03)
         'docker', // docker/
         'documentation', // documentation/ (DOC-01)
