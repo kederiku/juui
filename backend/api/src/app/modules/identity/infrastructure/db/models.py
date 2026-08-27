@@ -17,7 +17,10 @@ reporter. Le jour ou une regle en aurait besoin, c'est l'entite qui gagnerait le
 champ, pas l'inverse.
 
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-Le mot de passe hache arrive en BACK-10b, le secret TOTP en BACK-18.
+La colonne du mot de passe hache arrive en BACK-28, avec le parcours qui la
+remplit ; BACK-10b a livre la brique de hachage et le type `PasswordHash`, dont
+la docstring donne la forme de colonne attendue (`String(255)`, jamais 97). Le
+secret TOTP arrive en BACK-18.
 
 PAS DE `group_id` ICI, ET C'EST DELIBERE
 `TenantMixin` (BACK-05) est OPT-IN, et le compte ne le declare pas :

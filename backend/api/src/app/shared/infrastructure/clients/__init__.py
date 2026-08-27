@@ -14,6 +14,7 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `storage_keys.py` | --               | BACK-13  |
 | `s3_storage.py`   | `FileStorage`    | BACK-13  |
 | `smtp_mailer.py`  | `EmailTransport` | BACK-22  |
+| `hibp.py`         | `BreachChecker`  | BACK-10b |
 
 `cache_keys.py` et `storage_keys.py` ne remplissent aucun port : ils portent les
 conventions de nommage, partagees par l'adaptateur et par toute doublure du port
@@ -28,10 +29,16 @@ deviendrait introuvable des que le contexte de lecture differe de celui de
 l'ecriture. Copier la premiere pour ecrire la troisieme serait une erreur --
 c'est la duree de vie de la cle qui decide, pas le style du fichier voisin.
 
-`smtp_mailer.py` NE SUIT PAS LA FORME DES TROIS AUTRES, ET C'EST NORMAL
-Sa fabrique recoit bien `Settings`, mais rien ne se range dans `app.state` et
-aucun accesseur ne le rend : une session SMTP nait et meurt avec chaque message,
-il n'y a donc ni ressource a ouvrir au demarrage ni ressource a refermer a
-l'arret. Ce qui varie d'un adaptateur a l'autre n'est pas le style, c'est ce
-qu'il detient entre deux appels.
+`smtp_mailer.py` ET `hibp.py` NE SUIVENT PAS LA FORME DES TROIS AUTRES
+Leurs fabriques recoivent bien `Settings`, mais rien ne se range dans `app.state`
+et aucun accesseur ne le rend : une session SMTP nait et meurt avec chaque
+message, un client HTTP aussi. Il n'y a donc ni ressource a ouvrir au demarrage
+ni ressource a refermer a l'arret. Ce qui varie d'un adaptateur a l'autre n'est
+pas le style, c'est ce qu'il detient entre deux appels.
+
+Pour `hibp.py` (BACK-10b), la question meritait d'etre posee -- un client HTTP
+partage economiserait une poignee de main TLS par appel -- et sa docstring dit
+sur quoi elle a ete tranchee. Corollaire utile a connaitre d'ici : une fabrique
+autonome sert le semis d'INFRA-08 sans qu'un script ait a construire une
+application FastAPI.
 """

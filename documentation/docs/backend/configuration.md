@@ -1,12 +1,12 @@
 ---
 title: Configuration
-description: Les Settings Pydantic — sept sous-modèles, valeurs dérivées, .env strict — et la validation au démarrage.
+description: Les Settings Pydantic — neuf sous-modèles, valeurs dérivées, .env strict — et la validation au démarrage.
 ---
 
 # Configuration
 
 Le service ne lit jamais son environnement à la volée — toute la configuration passe par un
-objet `Settings` Pydantic, découpé en sept sous-modèles et validé dès le démarrage. Cette
+objet `Settings` Pydantic, découpé en neuf sous-modèles et validé dès le démarrage. Cette
 page décrit ce découpage, les valeurs dérivées, la strictesse du fichier `.env` et les sondes qui vérifient l'ensemble.
 
 Toute la configuration du service tient dans un objet unique,
@@ -19,17 +19,19 @@ recevra le conteneur d'INFRA-04, et le fichier `backend/api/.env` pour un lancem
 poste. Ce que signifie chaque variable est écrit dans `.env.example`, son
 gabarit ; cette page ne le recopie pas, pour éviter que les deux divergent.
 
-## Les sept sous-modèles
+## Les neuf sous-modèles
 
-| Sous-modèle        | Préfixe     | Ce qu'il porte                                    | Consommé par                                 |
-| ------------------ | ----------- | ------------------------------------------------- | -------------------------------------------- |
-| `AppSettings`      | _aucun_     | environnement, niveau de log, origines CORS       | BACK-08 (environnement), BACK-11 (CORS, log) |
-| `DatabaseSettings` | `POSTGRES_` | connexion PostgreSQL                              | BACK-05                                      |
-| `RedisSettings`    | `REDIS_`    | connexion Redis, bases de cache et de broker      | BACK-14, BACK-15                             |
-| `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod | BACK-13                                      |
-| `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie       | BACK-10                                      |
-| `OtpSettings`      | `OTP_`      | validité, tentatives et quotas de renvoi d'un OTP | BACK-17                                      |
-| `SmtpSettings`     | `SMTP_`     | courriel sortant, plus `MAIL_FROM` sans préfixe   | BACK-17, repris par BACK-22                  |
+| Sous-modèle        | Préfixe     | Ce qu'il porte                                        | Consommé par                                 |
+| ------------------ | ----------- | ----------------------------------------------------- | -------------------------------------------- |
+| `AppSettings`      | _aucun_     | environnement, niveau de log, origines CORS           | BACK-08 (environnement), BACK-11 (CORS, log) |
+| `DatabaseSettings` | `POSTGRES_` | connexion PostgreSQL                                  | BACK-05                                      |
+| `RedisSettings`    | `REDIS_`    | connexion Redis, bases de cache et de broker          | BACK-14, BACK-15                             |
+| `S3Settings`       | `S3_`       | stockage objet, MinIO en dev et Amazon S3 en prod     | BACK-13                                      |
+| `JWTSettings`      | `JWT_`      | clé de signature, algorithme, durées de vie           | BACK-10                                      |
+| `OtpSettings`      | `OTP_`      | validité, tentatives et quotas de renvoi d'un OTP     | BACK-17                                      |
+| `SmtpSettings`     | `SMTP_`     | courriel sortant, plus `MAIL_FROM` sans préfixe       | BACK-17, repris par BACK-22                  |
+| `PasswordSettings` | `PASSWORD_` | coût du hachage argon2id, plancher OWASP dans le type | BACK-10b                                     |
+| `HibpSettings`     | `HIBP_`     | adresse et délai total du contrôle de fuite           | BACK-10b                                     |
 
 Un préfixe par sous-modèle plutôt qu'un délimiteur de nesting : `POSTGRES_USER` et
 `MINIO_ROOT_USER` sont imposés par les images Docker, et la traduction n'aurait servi à rien.

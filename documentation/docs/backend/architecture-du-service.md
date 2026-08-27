@@ -130,7 +130,8 @@ ranger, et quel ticket l'apporte.
 | `modules/organization/`            | cas d'usage, invitations, routes d'administration          | BACK-25                   |
 
 `shared/domain/ports/` n'y figure plus : BACK-10a a livré `TokenService`, le
-dernier des sept ports techniques. Le paquet n'a plus de place réservée.
+septième des ports techniques prévus par BACK-04 ; BACK-10b y a ajouté le
+huitième, `PasswordHasher`, né d'un besoin et non d'un emplacement réservé.
 
 ## Vérifier que les règles tiennent
 

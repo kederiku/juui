@@ -25,20 +25,22 @@ premier seulement (`uv sync --frozen --no-dev`).
 
 ## Applicatives
 
-| Paquet                | Rôle                                                                   |
-| --------------------- | ---------------------------------------------------------------------- |
-| `fastapi`             | Framework HTTP et génération du contrat OpenAPI.                       |
-| `uvicorn[standard]`   | Serveur ASGI. L'extra apporte uvloop, httptools et le `--reload`.      |
-| `pydantic`            | Validation et sérialisation des schémas d'API.                         |
-| `pydantic-settings`   | Configuration typée, lue de l'environnement (BACK-03).                 |
-| `sqlalchemy[asyncio]` | ORM. L'extra tire `greenlet`, sans lequel l'asynchrone ne marche pas.  |
-| `asyncpg`             | Pilote PostgreSQL asynchrone.                                          |
-| `alembic`             | Migrations de schéma — voir [Migrations](./migrations.md).             |
-| `pyjwt`               | Émission et vérification des [jetons](./jetons.md) (BACK-10a).         |
-| `redis`               | Cache applicatif (BACK-14) et broker de TaskIQ (BACK-15).              |
-| `taskiq`              | Tâches de fond (BACK-15) — voir [Tâches de fond](./taches-de-fond.md). |
-| `taskiq-redis`        | Le broker `RedisStreamBroker` et le backend de résultats (BACK-15).    |
-| `boto3`               | Stockage objet S3 en production, MinIO en développement (BACK-13).     |
+| Paquet                | Rôle                                                                    |
+| --------------------- | ----------------------------------------------------------------------- |
+| `fastapi`             | Framework HTTP et génération du contrat OpenAPI.                        |
+| `uvicorn[standard]`   | Serveur ASGI. L'extra apporte uvloop, httptools et le `--reload`.       |
+| `pydantic`            | Validation et sérialisation des schémas d'API.                          |
+| `pydantic-settings`   | Configuration typée, lue de l'environnement (BACK-03).                  |
+| `sqlalchemy[asyncio]` | ORM. L'extra tire `greenlet`, sans lequel l'asynchrone ne marche pas.   |
+| `asyncpg`             | Pilote PostgreSQL asynchrone.                                           |
+| `alembic`             | Migrations de schéma — voir [Migrations](./migrations.md).              |
+| `pyjwt`               | Émission et vérification des [jetons](./jetons.md) (BACK-10a).          |
+| `argon2-cffi`         | Hachage des [mots de passe](./mots-de-passe.md) (BACK-10b).             |
+| `redis`               | Cache applicatif (BACK-14) et broker de TaskIQ (BACK-15).               |
+| `taskiq`              | Tâches de fond (BACK-15) — voir [Tâches de fond](./taches-de-fond.md).  |
+| `taskiq-redis`        | Le broker `RedisStreamBroker` et le backend de résultats (BACK-15).     |
+| `boto3`               | Stockage objet S3 en production, MinIO en développement (BACK-13).      |
+| `httpx`               | Client HTTP sortant du contrôle de fuite (BACK-10b), et client de test. |
 
 ## Développement (`dev`)
 
@@ -50,12 +52,19 @@ premier seulement (`uv sync --frozen --no-dev`).
 | `pytest`          | Cadre de test.                                        |
 | `pytest-asyncio`  | Support des tests asynchrones.                        |
 | `pytest-cov`      | Mesure de couverture.                                 |
-| `httpx`           | Client HTTP de test, via `ASGITransport`.             |
 | `boto3-stubs[s3]` | Stubs de typage de boto3, limités au service S3.      |
 
 `boto3` est le seul paquet de la liste à ne pas embarquer ses propres
 annotations : tous les autres livrent un `py.typed`, et leurs paquets `types-*`
-d'antan ont été retirés de PyPI.
+d'antan ont été retirés de PyPI. C'est vrai d'`argon2-cffi`, vérifié à
+l'installation — aucune dérogation Mypy n'a été nécessaire.
+
+**`httpx` a quitté ce groupe pour les dépendances applicatives** avec BACK-10b,
+exactement comme son commentaire l'annonçait depuis BACK-01 : « également utile
+comme client sortant si un adaptateur en a besoin ». L'adaptateur en question est
+le contrôle de fuite de mot de passe, premier client HTTP sortant du service. Il
+reste le client de test des suites d'API, via `ASGITransport` — un paquet, deux
+emplois, une seule borne de version.
 
 **Ruff et Import Linter sont épinglés à la version exacte**, contrairement à
 tout le reste. Un outil qui change d'avis tout seul entre deux `uv sync` ferait

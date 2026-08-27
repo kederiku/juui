@@ -44,6 +44,11 @@ dependencies = [
 
     # --- Securite ---
     "pyjwt~=2.13",
+    # Hachage des mots de passe (BACK-10b). Le paquet `argon2-cffi` embarque son
+    # `py.typed` et publie des roues `abi3` -- rien ne compile sur un poste neuf.
+    # Son nom d'IMPORT est `argon2`, et c'est sous ce nom qu'il figure plus bas
+    # dans les modules interdits au domaine.
+    "argon2-cffi~=25.1",
 
     # --- Infrastructure ---
     "redis~=8.1",
@@ -54,6 +59,13 @@ dependencies = [
     # est satisfaite par le `redis~=8.1` ci-dessus.
     "taskiq-redis~=1.2.3",
     "boto3~=1.43",
+    # PROMU DEPUIS LE GROUPE `dev` PAR BACK-10b, ce que ce groupe annoncait par
+    # ecrit : « egalement utile comme client sortant si un adaptateur en a
+    # besoin, auquel cas il passera en dependance applicative ». L'adaptateur en
+    # question est le controle de fuite de mot de passe, premier client HTTP
+    # sortant du service. Il reste le client de TEST (ASGITransport) des suites
+    # d'API : un paquet, deux emplois, une seule borne de version.
+    "httpx~=0.28.1",
 ]
 
 [dependency-groups]
@@ -79,15 +91,11 @@ dev = [
     "pytest~=9.1",
     "pytest-asyncio~=1.4",
     "pytest-cov~=7.1",
-    # Client HTTP de test (ASGITransport). Egalement utile comme client sortant
-    # si un adaptateur en a besoin, auquel cas il passera en dependance
-    # applicative.
-    "httpx~=0.28.1",
-
     # Stubs de typage. Le ticket demandait « types-* » au pluriel ; en pratique
     # boto3 est le seul de la liste a ne pas embarquer son propre `py.typed`.
-    # fastapi, pydantic, sqlalchemy, pyjwt, redis et httpx sont tous types a la
-    # source, et leurs paquets `types-*` d'antan sont depuis retires de PyPI.
+    # fastapi, pydantic, sqlalchemy, pyjwt, redis, httpx et argon2-cffi sont tous
+    # types a la source, et leurs paquets `types-*` d'antan sont depuis retires
+    # de PyPI.
     # L'extra [s3] limite les stubs au service reellement utilise (BACK-13) :
     # boto3-stubs complet, c'est plus de 400 sous-paquets.
     "boto3-stubs[s3]~=1.43",
@@ -312,6 +320,7 @@ markers = [
     "notifications: tests des preferences et de la remise de notifications (BACK-22)",
     "conformance: suites jouees contre l'implementation reelle ET sa doublure (BACK-06c)",
     "tokens: tests de l'emission et de la verification des jetons (BACK-10a)",
+    "passwords: tests de la politique de mot de passe et du controle de fuite (BACK-10b)",
 ]
 
 # ---------------------------------------------------------------------------
@@ -423,10 +432,17 @@ forbidden_modules = [
     # dependance : le broker (BACK-15) importe `taskiq_redis` par son nom.
     "taskiq_redis",
     "uvicorn",
-    # Client HTTP du groupe dev, qui deviendrait applicatif si un adaptateur
-    # sortant en avait besoin. Interdit d'avance : appeler le reseau depuis le
-    # domaine est exactement ce que les ports evitent.
+    # Client HTTP, interdit d'avance par BACK-10a « si un adaptateur sortant en
+    # avait besoin ». BACK-10b est ce ticket-la : `httpx` est desormais une
+    # dependance APPLICATIVE, et l'interdiction qui etait preventive devient la
+    # regle generale -- appeler le reseau depuis le domaine est exactement ce que
+    # les ports evitent.
     "httpx",
+    # Nom d'import reel de `argon2-cffi` (BACK-10b), sur le meme modele que `jwt`
+    # pour `pyjwt`. Application de la regle ci-dessus, dans la meme pull request
+    # que la dependance : le port `PasswordHasher` reste importable sans
+    # extension C, et c'est ce qui laisse le domaine et ses tests le nommer.
+    "argon2",
 ]
 
 # --- Contrat 2 : le sens des couches, dans chaque module --------------------

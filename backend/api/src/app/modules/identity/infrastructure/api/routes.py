@@ -4,7 +4,7 @@ Le routeur existe, il est assemble par `app.main`, et il ne porte ENCORE AUCUNE
 ROUTE. Ce n'est plus une question d'outillage : l'unite de travail existe
 (BACK-06a), et une route n'aurait qu'a annoter `uow: IdentityUowDep` pour la
 recevoir. Ce qui manque est METIER : le parcours d'inscription porte des regles
--- mot de passe hache (BACK-10b), non-divulgation (BACK-09), verification
+-- mot de passe hache (BACK-28), non-divulgation (BACK-09), verification
 (BACK-17) -- qu'une route de demonstration contournerait, et qu'il faudrait
 documenter comme si elles etaient tenues.
 
