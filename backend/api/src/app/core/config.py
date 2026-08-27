@@ -62,6 +62,17 @@ _ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
 # une faille, pas une negligence de style.
 _JWT_PLACEHOLDER = "changer-cette-valeur-voir-openssl-rand-hex-32"
 
+# Longueur minimale de la cle de signature, EN OCTETS ET PAR ALGORITHME. Le RFC
+# 7518 section 3.2 exige une cle au moins aussi longue que l'empreinte produite,
+# ce qui n'est pas la meme borne pour les trois : 32, 48 et 64 octets.
+#
+# UNE BORNE UNIQUE NE SUFFIT PAS, et l'avoir cru a produit exactement le defaut
+# qu'elle voulait fermer : une cle de 32 octets passait la validation avec
+# HS384, le service demarrait, et CHAQUE emission levait une `InvalidKeyError`
+# -- qui ne descend pas d'`InvalidTokenError` et sortait donc en 500. La borne
+# suit l'algorithme, ou elle ne sert a rien.
+_JWT_MIN_SECRET_BYTES = {"HS256": 32, "HS384": 48, "HS512": 64}
+
 
 class ConfigurationError(RuntimeError):
     """Configuration absente, incomplete ou invalide : l'API ne peut pas demarrer.
@@ -296,16 +307,116 @@ class S3Settings(_SettingsSection):
 
 
 class JWTSettings(_SettingsSection):
-    """Signature des jetons d'authentification. Prefixe `JWT_` (BACK-03, BACK-10)."""
+    """Signature des jetons d'authentification. Prefixe `JWT_` (BACK-03, BACK-10a).
+
+    TROIS AUDIENCES, UNE PAR APPLICATION
+    Le cahier des charges veut trois interfaces etanches. Un simple champ « type
+    de compte » dans le jeton ne suffit pas a les separer : un jeton de compte
+    particulier, parfaitement signe, reste techniquement presentable a l'API
+    professionnelle. C'est l'audience qui l'arrete, et elle ne peut le faire que
+    si chaque application connait la sienne. SETUP-08 recense ces trois
+    variables et les attribue nommement a BACK-10a.
+
+    LES REGLAGES DURCIS PAR BACK-10a, ET POURQUOI ILS L'ONT ETE
+    `algorithm` etait un `str` libre et `secret_key` n'avait aucune borne. Les
+    deux ont ete verifies contre PyJWT 2.13 avant d'etre resserres :
+
+    - `cryptography` n'est pas une dependance du projet. Un `JWT_ALGORITHM=RS256`
+      passait la validation, laissait le service DEMARRER, puis levait un
+      `NotImplementedError` -- hors de la hierarchie d'erreurs de PyJWT, donc en
+      500 -- a chaque emission de jeton. Le `Literal` deplace ce refus au
+      demarrage, ou il se voit.
+    - PyJWT n'exige pas la longueur minimale que le RFC 7518 recommande pour
+      HS256 : sans option contraire, une cle de cinq octets ne produit qu'un
+      avertissement, et rien dans ce depot ne transforme les avertissements en
+      erreurs. `min_length` le fait, une bonne fois, a l'endroit ou la valeur
+      entre dans le service.
+    """
 
     model_config = SettingsConfigDict(env_prefix="JWT_")
 
+    # Sans borne declarative : elle depend de l'algorithme, et le validateur de
+    # modele plus bas la tient en OCTETS -- `min_length` compterait des
+    # caracteres, ce qui n'est pas ce que le RFC mesure.
     secret_key: SecretStr
-    algorithm: str = "HS256"
+
+    # Famille HMAC seule. Elargir cette liste demande d'ajouter `pyjwt[crypto]`
+    # aux dependances ET de trancher la distribution des cles publiques : ce
+    # n'est pas un reglage, c'est un ticket.
+    algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
 
     # Court par construction : ce jeton circule a chaque requete.
-    access_token_expire_minutes: int = Field(default=15, gt=0)
-    refresh_token_expire_days: int = Field(default=7, gt=0)
+    #
+    # BORNES HAUTES, et pas seulement pour le style : `iat + duree` se calcule
+    # avec un `timedelta`, et une valeur assez grande fait deborder la date.
+    # L'API demarrerait, puis leverait un `OverflowError` a chaque emission --
+    # meme piege que la longueur de cle ci-dessus. Vingt-quatre heures pour un
+    # jeton d'acces et un an pour un rafraichissement sont deja au-dela de tout
+    # reglage defendable.
+    access_token_expire_minutes: int = Field(default=15, gt=0, le=1440)
+    refresh_token_expire_days: int = Field(default=7, gt=0, le=365)
+
+    # Les valeurs par defaut sont celles du developpement. Elles n'ont pas a
+    # etre secretes -- une audience est publique, elle voyage en clair dans
+    # chaque jeton ; ce qu'elle doit etre, c'est DISTINCTE.
+    audience_professional: str = Field(default="juui-pro", min_length=1)
+    audience_individual: str = Field(default="juui-particulier", min_length=1)
+    audience_admin: str = Field(default="juui-admin", min_length=1)
+
+    # Meme faux positif N804 que le validateur de `Settings` plus bas : un
+    # validateur « after » recoit le modele construit, donc `self`.
+    @model_validator(mode="after")
+    def _reject_unusable_audiences(self) -> Self:  # noqa: N804
+        """Refuse deux audiences identiques, ou une audience qui n'en est pas une.
+
+        Le controle d'audience separe les trois applications. Deux audiences
+        egales font passer les jetons de l'une pour ceux de l'autre, sans
+        qu'aucune erreur ne se produise nulle part -- l'isolation disparait en
+        silence, ce qui est exactement le defaut que ce reglage existe pour
+        empecher.
+
+        Les espaces de bordure sont refuses plutot qu'elages : une audience
+        `"juui-admin "` serait DISTINCTE de `"juui-admin"` pour ce validateur
+        comme pour la verification du jeton, et le refus qui s'ensuivrait ne
+        viserait que les administrateurs -- une panne aussi selective que
+        penible a diagnostiquer.
+        """
+        audiences = (self.audience_professional, self.audience_individual, self.audience_admin)
+        if any(audience != audience.strip() or not audience.strip() for audience in audiences):
+            message = (
+                "Une audience JWT ne peut etre ni vide ni bordee d'espaces : "
+                "elle est comparee caractere par caractere a la valeur du jeton."
+            )
+            raise ValueError(message)
+        if len(set(audiences)) != len(audiences):
+            message = (
+                "Les trois audiences JWT doivent etre distinctes : "
+                "JWT_AUDIENCE_PROFESSIONAL, JWT_AUDIENCE_INDIVIDUAL et JWT_AUDIENCE_ADMIN. "
+                "Deux valeurs egales supprimeraient la frontiere entre deux applications."
+            )
+            raise ValueError(message)
+        return self
+
+    @model_validator(mode="after")
+    def _reject_key_too_short_for_algorithm(self) -> Self:  # noqa: N804
+        """Refuse au DEMARRAGE une cle trop courte pour l'algorithme retenu.
+
+        La borne suit l'algorithme -- 32, 48 ou 64 octets. Une borne unique
+        laisserait passer une cle de 32 octets avec HS384 : la configuration
+        serait valide, le service demarrerait, et chaque emission leverait une
+        `InvalidKeyError` que rien ne rattrape. Un refus au demarrage se voit ;
+        un 500 par login se decouvre en production.
+        """
+        required = _JWT_MIN_SECRET_BYTES[self.algorithm]
+        actual = len(self.secret_key.get_secret_value().encode("utf-8"))
+        if actual < required:
+            message = (
+                f"JWT_SECRET_KEY fait {actual} octets, alors que {self.algorithm} en exige "
+                f"au moins {required} (RFC 7518 section 3.2). En generer une : "
+                f"openssl rand -hex {required}"
+            )
+            raise ValueError(message)
+        return self
 
 
 class OtpSettings(_SettingsSection):

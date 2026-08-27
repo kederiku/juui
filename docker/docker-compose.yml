@@ -172,6 +172,14 @@ x-app-environment: &app-environment
   JWT_ALGORITHM: ${JWT_ALGORITHM}
   JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
   JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
+  # Les trois audiences naissent avec BACK-10a. Le `:-` pour la meme raison que
+  # les reglages de pool et les variables SMTP : un .env anterieur ne les porte
+  # pas, et compose substituerait la chaine VIDE -- que la configuration refuse,
+  # a juste titre. Le defaut evite de casser le demarrage sur un poste qui n'a
+  # pas encore recopie le gabarit.
+  JWT_AUDIENCE_PROFESSIONAL: ${JWT_AUDIENCE_PROFESSIONAL:-juui-pro}
+  JWT_AUDIENCE_INDIVIDUAL: ${JWT_AUDIENCE_INDIVIDUAL:-juui-particulier}
+  JWT_AUDIENCE_ADMIN: ${JWT_AUDIENCE_ADMIN:-juui-admin}
 
   # --- Courriel sortant (INFRA-07, lu depuis BACK-17) ---
   # Le service `mailpit` existe depuis INFRA-07 ; ces six variables attendaient

@@ -40,6 +40,7 @@ from app.shared.domain.exceptions import (
     ValidationError,
 )
 from app.shared.domain.ports.file_storage import FileStorageUnavailableError
+from app.shared.domain.ports.token_service import InactiveMembershipError
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.tenancy import MissingTenantContextError
 
@@ -136,6 +137,10 @@ def _build_app() -> FastAPI:
     @application.get("/raise/storage-unavailable")
     async def raise_storage_unavailable() -> None:
         raise FileStorageUnavailableError("Le stockage objet ne repond pas.")
+
+    @application.get("/raise/inactive-membership")
+    async def raise_inactive_membership() -> None:
+        raise InactiveMembershipError("Aucune appartenance active a ce groupe.")
 
     @application.post("/probe/payload")
     async def echo_payload(payload: _ProbePayload) -> dict[str, int]:
@@ -328,6 +333,23 @@ async def test_storage_unavailability_follows_the_generic_500_path() -> None:
     body = response.json()
     assert body["code"] == "http.server.internal_error"
     assert "stockage" not in response.text
+
+
+async def test_a_membership_refusal_does_not_confirm_the_group_exists() -> None:
+    """Heritage multiple et TUPLE ORDONNE : le 404 doit gagner sur la famille.
+
+    `InactiveMembershipError` descend de `TokenError` -- pour qu'un
+    `except TokenError` autour de l'emission ne la rate pas -- et de
+    `NotFoundError`, pour la regle de non-divulgation de BACK-09. Le traducteur
+    resout par `isinstance` sur un tuple parcouru dans l'ordre : c'est
+    `(NotFoundError, 404)`, en tete, qui doit repondre. Un refus de DROIT
+    confirmerait au demandeur que le groupe existe.
+    """
+    async with _client(_build_app()) as client:
+        response = await client.get("/raise/inactive-membership")
+
+    assert response.status_code == 404
+    assert response.json()["code"] == "shared.token.membership_not_active"
 
 
 async def test_http_exceptions_share_the_format() -> None:

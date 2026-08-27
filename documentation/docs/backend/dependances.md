@@ -34,7 +34,7 @@ premier seulement (`uv sync --frozen --no-dev`).
 | `sqlalchemy[asyncio]` | ORM. L'extra tire `greenlet`, sans lequel l'asynchrone ne marche pas.  |
 | `asyncpg`             | Pilote PostgreSQL asynchrone.                                          |
 | `alembic`             | Migrations de schéma — voir [Migrations](./migrations.md).             |
-| `pyjwt`               | Émission et vérification des jetons d'authentification (BACK-10).      |
+| `pyjwt`               | Émission et vérification des [jetons](./jetons.md) (BACK-10a).         |
 | `redis`               | Cache applicatif (BACK-14) et broker de TaskIQ (BACK-15).              |
 | `taskiq`              | Tâches de fond (BACK-15) — voir [Tâches de fond](./taches-de-fond.md). |
 | `taskiq-redis`        | Le broker `RedisStreamBroker` et le backend de résultats (BACK-15).    |

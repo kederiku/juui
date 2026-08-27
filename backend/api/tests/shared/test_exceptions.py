@@ -30,6 +30,11 @@ from app.shared.domain.ports.file_storage import (
     StoredFileNotFoundError,
     UnsupportedContentTypeError,
 )
+from app.shared.domain.ports.token_service import (
+    ExpiredTokenError,
+    InactiveMembershipError,
+    TokenError,
+)
 
 # Le gabarit du ticket : `<module>.<ressource>.<erreur>`, trois segments.
 _CODE_PATTERN = re.compile(r"^[a-z_]+(\.[a-z_]+){2}$")
@@ -104,6 +109,25 @@ def test_file_storage_errors_keep_their_family_and_gain_a_category() -> None:
     # La panne technique reste hors categorie : le handler la re-leve en 500.
     assert not issubclass(FileStorageUnavailableError, NotFoundError)
     assert not issubclass(FileStorageUnavailableError, ValidationError)
+
+
+def test_token_errors_keep_their_family_and_the_membership_refusal_gains_a_category() -> None:
+    """Le port des jetons (BACK-10a) suit le patron du stockage, avec une nuance.
+
+    Une seule de ses erreurs porte une categorie de BACK-09 : celle du refus
+    d'appartenance, rangee sous `NotFoundError` par la regle de
+    non-divulgation -- un refus de DROIT confirmerait l'existence du groupe. Les
+    autres restent sans categorie : leur statut est un 401, que la bordure HTTP
+    de BACK-10c posera par `HTTPException`, comme BACK-09 l'a prevu.
+    """
+    assert issubclass(ExpiredTokenError, TokenError)
+    assert issubclass(InactiveMembershipError, TokenError)
+    assert issubclass(InactiveMembershipError, NotFoundError)
+    assert not issubclass(ExpiredTokenError, NotFoundError)
+    assert not issubclass(ExpiredTokenError, ValidationError)
+    assert not issubclass(ExpiredTokenError, PermissionDeniedError)
+    assert TokenError.code == "shared.token.invalid"
+    assert InactiveMembershipError.code == "shared.token.membership_not_active"
 
 
 def test_error_exposes_message_and_details() -> None:

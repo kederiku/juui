@@ -22,10 +22,11 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `unit_of_work.py`   | `AbstractUnitOfWork`                | BACK-06a |
 | `repository.py`     | `Repository` (protocole generique)  | BACK-06a |
 
-BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Six
+BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Les sept
 sont livres -- `cache.py` par BACK-14, `email.py` par BACK-22, `file_storage.py`
 par BACK-13, `unit_of_work.py` et `repository.py` par BACK-06a, `breach_checker.py`
-par BACK-06c ; seul `token_service.py` reste une place reservee.
+par BACK-06c, `token_service.py` par BACK-10a. Le paquet n'a plus de place
+reservee ; le prochain port naitra d'un besoin, et non d'un emplacement.
 
 `breach_checker.py` EST LE SECOND CAS LIMITE. Son adaptateur appartient a
 BACK-10b, qui n'est pas livre : le port nait quand meme, parce qu'une doublure
@@ -55,7 +56,10 @@ muet coute plus cher que le risque couvert. Un port ne se contente
 donc pas de nommer des operations : il dit ce qui se passe quand le service
 qu'il masque ne repond plus, et cette reponse ne s'herite pas du port
 precedent -- deux ports qui degradent peuvent le faire pour des raisons sans
-rapport.
+rapport. `TokenService` LEVE ET N'EMET RIEN, ce qui est la reponse la plus
+severe des sept, et pour le motif le plus simple : un jeton emis sans que
+l'appartenance ait pu etre verifiee est une elevation de privilege qui vivra
+jusqu'a son expiration, sans que personne apprenne qu'elle a eu lieu.
 
 CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
 Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard
