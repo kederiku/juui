@@ -75,6 +75,7 @@ const sidebars: SidebarsConfig = {
           id: 'backend/doublures-en-memoire',
           label: 'Doublures en mémoire',
         },
+        { type: 'doc', id: 'backend/tests', label: 'Tests' },
         { type: 'doc', id: 'backend/migrations', label: 'Migrations' },
         { type: 'doc', id: 'backend/cache', label: 'Cache' },
         { type: 'doc', id: 'backend/stockage-objet', label: 'Stockage objet' },

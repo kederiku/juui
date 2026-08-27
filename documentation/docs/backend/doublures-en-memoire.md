@@ -13,6 +13,11 @@ Une doublure dont le `rollback()` ne fait rien valide une sémantique que la vra
 tient pas. C'est **pire que pas de test** — un test vert affirme quelque chose. Toute cette page
 tourne autour de ce risque, et de ce qui l'écarte.
 
+**Elle dit ce que les doublures garantissent, pas comment s'en servir.** Le patron d'un test de
+cas d'usage — monter les fakes, exécuter le vrai cas d'usage, asserter sur l'état commité — est
+sur la page [Tests](./tests.md#écrire-un-test-de-cas-dusage-sur-doublure), avec le reste du
+harnais.
+
 ## Où elles vivent
 
 **La doublure suit son port.** C'est la règle, et elle range tout :

@@ -71,6 +71,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [DOC-01](./doc.md#écarts-assumés-avec-le-ticket-doc-01)          | Le site de documentation Docusaurus                          |
 | [DOC-02a](./doc.md#écarts-assumés-avec-le-ticket-doc-02a)        | La section Architecture et la carte de contexte              |
 | [DOC-02b](./doc.md#écarts-assumés-avec-le-ticket-doc-02b)        | Le registre des ADR                                          |
+| [DOC-02d](./doc.md#écarts-assumés-avec-le-ticket-doc-02d)        | La page des tests du backend                                 |
 
 Le registre est complet : chaque ticket livré avec un écart y a son tableau, et les prochains
 ajouteront le leur dans la PR qui les livre.

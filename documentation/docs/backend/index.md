@@ -30,6 +30,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Persistance](./persistance.md)                             | Le moteur SQLAlchemy, la convention de nommage, les mixins, la tenance.    |
 | [Unité de travail](./unite-de-travail.md)                   | Le port UnitOfWork, le dépôt générique, l'injection par requête.           |
 | [Doublures en mémoire](./doublures-en-memoire.md)           | Les fakes du projet et la suite de conformité qui les tient au contrat.    |
+| [Tests](./tests.md)                                         | Lancer la suite, lire ses `skip`, et écrire les trois formes de test.      |
 | [Migrations](./migrations.md)                               | Alembic piloté par Settings, un seul migrateur à la fois.                  |
 | [Cache](./cache.md)                                         | Le port de cache Redis et sa dégradation gracieuse.                        |
 | [Stockage objet](./stockage-objet.md)                       | Le port S3/MinIO et les URLs pré-signées.                                  |
@@ -58,6 +59,7 @@ Le socle est en place. Plutôt qu'une phrase qui périmerait, voici ce qui exist
 | Les tâches de fond, et leur premier consommateur métier                                                | [Tâches de fond](./taches-de-fond.md), [Vérification d'adresse](./verification-email-otp.md) |
 | Les jetons, les mots de passe et le contrôle de fuite                                                  | [Jetons](./jetons.md), [Mots de passe](./mots-de-passe.md)                                   |
 | Le service observable — journaux structurés, identifiant de requête, secrets masqués                   | [Journalisation](./journalisation.md)                                                        |
+| Une suite pytest qui tourne sur le poste, mais que la CI ne rejoue pas encore                          | [Tests](./tests.md)                                                                          |
 | Cinq modules métier, dont `identity` complet                                                           | [Carte de contexte](../architecture/carte-de-contexte.md)                                    |
 
 **Ce tableau est un résumé de lecture, et il périmera.** Ce qui existe vraiment se lit sur
