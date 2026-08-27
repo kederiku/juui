@@ -2,7 +2,8 @@
 
 MODULE PILOTE de BACK-04. Il est le premier complet, et sert de reference de
 structure aux suivants -- `organization` (BACK-16), `medical_records` (BACK-19),
-`scheduling` (BACK-21), `notifications` (BACK-22), `profile` (BACK-32).
+`scheduling` (BACK-21) et `notifications` (BACK-22) l'ont suivi ; reste
+`profile` (BACK-32).
 
 Son perimetre est l'IDENTITE et l'AUTHENTIFICATION : le compte, son adresse, son
 type, son statut, et plus tard le mot de passe (BACK-28), l'OTP (BACK-17), la

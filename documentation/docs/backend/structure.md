@@ -73,10 +73,19 @@ backend/api/
         │   ├── domain/         entités, enums, règle « une seule détention active », ports
         │   ├── infrastructure/ db/ (2 tables, dépôts non tenant — pas encore d'api/)
         │   └── unit_of_work.py `get_medical_records_uow`
-        └── organization/   groupes, cliniques, appartenances, affectations (BACK-16)
-            ├── domain/         entités, rôles, règle d'affectation, les 3 ports
-            ├── infrastructure/ db/ (4 tables, dépôts — pas encore d'api/)
-            └── unit_of_work.py `get_organization_uow`
+        ├── notifications/  qui prévenir, par quel canal (BACK-22)
+        │   ├── domain/         préférences par événement, catalogue, résolution des canaux
+        │   ├── application/    use_cases/ (remise d'une notification)
+        │   ├── infrastructure/ db/ (1 table), clients/ (un envoyeur par canal), tasks/, memory/
+        │   └── unit_of_work.py `get_notifications_uow`
+        ├── organization/   groupes, cliniques, appartenances, affectations (BACK-16)
+        │   ├── domain/         entités, rôles, règle d'affectation, les 3 ports
+        │   ├── infrastructure/ db/ (4 tables, dépôts — pas encore d'api/)
+        │   └── unit_of_work.py `get_organization_uow`
+        └── scheduling/     fiche technique du praticien : horaires et espèces (BACK-21)
+            ├── domain/         entité, plage hebdomadaire, catalogue d'espèces, les 2 lectures
+            ├── infrastructure/ db/ (3 tables, dépôt tenant — pas encore d'api/)
+            └── unit_of_work.py `get_scheduling_uow`
 ```
 
 Le paquet s'appelle `app` alors que le projet se nomme `juui-api` : la

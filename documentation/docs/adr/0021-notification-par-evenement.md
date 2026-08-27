@@ -5,9 +5,9 @@ description: Le canal n'appartient pas à l'émetteur ; les préférences se rè
 
 # ADR-0021 — Un module émet un événement, notifications choisit le canal
 
-| Statut      | Date       | Tickets                                                           |
-| ----------- | ---------- | ----------------------------------------------------------------- |
-| **Accepté** | 2026-08-26 | BACK-22, BACK-31 (à venir), BACK-21 (à venir), FRONT-11 (à venir) |
+| Statut      | Date       | Tickets                                        |
+| ----------- | ---------- | ---------------------------------------------- |
+| **Accepté** | 2026-08-26 | BACK-22, BACK-31 (à venir), FRONT-11 (à venir) |
 
 ## Contexte
 

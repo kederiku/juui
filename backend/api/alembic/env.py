@@ -56,6 +56,7 @@ _MODEL_MODULES: Final[tuple[str, ...]] = (
     "app.modules.medical_records.infrastructure.db.models",
     "app.modules.notifications.infrastructure.db.models",
     "app.modules.organization.infrastructure.db.models",
+    "app.modules.scheduling.infrastructure.db.models",
 )
 
 for _module_name in _MODEL_MODULES:

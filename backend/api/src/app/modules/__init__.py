@@ -50,4 +50,15 @@ TECHNIQUE est donc descendu dans `shared/domain/ports/`, ou les deux
 l'atteignent sans se connaitre (ADR-0022) -- et non l'inverse, qui aurait fait
 du premier arrive une dependance du second. Ce que `notifications` garde pour
 lui est ce qui parle METIER : les evenements, les preferences, le choix du canal.
+
+`scheduling` (BACK-21) a eprouve l'AUTRE moitie de la meme regle, et sa reponse
+est le pendant exact de la precedente. Deux modules avaient besoin du meme
+VOCABULAIRE -- l'espece d'un animal chez `medical_records`, l'espece prise en
+charge par un praticien ici -- et le meme contrat leur interdisait de
+s'importer. Un vocabulaire metier ne descend PAS dans `shared/`, reserve au
+besoin technique : il se RECOPIE, et une garde de non-derive le tient
+(ADR-0026). Le precedent etait deja pose par BACK-10a, qui a recopie les trois
+types de compte d'identity plutot que d'en faire descendre l'enum. La regle a
+retenir tient en une phrase : le besoin TECHNIQUE partage descend, le
+VOCABULAIRE metier partage se duplique et se garde.
 """

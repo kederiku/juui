@@ -384,12 +384,17 @@ class SqlAlchemyRepository[EntityT: Identified, ModelT: Base](ABC):
         ligne parente les en EXCLUT, le DELETE du parent part seul et heurte la
         cle etrangere. Un flush complet emet les enfants d'abord, comme le
         `commit()` le faisait avant que ce flush existe. `add` n'a pas ce
-        probleme -- verifie : les enfants d'une insertion partent au commit,
-        apres un parent deja insere -- et garde donc sa liste.
+        probleme -- verifie a l'execution : la cascade `save-update` tire les
+        enfants d'une insertion DANS le flush restreint, le parent d'abord, si
+        bien que leurs contraintes remontent des l'ecriture qui les viole, comme
+        `add` le promet. Il garde donc sa liste.
 
-        AUCUN MODELE NE DECLARE ENCORE DE `relationship()`, ce qui rend la
-        nuance invisible aujourd'hui. Elle attend BACK-19 et BACK-20, ou les
-        documents medicaux pendront a la fiche animal.
+        LA NUANCE EST DEVENUE VISIBLE AVEC BACK-21, premier modele du depot a
+        declarer une `relationship()` : les plages horaires et les especes d'une
+        fiche technique pendent a elle en `delete-orphan`, et
+        `test_deleting_a_profile_takes_its_children_with_it` verifie que le
+        DELETE du parent ne heurte pas leur cle etrangere. BACK-19 est passe
+        avant sans en declarer aucune.
 
         Args:
             entity_id: l'identifiant de l'entite a supprimer.
