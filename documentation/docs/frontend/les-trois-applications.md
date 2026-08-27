@@ -39,9 +39,11 @@ le back-office de la seule qui soit entièrement privée.
 
    C'est ce fichier-là, et non celui du package, que `app/layout.tsx` importe.
 
-4. `<html lang="fr" suppressHydrationWarning>` et `<ThemeProvider>` autour de
-   l'arbre — sans `suppressHydrationWarning`, next-themes provoque un
-   avertissement d'hydratation à chaque rendu.
+4. `<html lang="fr" suppressHydrationWarning>`, puis `<ThemeProvider>` et
+   `<QueryProvider>` autour de l'arbre — sans `suppressHydrationWarning`,
+   next-themes provoque un avertissement d'hydratation à chaque rendu. Le
+   fournisseur de données est arrivé avec FRONT-04 :
+   [Données côté client](./donnees-cote-client.md).
 5. Une police chargée avec `next/font` et exposée en `--font-juui-sans` sur
    `<html>` : c'est la variable que lit le `--font-sans` du preset. La classe
    `font-sans` doit en outre être posée sur `<body>` — le thème définit le token,

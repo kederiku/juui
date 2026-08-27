@@ -229,8 +229,10 @@ test-back: ## Suite de tests du backend (PostgreSQL docker demarre)
 	$(MAKE) --no-print-directory -C backend/api test
 
 # Celle-ci est un VRAI appel : `pnpm -r --if-present run test` ignore en
-# silence les workspaces sans script `test`, donc tous aujourd'hui. Le jour ou
-# QA-02 en declare un, cette cible marche sans etre touchee.
+# silence les workspaces sans script `test`. FRONT-04 a ete le premier a en
+# declarer un -- packages/api-client, qui prouve hors ligne la portee de ses
+# clefs de cache -- et la cible n'a pas eu a bouger, comme annonce. QA-02
+# n'aura pas davantage a la toucher.
 test-front: ## Suites de tests des workspaces pnpm (QA-02)
 	pnpm test
 	@echo 'INFRA-06 : les workspaces sans script test ont ete ignores (--if-present).'

@@ -77,9 +77,11 @@ poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 Les trois gabarits `frontend/*/.env.local.example` ont chacun leur application
 depuis FRONT-03. Leur copie n'est pas nécessaire pour démarrer : les variables
 d'API qu'ils portent désignent le service, que lit le mutator du client généré
-(SHARED-03) mais qu'aucun écran n'appelle encore — le fournisseur de requêtes
-arrive avec FRONT-04. `frontend-individual` en porte une de plus, `SITE_URL`,
-pour son volet SEO ; les commentaires de chaque gabarit font foi.
+(SHARED-03) et qu'un premier écran appelle depuis FRONT-04 — le badge d'état de
+`frontend-professional`, qui affiche « Service injoignable » tant que la copie
+n'est pas faite. La pile conteneurisée, elle, tient ses variables du `.env` de
+la racine et n'a rien à copier. `frontend-individual` en porte une de plus,
+`SITE_URL`, pour son volet SEO ; les commentaires de chaque gabarit font foi.
 :::
 
 Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre

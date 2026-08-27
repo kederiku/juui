@@ -1,3 +1,4 @@
+import { QueryProvider } from '@repo/api-client/query-provider';
 import { ThemeProvider } from '@repo/ui/components/theme-provider';
 import { Geist, Geist_Mono } from 'next/font/google';
 
@@ -136,7 +137,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
        * classe, la page s'afficherait dans la police par defaut du navigateur.
        */}
       <body className="font-sans antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        {/*
+         * L'ORDRE N'EST PAS ARBITRAIRE, MAIS IL EST SANS EFFET : next-themes
+         * ecrit sur <html> et ne consomme rien du cache, TanStack Query ignore
+         * le theme. Le theme reste dessus parce que c'est lui qui etait la, et
+         * que le diff des trois applications se lit ainsi en deux lignes.
+         *
+         * PAS DE app/providers.tsx : `QueryProvider` porte deja `'use client'`,
+         * ce layout reste donc un composant serveur (FRONT-04).
+         */}
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

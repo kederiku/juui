@@ -68,6 +68,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [FRONT-01](./front.md#écarts-assumés-avec-le-ticket-front-01)    | L'application des professionnels                             |
 | [FRONT-02](./front.md#écarts-assumés-avec-le-ticket-front-02)    | L'application des particuliers                               |
 | [FRONT-03](./front.md#écarts-assumés-avec-le-ticket-front-03)    | Le back-office d'administration                              |
+| [FRONT-04](./front.md#écarts-assumés-avec-le-ticket-front-04)    | La couche de données TanStack Query                          |
 | [DOC-01](./doc.md#écarts-assumés-avec-le-ticket-doc-01)          | Le site de documentation Docusaurus                          |
 | [DOC-02a](./doc.md#écarts-assumés-avec-le-ticket-doc-02a)        | La section Architecture et la carte de contexte              |
 | [DOC-02b](./doc.md#écarts-assumés-avec-le-ticket-doc-02b)        | Le registre des ADR                                          |

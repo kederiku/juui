@@ -130,21 +130,43 @@ export default defineConfig({
         },
 
         query: {
-          useQuery: true,
-
-          // `useMutation` N'EST PAS ECRIT ICI, ET C'EST UNE CORRECTION.
-          // Son defaut est « vrai pour les verbes autres que GET » ; le poser
-          // explicitement a `true` le rend vrai pour TOUTES les operations, et
-          // les deux sondes GET sortaient alors en useMutation -- verifie a la
-          // premiere generation. Le defaut fait exactement ce qu'on veut.
+          // NI `useQuery` NI `useMutation` NE SONT ECRITS ICI, ET LA REVUE
+          // CONTRADICTOIRE DE FRONT-04 A CORRIGE LA MOITIE QUI L'ETAIT.
+          //
+          // Les deux defauts d'Orval sont « par verbe » : useQuery vrai pour
+          // les GET, useMutation vrai pour les autres. SHARED-03 avait bien vu
+          // qu'un `useMutation: true` global sortirait les sondes GET en
+          // mutation -- et avait ecrit `useQuery: true`, qui produit la faute
+          // SYMETRIQUE : `isQuery` devient vrai pour tous les verbes, et le
+          // generateur eteint alors la mutation (@orval/query : « if (verb !==
+          // GET && isQuery) isMutation = false »). Mesure sur un contrat de
+          // sonde portant un POST : avec `useQuery: true`, ZERO useMutation
+          // genere et le POST sort en useQuery, avec sa clef de cache -- il
+          // partirait au montage et a chaque invalidation. Sans la ligne, le
+          // POST sort en useMutation, et les GET restent des requetes.
+          //
+          // Le contrat d'aujourd'hui n'ayant que deux GET, le retrait ne change
+          // pas un octet de la sortie -- verifie par `make generate-api-check`.
+          // C'est FRONT-04 qui le corrige parce que c'est lui qui pose la
+          // politique de mutation (retry, routage des 401) : la livrer sans le
+          // hook qui la consomme aurait ete livrer du code mort.
 
           // Rien dans le contrat ne pagine par curseur : l'ADR-0017 retient une
           // pagination par offset (page / page_size), qui se sert parfaitement
           // avec useQuery. A rouvrir si une route l'exige un jour.
           useInfinite: false,
 
-          // A rouvrir par FRONT-04, qui possede le QueryClientProvider et
-          // decidera de la strategie de chargement des trois applications.
+          // TRANCHE PAR FRONT-04, QUI POSSEDE LE QueryClientProvider : NON.
+          // Suspense deplace le chargement dans un <Suspense> et l'erreur dans
+          // une frontiere d'erreur -- c'est-a-dire dans le perimetre nomme de
+          // FRONT-18a (« squelette conservant la hauteur, vide, erreur avec
+          // reessai ») et de FRONT-10 (affichage des erreurs). L'activer ici
+          // rendrait ces deux tickets impossibles a ecrire tels qu'ils le sont.
+          // Et `useSuspenseQuery` n'accepte pas `enabled`, dont une requete
+          // dependante de la clinique active (ADR-0012) aura besoin. Le
+          // rouvrir ne coutera qu'un drapeau et une regeneration, les
+          // `getXxxQueryOptions` et les clefs etant partages par les deux
+          // formes.
           useSuspenseQuery: false,
 
           // Le signal d'abandon de TanStack Query descend jusqu'au RequestInit
@@ -153,15 +175,15 @@ export default defineConfig({
           // en depend explicitement : il distingue un abandon d'une panne.
           signal: true,
 
-          // FRONT-04 batira sa fabrique de clefs sur getXxxQueryKey : sans
-          // export, l'invalidation ciblee apres une mutation redeviendrait un
-          // tableau recopie a la main.
+          // FRONT-04 a bati sa fabrique de clefs sur getXxxQueryKey
+          // (src/query-keys.ts) : sans export, l'invalidation ciblee apres une
+          // mutation redeviendrait un tableau recopie a la main.
           shouldExportQueryKey: true,
 
           // AUCUNE option de requete par defaut ici -- staleTime, retry, gcTime.
-          // La politique de cache appartient au QueryClient de FRONT-04, en un
-          // seul endroit ; l'inscrire dans le genere la figerait par operation
-          // et la rendrait invisible.
+          // La politique de cache vit en un seul endroit, le QueryClient de
+          // FRONT-04 (src/query-client.ts) ; l'inscrire dans le genere la
+          // figerait par operation et la rendrait invisible.
         },
       },
     },

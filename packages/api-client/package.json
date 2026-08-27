@@ -9,6 +9,11 @@
     "./mutator": "./src/mutator.ts",
     "./errors": "./src/errors.ts",
     "./runtime": "./src/runtime.ts",
+    "./query-keys": "./src/query-keys.ts",
+    "./query-client": "./src/query-client.ts",
+    "./query-provider": "./src/query-provider.tsx",
+    "./query-server": "./src/query-server.ts",
+    "./unauthorized": "./src/unauthorized.ts",
     "./api/*": "./src/generated/api/*/*.ts",
     "./model/*": "./src/generated/api/model/*.ts",
     "./zod/*": "./src/generated/zod/*/*.ts",
@@ -21,10 +26,12 @@
   ],
   "scripts": {
     "generate": "orval --config ./orval.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/verify-query-keys.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",
+    "@tanstack/react-query-devtools": "5.101.4",
     "zod": "4.4.3"
   },
   "peerDependencies": {

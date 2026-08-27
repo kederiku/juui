@@ -14,10 +14,17 @@
 # laisserait passer une pull request qui edite `generated/` a la main, le cas
 # que l'ADR-0007 vise en premier.
 #
-# LE JOB NE LANCE QU'UNE CIBLE make, ET C'EST DELIBERE : `make
-# generate-api-check` sur le poste fait exactement ce que fait la CI, message
-# d'echec compris. Meme regle que le `check` de backend/api/Makefile -- « un
-# echec local reproduit ainsi exactement un echec de CI ».
+# LE JOB LANCE DEUX COMMANDES, ET LES DEUX SE REJOUENT A L'IDENTIQUE SUR LE
+# POSTE : `make generate-api-check` et `pnpm --filter @repo/api-client test`.
+# Meme regle que le `check` de backend/api/Makefile -- « un echec local
+# reproduit ainsi exactement un echec de CI ».
+#
+# LA SECONDE EST ARRIVEE AVEC FRONT-04, et elle est ici plutot qu'ailleurs pour
+# une raison de `paths` : la portee des clefs de cache est la frontiere de
+# tenance cote navigateur (ADR-0027), et le seul fichier qui la porte vit dans
+# `packages/api-client/**`, que ce workflow surveille deja. Elle ne demande ni
+# pile demarree ni compilation -- c'est ce qui la rend eligible ici, la ou
+# `make verify-api-client` ne le sera jamais.
 name: Client d'API
 
 # LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, comme dans
@@ -62,7 +69,7 @@ concurrency:
 
 jobs:
   drift:
-    name: Client d'API a jour
+    name: Client d'API a jour, clefs de cache isolees
     runs-on: ubuntu-latest
 
     # PAS de `defaults.run.working-directory`, contrairement a ci-backend.yml :
@@ -133,3 +140,12 @@ jobs:
       # message d'erreur est ecrit dans le Makefile de la racine, pas ici.
       - name: Verifier que le client est a jour
         run: make generate-api-check
+
+      # APRES la verification anti-derive, et non avant : une sortie generee
+      # perimee rendrait le second echec incomprehensible. Ce programme est hors
+      # ligne -- `node` execute src/query-keys.ts sans compilation, le fichier
+      # n'ayant aucun import de valeur (FRONT-04). Sa violation ne rougirait
+      # nulle part ailleurs : elle produirait des donnees medicales d'un groupe
+      # affichees dans un autre.
+      - name: Verifier la portee des clefs de cache
+        run: pnpm --filter @repo/api-client test
