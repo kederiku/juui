@@ -70,8 +70,12 @@ inconsequence, et sa docstring deroule le raisonnement plutot que de le repeter
 ici.
 
 CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
-Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard
-SEULE. La contrainte n'est pas de style : le contrat `domain-purity` de BACK-04b
+Un port est une `ABC` ecrite en bibliotheque standard SEULE, dont les methodes
+sont asynchrones DES QU'ELLES FONT UNE ENTREE-SORTIE -- la plupart, mais pas
+toutes : `FileStorage.generate_presigned_url` est synchrone parce que signer une
+URL ne demande aucun appel reseau, et `TokenService.audience_for` parce qu'elle
+ne fait que traduire un type de compte. La contrainte n'est pas de style : le
+contrat `domain-purity` de BACK-04b
 refuse aussi les chaines INDIRECTES, donc un port ne peut pas non plus importer
 `app.core` -- qui importe pydantic. Un port ne lit donc jamais la configuration,
 et tout ce qui en depend appartient a l'adaptateur.

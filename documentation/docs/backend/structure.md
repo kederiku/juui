@@ -91,8 +91,10 @@ backend/api/
 Le paquet s'appelle `app` alors que le projet se nomme `juui-api` : la
 correspondance est déclarée par `[tool.uv.build-backend] module-name`.
 
-Le détail de ce découpage — ce que chaque espace a le droit d'importer, et
-pourquoi — est l'objet de la section [Architecture](./architecture-du-service.md).
+Ce que chaque espace a le droit d'importer, et pourquoi, est une **règle** : elle vit dans la
+section [Architecture](../architecture/ecrire-un-module-conforme.md#le-sens-des-dépendances).
+L'état des lieux de ce découpage — les trois espaces tels qu'ils sont posés — reste sur
+[Architecture du service](./architecture-du-service.md).
 
 ## `main.py`
 

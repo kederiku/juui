@@ -67,5 +67,8 @@ consigné par BACK-06a en même temps qu'il livrait l'unité de travail, est le 
 règle.
 
 Les règles opérationnelles qui découlent de ces décisions — comment structurer un module, écrire
-un cas d'usage, déclarer un agrégat tenant — seront reprises dans
-[Architecture](../architecture/index.md) (DOC-02a).
+un cas d'usage, déclarer un agrégat tenant — sont reprises dans la section
+[Architecture](../architecture/index.md), livrée par DOC-02a :
+[le guide](../architecture/ecrire-un-module-conforme.md),
+[les interdits](../architecture/anti-patterns.md) et
+[la carte de contexte](../architecture/carte-de-contexte.md).
