@@ -21,22 +21,21 @@ name: CI frontend
 # que c'est le garde-fou lui-meme. Les deux fichiers de verrouillage parce
 # qu'une montee d'eslint-plugin-import-x change la regle qui rend le verdict.
 #
-# `packages/ui/**`, `packages/api-client/**` et `packages/config-typescript/**`
-# y sont AUSSI, et ce n'est pas du zele. Ils ne peuvent pas franchir une
-# frontiere de feature -- mais le controle de conformite exige que chaque import
-# des applications SE RESOLVE, faute de quoi la regle ne verrait rien et le
-# programme annoncerait « conforme » a vide. Un export retire de `@repo/ui` ou
-# un `paths` change dans le socle TypeScript rend donc ce job rouge, ou pire,
-# muet : il doit se declencher dessus.
+# `packages/**` EN ENTIER, et ce n'est pas du zele. Aucun package ne peut
+# franchir une frontiere de feature -- mais le controle de conformite exige que
+# chaque import des applications SE RESOLVE, faute de quoi la regle ne verrait
+# rien et le programme annoncerait « conforme » a vide. Or ces imports touchent
+# de proche en proche les six packages : `@repo/ui` et `@repo/api-client` depuis
+# le code, `@repo/eslint-config` et `@repo/typescript-config` depuis les
+# configurations, `@repo/tailwind-config` depuis `postcss.config.mjs`. Nommer
+# trois d'entre eux -- ce que faisait la premiere version -- etait un pari sur ce
+# que le lint atteindrait, et le pari se reperd a chaque package ajoute.
 on:
   push:
     branches: [main]
     paths:
       - 'frontend/**'
-      - 'packages/config-eslint/**'
-      - 'packages/ui/**'
-      - 'packages/api-client/**'
-      - 'packages/config-typescript/**'
+      - 'packages/**'
       - 'eslint.config.mjs'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -45,10 +44,7 @@ on:
     branches: [main]
     paths:
       - 'frontend/**'
-      - 'packages/config-eslint/**'
-      - 'packages/ui/**'
-      - 'packages/api-client/**'
-      - 'packages/config-typescript/**'
+      - 'packages/**'
       - 'eslint.config.mjs'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -95,21 +91,31 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
 
-      # LES TROIS APPLICATIONS, ET PAS SEULEMENT LE PACKAGE DE CONFIGURATION.
-      # Le programme de verification n'analyse pas une maquette : il analyse les
-      # fichiers reels des trois applications avec la configuration qu'elles
-      # chargent. Il lui faut donc leurs `eslint.config.mjs` resolvables, et les
-      # packages qu'elles importent -- sans @repo/ui ni @repo/api-client, chaque
-      # import remonterait en « irresolu » et le programme echouerait a bon
-      # droit. Le `...` de pnpm tire ces dependances de workspace ; seul
-      # `documentation` reste dehors.
+      # AUCUN FILTRE, ET C'EST UNE CORRECTION PAYEE COMPTANT.
+      #
+      # La premiere version installait `@repo/eslint-config...` et les trois
+      # applications avec leurs dependances. Le job est tombe des la premiere
+      # execution : `Scope: 8 of 11 workspace projects`, et vingt et une erreurs
+      # « Resolve error: File '@repo/typescript-config/base.json' not found ».
+      # Le programme analyse le depot REEL avec la configuration REELLE -- les
+      # `eslint.config.mjs` et `postcss.config.mjs` des applications compris,
+      # que la troisieme famille de zones vise aussi. Resoudre leurs imports
+      # demande de proche en proche le socle TypeScript, que le filtre laissait
+      # dehors.
+      #
+      # Filtrer, c'est donc PARIER sur ce que le lint atteindra -- et le pari se
+      # reperd a chaque package ajoute. L'installation complete ne se discute
+      # pas : c'est ce que fait un clone. Le seul cout est `documentation`, une
+      # trentaine de secondes, mises en cache par `setup-node` des la deuxieme
+      # execution.
+      #
+      # A NOTER : l'echec a ete PROPRE. Les vingt et une erreurs etaient des
+      # `no-unresolved`, que le programme refuse explicitement -- il a repere
+      # qu'il ne pouvait rien certifier plutot que d'annoncer « conforme » sur un
+      # depot qu'il n'avait pas su analyser. C'est exactement ce que ce refus
+      # existe pour attraper.
       - name: Installer les dependances Node
-        run: >
-          pnpm install --frozen-lockfile
-          --filter @repo/eslint-config...
-          --filter frontend-admin...
-          --filter frontend-individual...
-          --filter frontend-professional...
+        run: pnpm install --frozen-lockfile
 
       # UNE SEULE COMMANDE, rejouable a l'identique sur le poste -- meme regle
       # que le `make generate-api-check` d'api-client.yml. Le message d'echec
