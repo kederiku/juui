@@ -5,7 +5,7 @@ structure aux suivants -- `organization` (BACK-16), `medical_records` (BACK-19),
 `scheduling` (BACK-21), `notifications` (BACK-22), `profile` (BACK-32).
 
 Son perimetre est l'IDENTITE et l'AUTHENTIFICATION : le compte, son adresse, son
-type, son statut, et plus tard le mot de passe (BACK-10b), l'OTP (BACK-17), la
+type, son statut, et plus tard le mot de passe (BACK-28), l'OTP (BACK-17), la
 double authentification (BACK-18) et les sessions (BACK-29). La question « dans
 quelle structure ce compte travaille-t-il » appartient a `organization`.
 

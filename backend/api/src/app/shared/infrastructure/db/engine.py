@@ -86,7 +86,7 @@ def build_engine(settings: Settings) -> AsyncEngine:
         # Double garde sur la journalisation SQL : meme si `POSTGRES_ECHO` est
         # laisse a `true` par megarde dans un environnement de production, les
         # parametres lies -- adresses, puis empreintes de mot de passe
-        # (BACK-10b) et secret TOTP (BACK-18) -- n'y partiront pas en clair.
+        # (BACK-28) et secret TOTP (BACK-18) -- n'y partiront pas en clair.
         echo=settings.db.echo and not settings.app.is_production,
         connect_args={
             "timeout": _CONNECT_TIMEOUT_SECONDS,

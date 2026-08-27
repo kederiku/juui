@@ -5,7 +5,8 @@ modele de persistance -- sur un exemple qui ecrit reellement. C'est le sens que
 demande le critere d'acceptation du ticket.
 
 CE QUE CE CAS D'USAGE NE FAIT PAS, ET POURQUOI
-Il ne hache aucun mot de passe (BACK-10b), n'envoie aucun code de verification
+Il ne hache aucun mot de passe (BACK-28 -- la brique existe depuis BACK-10b,
+c'est le CHAMP du compte qui manque), n'envoie aucun code de verification
 (BACK-17) et n'applique PAS la regle de non-divulgation du parcours
 d'inscription (BACK-09, BACK-28) -- il leve `EmailAlreadyUsedError` en clair,
 ce qui convient a une creation administrative mais ferait du formulaire

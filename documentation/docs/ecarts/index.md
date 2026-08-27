@@ -51,6 +51,7 @@ même PR. Un ticket sans écart n'apparaît pas.
 | [BACK-08](./back.md#écarts-assumés-avec-le-ticket-back-08)       | La sonde de santé et les métadonnées OpenAPI                 |
 | [BACK-09](./back.md#écarts-assumés-avec-le-ticket-back-09)       | La traduction des erreurs métier en HTTP                     |
 | [BACK-10a](./back.md#écarts-assumés-avec-le-ticket-back-10a)     | Le port des jetons et son adaptateur PyJWT                   |
+| [BACK-10b](./back.md#écarts-assumés-avec-le-ticket-back-10b)     | Le hachage des mots de passe et la politique de sécurité     |
 | [BACK-11](./back.md#écarts-assumés-avec-le-ticket-back-11)       | Le CORS, les journaux structurés et l'identifiant de requête |
 | [BACK-13](./back.md#écarts-assumés-avec-le-ticket-back-13)       | Le port de stockage objet                                    |
 | [BACK-14](./back.md#écarts-assumés-avec-le-ticket-back-14)       | Le port de cache Redis                                       |

@@ -1,16 +1,18 @@
-"""Port du controle de fuite de mot de passe (port pose par BACK-06c, adaptateur en BACK-10b).
+"""Port du controle de fuite de mot de passe (pose par BACK-06c, adaptateur en BACK-10b).
 
 Le contrat, jamais son adaptateur : ce module ne connait ni Have I Been Pwned, ni
 le SHA-1, ni la k-anonymity, ni le reseau. Il dit ce que le domaine a besoin de
 savoir -- « ce mot de passe est-il connu des fuites publiques ? » -- et laisse a
 `shared/infrastructure/clients/` le soin d'aller le demander a quelqu'un.
 
-POURQUOI CE PORT NAIT ICI, AVANT SON ADAPTATEUR
-BACK-10b porte la politique de mot de passe et l'adaptateur HIBP ; ce ticket-ci
-ne livre que ce sans quoi `FakeBreachChecker` ne pourrait pas exister -- une
-doublure repond a un port, elle n'en invente pas un. Ce qui reste entier a
-BACK-10b : l'appel en k-anonymity (seuls les cinq premiers caracteres du SHA-1
-partent), le hachage argon2id, l'objet-valeur `Password` et ses bornes.
+POURQUOI CE PORT EST NE ICI, AVANT SON ADAPTATEUR
+BACK-06c ne livrait que ce sans quoi `FakeBreachChecker` ne pouvait pas exister
+-- une doublure repond a un port, elle n'en invente pas un. Le reste est arrive
+avec BACK-10b : `shared/infrastructure/clients/hibp.py` porte l'appel en
+k-anonymity (seuls les cinq premiers caracteres du SHA-1 partent) et
+`shared/domain/password.py` porte l'objet-valeur `Password`, ses bornes et le
+seul chemin par lequel on l'obtient -- une fabrique qui EXIGE ce port en
+argument, pour qu'aucun parcours ne puisse oublier le controle.
 
 CE QU'IL FAIT DEVANT UNE PANNE : IL DEGRADE
 Troisieme comportement du quatuor, et le plus contre-intuitif. `FileStorage` et

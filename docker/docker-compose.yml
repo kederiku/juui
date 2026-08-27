@@ -181,6 +181,15 @@ x-app-environment: &app-environment
   JWT_AUDIENCE_INDIVIDUAL: ${JWT_AUDIENCE_INDIVIDUAL:-juui-particulier}
   JWT_AUDIENCE_ADMIN: ${JWT_AUDIENCE_ADMIN:-juui-admin}
 
+  # Cout du hachage des mots de passe et controle de fuite (BACK-10b). Forme
+  # `${VAR:-defaut}` pour la meme raison que les audiences ci-dessus : un .env
+  # anterieur a ce ticket -- il en existe -- transmettrait une chaine vide, que
+  # pydantic refuserait, et la pile ne demarrerait plus apres un simple `git pull`.
+  PASSWORD_ARGON2_TIME_COST: ${PASSWORD_ARGON2_TIME_COST:-2}
+  PASSWORD_ARGON2_MEMORY_COST_KIB: ${PASSWORD_ARGON2_MEMORY_COST_KIB:-19456}
+  HIBP_API_URL: ${HIBP_API_URL:-https://api.pwnedpasswords.com}
+  HIBP_TIMEOUT_SECONDS: ${HIBP_TIMEOUT_SECONDS:-2}
+
   # --- Courriel sortant (INFRA-07, lu depuis BACK-17) ---
   # Le service `mailpit` existe depuis INFRA-07 ; ces six variables attendaient
   # qu'une ligne de code les lise, ce que fait desormais l'adaptateur SMTP

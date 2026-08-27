@@ -52,7 +52,7 @@ avant d'en arriver là.
 
 **`POSTGRES_ECHO` est un champ à soi, et non une déduction de `LOG_LEVEL`.** `echo` journalise
 les paramètres liés : les adresses e-mail aujourd'hui, les empreintes de mot de passe à
-partir de BACK-10b, le secret TOTP à partir de BACK-18. Passer `LOG_LEVEL=DEBUG` pour suivre
+partir de BACK-28, le secret TOTP à partir de BACK-18. Passer `LOG_LEVEL=DEBUG` pour suivre
 un problème de routage ne doit pas les déverser dans la chaîne de journalisation par effet de
 bord. Le moteur l'ignore de toute façon quand `ENVIRONMENT` vaut `production`.
 

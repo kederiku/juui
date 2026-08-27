@@ -12,27 +12,30 @@ BACK-04 interdit.
 
 CE QUE CHAQUE TICKET APPORTE ICI
 
-| Fichier             | Port                                | Ticket   |
-| ------------------- | ----------------------------------- | -------- |
-| `breach_checker.py` | `BreachChecker`                     | BACK-06c |
-| `cache.py`          | `Cache`                             | BACK-14  |
-| `email.py`          | `EmailTransport`                    | BACK-22  |
-| `file_storage.py`   | `FileStorage`                       | BACK-13  |
-| `token_service.py`  | `TokenService`                      | BACK-10a |
-| `unit_of_work.py`   | `AbstractUnitOfWork`                | BACK-06a |
-| `repository.py`     | `Repository` (protocole generique)  | BACK-06a |
+| Fichier              | Port                                | Ticket   |
+| -------------------- | ----------------------------------- | -------- |
+| `breach_checker.py`  | `BreachChecker`                     | BACK-06c |
+| `cache.py`           | `Cache`                             | BACK-14  |
+| `email.py`           | `EmailTransport`                    | BACK-22  |
+| `file_storage.py`    | `FileStorage`                       | BACK-13  |
+| `password_hasher.py` | `PasswordHasher`                    | BACK-10b |
+| `token_service.py`   | `TokenService`                      | BACK-10a |
+| `unit_of_work.py`    | `AbstractUnitOfWork`                | BACK-06a |
+| `repository.py`      | `Repository` (protocole generique)  | BACK-06a |
 
 BACK-04 a pose la place et le sens, chaque ticket apporte son contrat. Les sept
-sont livres -- `cache.py` par BACK-14, `email.py` par BACK-22, `file_storage.py`
-par BACK-13, `unit_of_work.py` et `repository.py` par BACK-06a, `breach_checker.py`
-par BACK-06c, `token_service.py` par BACK-10a. Le paquet n'a plus de place
-reservee ; le prochain port naitra d'un besoin, et non d'un emplacement.
+que BACK-04 avait prevus sont livres ; `password_hasher.py` est le HUITIEME, et
+il est ne exactement comme la phrase ci-dessous l'annoncait -- d'un besoin, et
+non d'un emplacement reserve. Ce besoin est celui de BACK-10b : hacher un mot de
+passe sans qu'`argon2` entre dans le domaine, et nommer d'un seul endroit ce qui
+se passe quand une empreinte est illisible.
 
-`breach_checker.py` EST LE SECOND CAS LIMITE. Son adaptateur appartient a
-BACK-10b, qui n'est pas livre : le port nait quand meme, parce qu'une doublure
-repond a un contrat et n'en invente pas un -- `FakeBreachChecker` (BACK-06c)
-n'aurait eu personne a qui repondre. Ecrire un port sans son adaptateur reste
-l'exception, pas la regle : ici c'est un ticket ANTERIEUR qui en avait besoin.
+`breach_checker.py` ETAIT LE SECOND CAS LIMITE, ET IL A CESSE DE L'ETRE. Son
+adaptateur est livre par BACK-10b, comme annonce. Ce qui reste vrai est la regle
+que ce cas avait servi a poser : ecrire un port sans son adaptateur est
+l'exception, et elle se justifie par un ticket ANTERIEUR qui en a besoin -- ici,
+la doublure `FakeBreachChecker` de BACK-06c, qui repond a un contrat et n'en
+invente pas un.
 
 `email.py` EST LE CAS LIMITE QUI VALIDE LA REGLE. Le transport de courriel
 appartenait a `notifications` par sa carte, et il est ici parce qu'`identity`
@@ -56,10 +59,15 @@ muet coute plus cher que le risque couvert. Un port ne se contente
 donc pas de nommer des operations : il dit ce qui se passe quand le service
 qu'il masque ne repond plus, et cette reponse ne s'herite pas du port
 precedent -- deux ports qui degradent peuvent le faire pour des raisons sans
-rapport. `TokenService` LEVE ET N'EMET RIEN, ce qui est la reponse la plus
+rapport. `TokenService` LEVE ET N'EMET RIEN, ce qui etait la reponse la plus
 severe des sept, et pour le motif le plus simple : un jeton emis sans que
 l'appartenance ait pu etre verifiee est une elevation de privilege qui vivra
 jusqu'a son expiration, sans que personne apprenne qu'elle a eu lieu.
+`PasswordHasher` LEVE lui aussi, et il donne au passage la meilleure
+illustration de la regle : livre par le MEME ticket que `breach_checker.py`, dans
+le meme parcours, il repond a l'inverse de son voisin. Ce n'est pas une
+inconsequence, et sa docstring deroule le raisonnement plutot que de le repeter
+ici.
 
 CE QUE `cache.py` A ETABLI, ET QUE LES SUIVANTS REPRENDRONT
 Un port est une `ABC` aux methodes asynchrones, ecrit en bibliotheque standard

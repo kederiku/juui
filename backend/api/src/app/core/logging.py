@@ -529,10 +529,24 @@ _UVICORN_LOGGERS: Final[tuple[str, ...]] = ("uvicorn", "uvicorn.error", "uvicorn
 # y toucher interfererait avec `POSTGRES_ECHO`, dont BACK-03 a fait un champ a
 # part precisement pour qu'il ne depende pas de `LOG_LEVEL`. `taskiq` non plus :
 # ses lignes de demarrage de worker sont utiles.
+#
+# `httpx` ET `httpcore` NE SONT PAS LA POUR LEUR BAVARDAGE, MAIS POUR UNE FUITE.
+# Ajoutes par BACK-10b, qui livre le premier client HTTP sortant du service.
+# `httpx` journalise a INFO une ligne « HTTP Request: GET <URL complete> » --
+# donc, pour le controle de fuite de mot de passe, LE PREFIXE D'EMPREINTE que la
+# k-anonymity existe pour ne pas laisser trainer. Cinq caracteres de SHA-1 dans
+# un journal, croises avec le corpus public, reduisent le mot de passe d'un
+# utilisateur a un millionieme de ce corpus. L'adaptateur peut bien ne rien
+# journaliser lui-meme : sans cette ligne, sa bibliotheque le fait pour lui.
+#
+# Le defaut a ete constate en executant la suite de tests, pas suppose. Passer
+# `LOG_LEVEL=DEBUG` ne le rouvre pas : ces planchers sont ABSOLUS.
 _NOISY_FLOORS: Final[Mapping[str, int]] = {
     "asyncio": logging.WARNING,
     "boto3": logging.WARNING,
     "botocore": logging.WARNING,
+    "httpcore": logging.WARNING,
+    "httpx": logging.WARNING,
     "s3transfer": logging.WARNING,
     "urllib3": logging.WARNING,
     "watchfiles": logging.WARNING,

@@ -2,7 +2,7 @@
 
 Tout ce que l'API lit de son environnement passe par ici, et par nulle part
 ailleurs : aucun `os.getenv` n'a sa place dans le reste du code. Le module expose
-un objet unique, `Settings`, compose de sept sous-modeles thematiques, et la
+un objet unique, `Settings`, compose de neuf sous-modeles thematiques, et la
 fonction `get_settings()` qui le construit une fois pour toutes.
 
 DEUX SOURCES, DEUX COMPORTEMENTS
@@ -84,15 +84,15 @@ class ConfigurationError(RuntimeError):
 
 
 class _SettingsSection(BaseSettings):
-    """Socle commun aux sept sous-modeles thematiques.
+    """Socle commun aux neuf sous-modeles thematiques.
 
     Les trois reglages qui comptent :
 
-    - `env_file` : les sept classes lisent le MEME fichier, chacune n'y prenant
+    - `env_file` : les neuf classes lisent le MEME fichier, chacune n'y prenant
       que son prefixe.
     - `dotenv_filtering="only_existing"` : sans lui, `DatabaseSettings` verrait
       `REDIS_HOST` comme une cle surnumeraire et refuserait de se construire --
-      la cohabitation de sept sous-modeles dans un seul fichier tient a cette
+      la cohabitation de neuf sous-modeles dans un seul fichier tient a cette
       ligne.
     - `extra="forbid"` : le defaut de pydantic-settings, conserve. Il ne porte
       plus sur le fichier (voir ci-dessus) mais toujours sur les arguments passes
@@ -112,7 +112,7 @@ class _SettingsSection(BaseSettings):
 class AppSettings(_SettingsSection):
     """Reglages generaux de l'application. Sans prefixe (BACK-03, BACK-11)."""
 
-    # Prefixe vide EXPLICITE, alors que c'est deja le defaut : les sept
+    # Prefixe vide EXPLICITE, alors que c'est deja le defaut : les neuf
     # sous-modeles annoncent ainsi tous leur prefixe au meme endroit, et
     # `ENVIRONMENT` ou `LOG_LEVEL` se lisent pour ce qu'ils sont -- des variables
     # nues, et non un oubli.
@@ -186,7 +186,7 @@ class DatabaseSettings(_SettingsSection):
     #
     # Un champ a soi, et non une deduction de `LOG_LEVEL` : ces parametres
     # portent les adresses e-mail aujourd'hui, les empreintes de mot de passe a
-    # partir de BACK-10b et le secret TOTP a partir de BACK-18. Passer
+    # partir de BACK-28 et le secret TOTP a partir de BACK-18. Passer
     # `LOG_LEVEL=DEBUG` pour suivre un probleme de routage ne doit pas les
     # deverser dans la chaine de journalisation par effet de bord.
     echo: bool = False
@@ -511,6 +511,112 @@ class SmtpSettings(_SettingsSection):
         return bool(self.user)
 
 
+class PasswordSettings(_SettingsSection):
+    """Cout du hachage des mots de passe. Prefixe `PASSWORD_` (BACK-10b).
+
+    POURQUOI CES DEUX-LA SONT DES REGLAGES, ALORS QUE LES DELAIS N'EN SONT PAS
+    Le depot pose ailleurs que les delais sont des constantes de module -- « chaque
+    variable de configuration coute deux gabarits, une ligne de compose et une
+    ligne de documentation ». Le cout d'un hachage echappe a la regle pour une
+    raison propre : c'est la SEULE valeur du service dont la bonne valeur depend du
+    materiel qui l'execute, et elle est destinee a MONTER avec lui. Sans reglage,
+    la remise a niveau au login (BACK-10b, consommee par BACK-29) n'aurait aucun
+    declencheur autre qu'une livraison de code.
+
+    LES PLANCHERS NE SONT PAS DECORATIFS. `ge=` interdit de descendre sous la
+    configuration recommandee par l'OWASP. C'est ce qui borne une manoeuvre qu'on
+    ne voit pas venir : abaisser le cout depuis l'environnement, sur un service qui
+    REHACHE automatiquement au login, ne produit pas seulement des empreintes
+    neuves faibles -- cela degrade activement toutes les anciennes, compte par
+    compte, a mesure que leurs proprietaires se connectent.
+
+    LE PLAFOND NON PLUS. Sans `le=`, un `PASSWORD_ARGON2_MEMORY_COST_KIB` a quatre
+    gibioctets laisse le service DEMARRER et fait echouer chaque hachage -- la
+    classe de defaut que `JWTSettings` documente longuement plus haut, et qu'on
+    refuse ici au demarrage plutot qu'a la premiere inscription.
+
+    LE PARALLELISME N'EST PAS ICI, ET C'EST VOULU. Les cinq configurations de
+    l'OWASP le fixent a 1, et argon2-cffi ne parallelise pas reellement ses voies :
+    un `p` eleve decouperait la meme memoire en tranches calculees a la suite, sans
+    rien acheter au defenseur et en offrant une structure a l'attaquant. La valeur
+    vit donc en constante de module dans l'adaptateur, aupres du code qui s'en sert.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="PASSWORD_")
+
+    # Nombre de passes. 2 est la configuration OWASP retenue, mesuree a ~17 ms sur
+    # un poste de developpement -- assez pour qu'un attaquant paie, assez peu pour
+    # qu'une connexion ne se sente pas.
+    argon2_time_cost: int = Field(default=2, ge=2, le=10)
+
+    # Memoire par hachage, en kibioctets. 19456 KiB = 19 MiB, la configuration
+    # recommandee par l'OWASP a `t=2, p=1`.
+    #
+    # LE CHIFFRE A GARDER EN TETE N'EST PAS LA MILLISECONDE, C'EST LE MEBIOCTET.
+    # `asyncio.to_thread` sert le calcul depuis un vivier plafonne a
+    # `min(32, nb_coeurs + 4)` fils : le pic memoire du service vaut ce plafond
+    # multiplie par cette valeur. Dix-huit fils a 19 MiB font 342 MiB, ce qui tient.
+    # Les memes a 64 MiB en feraient 1,1 Gio, sur un point d'entree que personne
+    # n'a encore eu besoin d'authentifier.
+    argon2_memory_cost_kib: int = Field(default=19456, ge=19456, le=1_048_576)
+
+
+class HibpSettings(_SettingsSection):
+    """Controle de fuite de mot de passe. Prefixe `HIBP_` (BACK-10b).
+
+    Deux reglages, recenses et attribues nommement a ce ticket par SETUP-08 --
+    meme precedent que les trois audiences de BACK-10a, et meme reponse : ce n'est
+    pas une extension de portee.
+
+    LE DELAI DEROGE A LA CONVENTION DES CONSTANTES, ET VOICI POURQUOI. Les delais
+    de PostgreSQL, de Redis et de S3 sont des constantes parce que le deploiement
+    controle ces services. Have I Been Pwned est un tiers sur l'internet public :
+    la latence depend du chemin de sortie de l'exploitant, qui n'a aucun autre
+    levier. La borne haute, elle, preserve la promesse du ticket -- un delai court,
+    parce qu'une inscription ne doit pas pendre.
+
+    IL N'Y A PAS DE `HIBP_ENABLED`, ET IL NE FAUT PAS EN AJOUTER UN. Un interrupteur
+    qui desactive un controle de securite depuis l'environnement finit pose en
+    production le jour d'un incident, et n'en repart jamais. Hors ligne, le port
+    degrade deja tout seul : on paie le delai, on obtient l'avertissement, et
+    l'inscription passe.
+    """
+
+    model_config = SettingsConfigDict(env_prefix="HIBP_")
+
+    # Racine du service, sans le segment `/range/{prefixe}` que l'adaptateur ajoute.
+    #
+    # Reglable pour la meme raison que `S3_ENDPOINT_URL` : pouvoir pointer ailleurs
+    # sans toucher au code, et pouvoir faire tourner la pile sans sortie reseau. Le
+    # validateur refuse tout ce qui n'est pas `https` -- le prefixe d'empreinte est
+    # public par construction, mais l'ADRESSE qui l'accompagne ne l'est pas, et un
+    # observateur du reseau apprendrait qui s'inscrit chez nous et quand.
+    api_url: str = Field(default="https://api.pwnedpasswords.com", min_length=1)
+
+    # Delai TOTAL consenti a l'appel, en secondes. L'adaptateur l'applique par une
+    # enveloppe `asyncio.timeout`, et pas seulement par le delai d'httpx : celui-ci
+    # borne CHAQUE phase et se rearme a chaque fragment recu, si bien qu'un serveur
+    # lent tient la requete ouverte aussi longtemps qu'il envoie un octet de temps
+    # en temps. Mesure : 30 s pour un delai annonce a 2 s.
+    #
+    # `gt=0` n'est pas de la coquetterie : `httpx` accepte un delai nul, et
+    # `HIBP_TIMEOUT_SECONDS=0` desactiverait le controle EN SILENCE, chaque appel
+    # expirant avant de partir. Meme geste que le `gt=0` de `REDIS_CACHE_TTL`.
+    timeout_seconds: float = Field(default=2.0, gt=0, le=10)
+
+    @field_validator("api_url")
+    @classmethod
+    def _require_https(cls, value: str) -> str:
+        """Refuse une adresse qui ne serait pas en https."""
+        if not value.startswith("https://"):
+            message = (
+                "HIBP_API_URL doit commencer par « https:// » : le prefixe "
+                "d'empreinte ne voyage pas en clair."
+            )
+            raise ValueError(message)
+        return value.rstrip("/")
+
+
 # Ordre d'affichage dans les messages d'erreur, et source unique du jeu de cles
 # admises dans le fichier .env.
 _SETTINGS_SECTIONS: tuple[type[BaseSettings], ...] = (
@@ -521,6 +627,8 @@ _SETTINGS_SECTIONS: tuple[type[BaseSettings], ...] = (
     JWTSettings,
     OtpSettings,
     SmtpSettings,
+    PasswordSettings,
+    HibpSettings,
 )
 
 
@@ -571,7 +679,7 @@ class _OrphanKeyDotEnvSource(DotEnvSettingsSource):
     La source dotenv de pydantic-settings verse dans le dictionnaire de
     validation toute cle du fichier qui ne correspond a aucun champ de la classe
     -- charge a l'`extra` du modele de l'accepter ou non. Sur `Settings`, qui ne
-    declare que sept sous-modeles, cela reviendrait a refuser le fichier entier.
+    declare que neuf sous-modeles, cela reviendrait a refuser le fichier entier.
     On retire donc d'abord les cles qu'un sous-modele revendique ; ce qui reste
     n'appartient a personne et tombe sur `extra="forbid"`, avec le nom de la cle
     fautive dans l'erreur.
@@ -594,7 +702,7 @@ class _OrphanKeyDotEnvSource(DotEnvSettingsSource):
 
 
 class Settings(BaseSettings):
-    """Configuration complete du service, assemblee a partir des sept sous-modeles.
+    """Configuration complete du service, assemblee a partir des neuf sous-modeles.
 
     S'obtient par `get_settings()` -- ne pas instancier directement en dehors des
     tests, sous peine de relire l'environnement a chaque appel.
@@ -621,6 +729,8 @@ class Settings(BaseSettings):
     jwt: JWTSettings = Field(default_factory=JWTSettings)
     otp: OtpSettings = Field(default_factory=OtpSettings)
     smtp: SmtpSettings = Field(default_factory=SmtpSettings)
+    password: PasswordSettings = Field(default_factory=PasswordSettings)
+    hibp: HibpSettings = Field(default_factory=HibpSettings)
 
     @classmethod
     def settings_customise_sources(
@@ -724,7 +834,7 @@ def _explicit_message(error: ValidationError) -> str:
     """
     # `Settings` s'arrete a la PREMIERE fabrique de sous-modele en defaut : une
     # configuration vide ne signalerait que PostgreSQL, puis JWT au lancement
-    # suivant, et ainsi de suite. On reinterroge donc les sept sous-modeles pour
+    # suivant, et ainsi de suite. On reinterroge donc les neuf sous-modeles pour
     # tout dire d'un coup. S'ils sont tous sains, la faute est a la racine -- une
     # cle orpheline dans le fichier .env -- et l'erreur d'origine fait foi.
     faults: dict[str, str] = {}

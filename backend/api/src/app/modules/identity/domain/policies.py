@@ -20,10 +20,19 @@ un mot de passe » -- que TOUTE implementation du magasin doit tenir, la doublur
 en memoire des tests comprise. Elles ne dependent que de la bibliotheque
 standard, ce qu'exige le contrat `domain-purity`.
 
+OU EST PASSEE LA POLITIQUE DE MOT DE PASSE, ANNONCEE ICI PAR BACK-04
+Elle est dans `app/shared/domain/password.py`, livree par BACK-10b, et le
+deplacement est un ECART assume plutot qu'un oubli. Le motif est mecanique : le
+port `PasswordHasher` vit dans `shared/` et TYPE son argument -- `hash(password:
+Password)` --, ce qui est la garantie qu'on ne hache jamais un secret dont la
+politique n'a pas ete appliquee. Le contrat `service-spaces` interdisant a
+`app.shared` d'importer un module, un `Password` range ici aurait oblige le port
+a prendre un `str`, et la garantie aurait disparu avec le type. Le registre des
+ecarts porte le raisonnement complet, ADR-0022 comprise.
+
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-La politique de mot de passe et la verification HIBP arrivent en BACK-10b sous
-la forme d'un objet-valeur `Password` ; les regles de canal d'inscription
-(« seuls les comptes particuliers s'inscrivent seuls ») viennent avec BACK-28.
+Les regles de canal d'inscription (« seuls les comptes particuliers s'inscrivent
+seuls ») viennent avec BACK-28.
 """
 
 import hmac

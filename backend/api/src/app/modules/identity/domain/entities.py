@@ -18,7 +18,7 @@ veterinaire remplacant intervient dans plusieurs groupes avec un seul compte, et
 un champ immuable sur le compte l'aurait interdit des le premier jour.
 
 CE QUE LES TICKETS SUIVANTS AJOUTERONT ICI
-Le mot de passe hache, sous forme d'objet-valeur (BACK-10b) ; l'etat de la
+Le mot de passe hache, sous forme d'objet-valeur (BACK-28) ; l'etat de la
 double authentification (BACK-18). L'etat de verification est deja la : BACK-17
 le fera evoluer par OTP.
 """

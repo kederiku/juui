@@ -42,6 +42,7 @@ from contextvars import ContextVar
 from typing import Final, cast
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 import pytest_asyncio
 from sqlalchemy import URL, make_url
@@ -272,3 +273,73 @@ def _ensure_pristine_logging() -> Iterator[None]:
         "Le test a laisse une configuration de journalisation derriere lui : "
         "envelopper l'appel a `configure_logging` dans `isolated_logging()`."
     )
+
+
+# Hotes que la suite a le droit de joindre : ceux de la pile de developpement.
+# Mailpit (BACK-17) y repond, et ses tests se sautent d'eux-memes quand la boite
+# est arretee. Tout le reste est un TIERS, et un tiers ne se joint pas depuis une
+# suite de tests.
+_LOCAL_HOSTS: Final = frozenset({"localhost", "127.0.0.1", "::1", "mailpit"})
+
+# Message de refus du garde-fou reseau. Il nomme le remede, pas seulement la
+# faute -- un test qui sort sur le reseau le fait presque toujours en oubliant
+# d'injecter un transport. Il ne porte que l'HOTE : le chemin d'un appel a Have I
+# Been Pwned contient un prefixe d'empreinte, qui n'a rien a faire dans une sortie
+# de test plus que dans un journal.
+_NO_NETWORK = (
+    "Un test a tente de joindre l'hote tiers {host} par httpx. Passer "
+    "`transport=httpx.MockTransport(...)` a l'adaptateur, ou sa doublure en memoire."
+)
+
+
+@pytest.fixture(autouse=True)
+def _forbid_outbound_http(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refuse toute requete HTTPX vers un hote tiers, dans toute la suite (BACK-10b).
+
+    CE QU'IL GARANTIT, EXACTEMENT : aucune requete passant par `httpx` ne joint un
+    hote absent de `_LOCAL_HOSTS`. Ni plus, ni moins -- `smtplib`, `socket` et
+    `urllib` ne sont pas gardes, et la pile locale reste joignable. Le dire
+    precisement importe : un garde-fou dont on croit qu'il ferme tout est un
+    garde-fou sur lequel on se repose a tort.
+
+    Le critere du ticket -- « aucun test n'appelle le vrai service de fuites » --
+    ne tenait que par une convention : passer un transport de doublure. Une
+    convention se tient jusqu'au jour ou quelqu'un appelle la fabrique de
+    production depuis un test de configuration, et la suite se met a envoyer des
+    prefixes d'empreintes de mots de passe a un tiers, depuis la CI, sans que rien
+    ne le signale. Ceci le rend MECANIQUE.
+
+    LE TRANSPORT ASGI N'EST PAS TOUCHE, et c'est tout l'interet de mordre sur le
+    transport plutot que sur `AsyncClient` : `httpx.ASGITransport` sert le trafic
+    ENTRANT des tests d'API (BACK-09, BACK-11, BACK-24) et n'ouvre aucune socket.
+    Seuls les deux transports qui en ouvrent une sont gardes -- l'asynchrone et le
+    synchrone.
+
+    LA PILE LOCALE RESTE JOIGNABLE. Interdire `localhost` ferait echouer les tests
+    de remise de courriel (BACK-17) au lieu de les faire se sauter, et rendrait ce
+    garde-fou insupportable donc contourne. Ce qu'on refuse, ce n'est pas le
+    reseau : c'est le TIERS.
+
+    Cout mesure : 0,27 microseconde par test, soit 0,2 ms sur la suite entiere.
+    """
+    original_async = httpx.AsyncHTTPTransport.handle_async_request
+    original_sync = httpx.HTTPTransport.handle_request
+
+    def _refuse(request: httpx.Request) -> None:
+        if request.url.host not in _LOCAL_HOSTS:
+            raise RuntimeError(_NO_NETWORK.format(host=request.url.host))
+
+    @functools.wraps(original_async)
+    async def guarded_async(
+        self: httpx.AsyncHTTPTransport, request: httpx.Request
+    ) -> httpx.Response:
+        _refuse(request)
+        return await original_async(self, request)
+
+    @functools.wraps(original_sync)
+    def guarded_sync(self: httpx.HTTPTransport, request: httpx.Request) -> httpx.Response:
+        _refuse(request)
+        return original_sync(self, request)
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", guarded_async)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", guarded_sync)
