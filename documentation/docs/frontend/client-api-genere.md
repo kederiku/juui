@@ -12,14 +12,16 @@ de vérité ; Orval en dérive le reste ([ADR-0007](../adr/0007-client-api-gener
 Comme `@repo/ui`, le package n'est **jamais compilé** : il s'exporte en source TypeScript, et chaque
 application le transpile.
 
-| Chemin            | Contenu                                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------------------- |
-| `openapi.json`    | Le contrat exporté depuis FastAPI, versionné ([ADR-0019](../adr/0019-contrat-openapi-exporte.md)). |
-| `orval.config.ts` | Les deux sorties du générateur — les hooks, puis les schémas Zod.                                  |
-| `src/mutator.ts`  | L'unique porte de sortie HTTP : base URL, en-têtes, erreurs.                                       |
-| `src/errors.ts`   | `ApiError` et la normalisation du format d'erreur unique.                                          |
-| `src/runtime.ts`  | L'adresse de l'API et le point d'injection de l'identité.                                          |
-| `src/generated/`  | La sortie d'Orval. **Jamais éditée.**                                                              |
+| Chemin                | Contenu                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `openapi.json`        | Le contrat exporté depuis FastAPI, versionné ([ADR-0019](../adr/0019-contrat-openapi-exporte.md)).                |
+| `orval.config.ts`     | Les deux sorties du générateur — les hooks, puis les schémas Zod.                                                 |
+| `src/mutator.ts`      | L'unique porte de sortie HTTP : base URL, en-têtes, erreurs.                                                      |
+| `src/errors.ts`       | `ApiError` et la normalisation du format d'erreur unique.                                                         |
+| `src/runtime.ts`      | L'adresse de l'API et le point d'injection de l'identité.                                                         |
+| `src/query-*`         | La couche de cache : fournisseur, politique, clés, hydratation ([Données côté client](./donnees-cote-client.md)). |
+| `src/unauthorized.ts` | La couture du 401 : un gestionnaire global, un verrou par épisode.                                                |
+| `src/generated/`      | La sortie d'Orval. **Jamais éditée.**                                                                             |
 
 ## Ce que le package contient
 
@@ -122,10 +124,15 @@ export function ServiceStatus() {
 Le schéma Zod du même contrat s'importe depuis `@repo/api-client/zod/health`, pour valider une saisie
 avec les contraintes exactes du backend.
 
-:::note Un fournisseur est nécessaire
-Un hook de requête exige un `QueryClientProvider` au-dessus de lui. Il arrive avec **FRONT-04**, dans
-ce même package, avec les clés de cache partagées. D'ici là le client se compile, se type et se
-vérifie, mais aucun écran n'appelle encore l'API.
+:::note Un fournisseur est nécessaire, et une portée aussi
+Un hook de requête exige un `QueryClientProvider` au-dessus de lui : c'est le `QueryProvider` de
+**FRONT-04**, dans ce même package, monté dans les trois layouts.
+
+L'exemple ci-dessus laisse le hook se ranger sous la clé nue d'Orval — `['/health/ready']` —, ce qui
+ne convient qu'à une ressource **publique**. Dès qu'une réponse dépend du groupe actif, la clé doit
+porter sa portée, sans quoi une bascule de groupe affiche les données de la structure précédente.
+Tout est sur [Données côté client](./donnees-cote-client.md) et dans
+l'[ADR-0027](../adr/0027-portee-des-cles-de-cache.md).
 :::
 
 ## Le mutator et ses points d'extension
@@ -169,7 +176,7 @@ conventions est sur [Surface HTTP](../backend/surface-http.md).
 
 ## Vérifier sans lancer d'application
 
-Trois contrôles, du moins cher au plus complet :
+Quatre contrôles, du moins cher au plus complet :
 
 ```bash
 pnpm typecheck
@@ -187,16 +194,25 @@ est la preuve** que le client correspond au contrat. C'est exactement ce que fai
 d'erreur compris.
 
 ```bash
+pnpm --filter @repo/api-client test
+```
+
+La portée des clés de cache, **hors ligne** : ni pile, ni compilation, ni dépendance. C'est la seule
+preuve mécanique de la frontière de tenance côté navigateur tant que QA-02 n'a pas posé de runner —
+détaillée sur [Données côté client](./donnees-cote-client.md#vérifier-sans-lancer-dapplication).
+
+```bash
 make verify-api-client
 ```
 
 Appelle réellement l'API avec les fonctions du client généré et vérifie la forme des données
-rendues, ainsi que la normalisation d'une erreur. Exige la pile démarrée (`make dev`) : c'est le
-vrai service qui est interrogé, pas un double.
+rendues, ainsi que la normalisation d'une erreur. Depuis FRONT-04, la même passe joue aussi la
+couche de cache posée au-dessus — politique de réessai, appariement par préfixe, routage des 401.
+Exige la pile démarrée (`make dev`) : c'est le vrai service qui est interrogé, pas un double.
 
 ## Ce qui viendra
 
-- **FRONT-04** — le `QueryClientProvider` partagé et la fabrique de clés de cache, dans ce package.
+- **FRONT-05** — le patron de formulaire, qui réutilisera les schémas Zod de ce package.
 - **FRONT-07** — le flux d'authentification : jeton dans le mutator, rafraîchissement sur 401.
 - **QA-02** — l'outillage de test frontend, qui rejouera les hooks eux-mêmes et remplacera le
   montage de compilation jetable de `make verify-api-client`.

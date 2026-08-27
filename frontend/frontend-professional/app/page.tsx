@@ -9,6 +9,8 @@ import {
 } from '@repo/ui/components/card';
 import { ThemeToggle } from '@repo/ui/components/theme-toggle';
 
+import { ServiceStatus } from '@/components/service-status';
+
 /**
  * Page d'accueil de frontend-professional (FRONT-01).
  *
@@ -28,7 +30,10 @@ export default function HomePage() {
             Agenda et gestion du cabinet pour les cliniques vétérinaires.
           </p>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <ServiceStatus />
+          <ThemeToggle />
+        </div>
       </header>
 
       <Card>
@@ -56,6 +61,12 @@ export default function HomePage() {
             <li>
               Ce texte est rendu en Geist, donc <code className="font-mono">--font-juui-sans</code>{' '}
               alimente bien le <code className="font-mono">--font-sans</code> du thème.
+            </li>
+            <li>
+              Le badge d’état en haut à droite vient de l’API, appelé par un hook généré : le
+              fournisseur de données est donc bien au-dessus de lui, en un seul exemplaire. Le cache
+              vit en mémoire, le temps de la page : un retour de navigation ressert la réponse
+              pendant 60 s, un rechargement complet repart au réseau.
             </li>
           </ul>
           <Button>Rien à faire pour l’instant</Button>

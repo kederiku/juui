@@ -41,5 +41,11 @@
     // celui d'un appel HTTP rate, la cause un type faux.
     "noEmitOnError": true
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts"]
+  // scripts/verify.ts NOMMEMENT, et non `scripts/**/*.ts` (FRONT-04).
+  // scripts/verify-query-keys.ts se resout par AUTO-REFERENCE au package
+  // (`@repo/api-client/query-keys`), ce que la resolution `node10` de ce
+  // fichier-ci ne sait pas lire : elle ignore les cartes `exports`. Il n'a de
+  // toute facon rien a faire ici -- il ne touche ni au reseau ni au code
+  // genere, et c'est `node` qui l'execute directement, sans compilation.
+  "include": ["src/**/*.ts", "scripts/verify.ts"]
 }

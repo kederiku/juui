@@ -1,3 +1,4 @@
+import { QueryProvider } from '@repo/api-client/query-provider';
 import { ThemeProvider } from '@repo/ui/components/theme-provider';
 import { Geist, Geist_Mono } from 'next/font/google';
 
@@ -9,9 +10,12 @@ import type { ReactNode } from 'react';
 /**
  * Layout racine de frontend-professional (FRONT-01).
  *
- * Trois responsabilites, et rien d'autre : charger la police, poser le theme,
- * declarer les metadonnees. Les fournisseurs de donnees viendront s'y ajouter en
- * FRONT-04.
+ * Quatre responsabilites, et rien d'autre : charger la police, poser le theme,
+ * monter le fournisseur de donnees (FRONT-04), declarer les metadonnees. Les
+ * trois applications montent le MEME `QueryProvider`, celui de
+ * `@repo/api-client` : un seul exemplaire de TanStack Query, donc un seul
+ * contexte React -- deux copies rendraient le fournisseur invisible aux hooks
+ * generes, sans la moindre erreur de compilation.
  */
 
 /*
@@ -63,7 +67,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
        * classe, la page s'afficherait dans la police par defaut du navigateur.
        */}
       <body className="font-sans antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+        {/*
+         * L'ORDRE N'EST PAS ARBITRAIRE, MAIS IL EST SANS EFFET : next-themes
+         * ecrit sur <html> et ne consomme rien du cache, TanStack Query ignore
+         * le theme. Le theme reste dessus parce que c'est lui qui etait la, et
+         * que le diff des trois applications se lit ainsi en deux lignes.
+         *
+         * PAS DE app/providers.tsx : `QueryProvider` porte deja `'use client'`,
+         * ce layout reste donc un composant serveur (FRONT-04).
+         */}
+        <ThemeProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

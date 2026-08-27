@@ -11,9 +11,18 @@
 # CE QUE CETTE VERIFICATION VAUT
 # Elle appelle les FONCTIONS DE REQUETE du client genere -- celles-la memes que
 # les hooks appellent -- contre le backend reel, et verifie la forme des donnees
-# rendues. Elle ne rend pas les hooks React : cela demande le
-# QueryClientProvider de FRONT-04 et un runner de test frontend, qui appartient
-# a QA-02. L'ecart est consigne au registre.
+# rendues. Depuis FRONT-04, elle joue aussi la couche de cache posee au-dessus :
+# politique de reessai, appariement par prefixe d'un vrai QueryCache, routage
+# global des 401. Elle ne rend toujours pas les hooks React : cela demande un
+# runner de test frontend, qui appartient a QA-02. L'ecart est consigne au
+# registre.
+#
+# CE QUI NE PASSE PAS PAR ICI
+# L'algebre des clefs de cache se prouve HORS LIGNE, sans backend et sans
+# compilation : `pnpm --filter @repo/api-client test`
+# (packages/api-client/scripts/verify-query-keys.ts). Une preuve qui exigerait la
+# pile pour comparer deux tableaux ne tournerait jamais en integration
+# continue.
 #
 # POURQUOI UNE COMPILATION JETABLE
 # Node 24 efface les types a la volee, mais reste un resolveur ESM : il exige

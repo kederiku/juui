@@ -59,6 +59,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0024](./0024-jetons-audience-par-application.md)               | Un jeton vise une seule application, son groupe actif est vérifié à l'émission            | Accepté |
 | [ADR-0025](./0025-politique-de-mot-de-passe-et-degradation-hibp.md) | Un mot de passe se juge sur sa seule longueur, un contrôle de fuite muet le laisse passer | Accepté |
 | [ADR-0026](./0026-fiche-technique-praticien.md)                     | La fiche technique du praticien est portée par la clinique et déclarée en heure murale    | Accepté |
+| [ADR-0027](./0027-portee-des-cles-de-cache.md)                      | Une clé de cache déclare sa portée : publique, groupe, clinique                           | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit
