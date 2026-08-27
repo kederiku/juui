@@ -380,9 +380,12 @@ include_external_packages = true
 #
 # La liste interdite depasse les cinq paquets nommes par le ticket, et il le
 # faut : `pydantic_settings` est un paquet DISTINCT de `pydantic`, et `jwt` est
-# le nom d'import reel de `pyjwt`. S'en tenir a cinq laisserait passer les
-# sept autres. Regle a tenir : toute dependance applicative ajoutee au projet
-# s'ajoute ici, dans la meme pull request.
+# le nom d'import reel de `pyjwt`. S'en tenir a cinq laisserait passer tous les
+# autres. AUCUN COMPTE N'EST ECRIT ICI, A DESSEIN : la liste s'allonge a chaque
+# dependance, et un nombre en commentaire perime au premier ajout -- DOC-02a a
+# trouve « sept autres » alors qu'il y en avait onze. Regle a tenir : toute
+# dependance applicative ajoutee au projet s'ajoute ici, dans la meme pull
+# request.
 #
 # `app.core` n'y figure PAS, bien qu'un domaine pur ne devrait rien lire de sa
 # configuration. L'arbitrage appartient a BACK-04, qui l'a rendu par ecrit dans

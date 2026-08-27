@@ -13,7 +13,7 @@ l'une de l'autre. Cette page couvre ce parcours, du clone du dépôt au premier 
 
 Pour le parcours qui fonctionne aujourd'hui :
 
-- **Node 24 LTS** — la version de référence est déclarée dans `.nvmrc` :
+- **Node 24 LTS** — à installer via [nvm](https://github.com/nvm-sh/nvm) ou [fnm](https://github.com/Schniz/fnm), ou depuis [nodejs.org](https://nodejs.org/). La version de référence est déclarée dans `.nvmrc` :
   avec `nvm` ou `fnm`, `nvm use` suffit à s'y aligner.
 - **pnpm** — rien à installer soi-même : le champ `packageManager` du
   `package.json` racine épingle la version exacte, que pnpm récupère seul.
@@ -22,8 +22,9 @@ Pour le parcours qui fonctionne aujourd'hui :
   La version attendue est déclarée par `required-version` dans
   `backend/api/pyproject.toml`, et fait foi pour
   le poste comme pour la CI et l'image Docker
-  ([ADR-0002](../adr/0002-uv-outillage-python.md)).
-  `brew upgrade uv` suffit à s'y aligner.
+  ([ADR-0002](../adr/0002-uv-outillage-python.md)). Sur macOS, `brew install uv`
+  l'installe et `brew upgrade uv` l'aligne ; ailleurs, l'installateur officiel
+  est sur [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/).
 
 - **Docker** — [Docker Desktop](https://docs.docker.com/desktop/),
   [OrbStack](https://orbstack.dev/) ou [Colima](https://github.com/abiosoft/colima).
@@ -46,6 +47,9 @@ lui qui porte `make up`, `make db-reset` et les autres cibles du
 ```bash
 git clone git@github.com:kederiku/juui.git && cd juui
 ```
+
+La forme SSH suppose une clé enregistrée sur GitHub. Sans clé, la forme HTTPS fait la même
+chose : `git clone https://github.com/kederiku/juui.git && cd juui`.
 
 Aucun `.env` n'est versionné — `.gitignore` les exclut tous et
 n'excepte que les gabarits. Chaque fichier d'environnement se crée à partir du
@@ -71,10 +75,11 @@ poste : `JWT_SECRET_KEY`, à régénérer par environnement avec
 
 :::note Gabarits des frontends
 Les trois gabarits `frontend/*/.env.local.example` ont chacun leur application
-depuis FRONT-03. Leur copie n'est pas nécessaire pour démarrer : les deux
-variables qu'ils portent désignent l'API, que lit le mutator du client généré
+depuis FRONT-03. Leur copie n'est pas nécessaire pour démarrer : les variables
+d'API qu'ils portent désignent le service, que lit le mutator du client généré
 (SHARED-03) mais qu'aucun écran n'appelle encore — le fournisseur de requêtes
-arrive avec FRONT-04.
+arrive avec FRONT-04. `frontend-individual` en porte une de plus, `SITE_URL`,
+pour son volet SEO ; les commentaires de chaque gabarit font foi.
 :::
 
 Le dépôt a **deux chaînes d'outils**, indépendantes l'une de l'autre
@@ -96,6 +101,17 @@ par `uv` :
 ```bash
 cd backend/api && uv sync
 ```
+
+`uv sync` lit `uv.lock` et construit un environnement virtuel dans
+`backend/api/.venv`, aux versions exactes du verrou.
+
+:::tip On n'active jamais rien
+Toutes les commandes Python du dépôt s'écrivent `uv run <commande>` — jamais
+`source .venv/bin/activate`. `uv run` s'occupe lui-même de l'environnement, et
+vérifie au passage qu'il correspond toujours au verrou. Si vous venez de `pip` et
+`venv`, c'est le seul réflexe à changer : `uv run pytest` plutôt que d'activer
+puis `pytest`.
+:::
 
 Les écarts assumés avec le ticket SETUP-05 sont consignés au
 [registre des écarts](../ecarts/setup.md#écarts-assumés-avec-le-ticket-setup-05).

@@ -30,8 +30,8 @@ pnpm --filter documentation build && pnpm --filter documentation start
 ```
 
 L'ordre de lecture des sections reste écrit à la main dans `sidebars.ts` plutôt que déduit de
-l'arborescence des fichiers. Le registre des ADR est livré (DOC-02b) ; la section Architecture
-attend DOC-02a, et le guide de contribution viendra avec DOC-02c.
+l'arborescence des fichiers. Le registre des ADR est livré (DOC-02b), la section Architecture
+aussi (DOC-02a) ; le guide de contribution viendra avec DOC-02c.
 
 Deux capacités sont acquises dès maintenant, parce qu'elles décident de la façon
 d'écrire la suite :

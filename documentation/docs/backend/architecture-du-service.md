@@ -6,8 +6,9 @@ description: Les trois espaces, les trois couches d'un module, la règle des 3 m
 # Architecture du service
 
 Cette page décrit l'architecture **existante** du service — les espaces, les couches et les
-modèles tels qu'ils sont posés dans le code aujourd'hui. Le guide normatif — règles à suivre,
-carte de contexte — viendra avec DOC-02a dans la section [Architecture](../architecture/index.md).
+modèles tels qu'ils sont posés dans le code aujourd'hui. Le guide normatif — les règles à suivre
+et la carte de contexte — vit dans la section [Architecture](../architecture/index.md), livrée
+par DOC-02a. Les deux se répondent : ici l'état des lieux, là-bas la règle.
 
 Hexagonale — ports et adaptateurs — **à l'intérieur de modules métier**, et non un domaine plat :
 c'est le **module** qui porte la frontière, la couche ne décrit que le sens des dépendances. Le
@@ -19,15 +20,16 @@ d'[Import Linter](./qualite-et-typage.md#import-linter) font échouer la CI sur 
 
 ## Les trois espaces
 
-| Espace     | Ce qu'il porte                                                                           | Ce qu'il importe   |
-| ---------- | ---------------------------------------------------------------------------------------- | ------------------ |
-| `core/`    | réglages du **processus** : configuration (BACK-03), journalisation (BACK-11)            | rien du métier     |
-| `shared/`  | noyau **partagé** : racine des erreurs, ports techniques, socles de persistance et d'API | `core/`            |
-| `modules/` | les **contextes métier**, étanches les uns aux autres                                    | `core/`, `shared/` |
+| Espace     | Ce qu'il porte                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `core/`    | réglages du **processus** : configuration (BACK-03), journalisation (BACK-11)            |
+| `shared/`  | noyau **partagé** : racine des erreurs, ports techniques, socles de persistance et d'API |
+| `modules/` | les **contextes métier**, étanches les uns aux autres                                    |
 
-La relation entre les deux derniers est à sens unique : `modules/` → `shared/` est autorisé,
-`shared/` → `modules/` ne l'est jamais — c'est le contrat `service-spaces`
-d'[Import Linter](./qualite-et-typage.md#import-linter) qui le tient.
+Ce que chacun a le **droit d'importer** est une règle, et elle vit avec son schéma sur
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md#le-sens-des-dépendances).
+Elle est tenue par le contrat `service-spaces`
+d'[Import Linter](./qualite-et-typage.md#import-linter).
 
 `core/` **reste en place** et n'a pas été fondu dans `shared/` : ce qu'il contient règle le
 processus, pas l'architecture.
@@ -41,28 +43,21 @@ processus, pas l'architecture.
 | `infrastructure/` | modèle SQLAlchemy et dépôt, schémas Pydantic et routeur | `domain/` et `application/`               |
 
 **Les dépendances pointent vers l'intérieur** : l'infrastructure dépend du domaine, jamais
-l'inverse. C'est la seule direction que l'architecture interdit, et elle se vérifie d'une ligne —
-aucun import de `fastapi`, `sqlalchemy` ou `pydantic` dans un `domain/`.
+l'inverse. La règle, son schéma et les deux fichiers qui vivent hors des couches sont sur
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md#le-sens-des-dépendances).
 
-Trois anti-patrons sont proscrits, tous nommés par le guide de référence : l'entité **anémique**
-(une dataclass sans méthode, dont les règles vivent ailleurs), la **session** de base injectée
-dans un cas d'usage, et l'`HTTPException` levée depuis le domaine — qui rendrait le même code
-inutilisable depuis une tâche de fond, où personne n'attend de code HTTP.
+Les anti-patrons proscrits — entité anémique, session injectée dans un cas d'usage,
+`HTTPException` levée depuis le domaine — sont listés avec ce qui les arrête sur
+[Ce qui est interdit](../architecture/anti-patterns.md).
 
 ## La règle des 3 modèles
 
-Chaque couche a **son** modèle, et le passage de l'un à l'autre s'écrit à la main.
+Chaque couche a **son** modèle, et le passage de l'un à l'autre s'écrit à la main. Le tableau des
+trois, le motif du mapping manuel et ce qu'un `Account(**model.__dict__)` casserait en silence
+sont sur
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md#la-règle-des-3-modèles).
 
-| Modèle                | Fichier                         | Technologie    | Rôle                                                            |
-| --------------------- | ------------------------------- | -------------- | --------------------------------------------------------------- |
-| Schéma d'API          | `infrastructure/api/schemas.py` | Pydantic       | valider l'entrée, mettre en forme la sortie, documenter OpenAPI |
-| Entité du domaine     | `domain/entities.py`            | dataclass      | les règles et l'état ; zéro dépendance technique                |
-| Modèle de persistance | `infrastructure/db/models.py`   | SQLAlchemy 2.0 | colonnes, types et contraintes                                  |
-
-Un `Account(**model.__dict__)` fonctionnerait aujourd'hui et casserait **en silence** au premier
-champ que le domaine nomme autrement que la base, en remplissant l'entité de valeurs par défaut.
-Le mapping explicite, lui, échoue chez Mypy et non en production ; il rend aussi visibles les
-conversions qui comptent — `str` en base, `AccountType` dans le domaine.
+Ce qui suit est le trajet de ces trois modèles **dans le code d'aujourd'hui**.
 
 ## Le trajet, sur le module pilote
 
@@ -97,19 +92,18 @@ Deux détails du trajet valent d'être signalés, parce qu'ils illustrent où se
 
 ## L'indépendance des modules
 
-Un module n'importe **jamais** l'intérieur d'un autre : ni son entité, ni son dépôt, ni son
-modèle de persistance, ni une jointure sur ses tables. Les échanges passent par les cas d'usage
-publics du module cible — c'est-à-dire par la surface qu'il a choisi d'exposer, et qu'il peut
-donc tenir dans le temps. Ce que cette étanchéité coûte, et l'entorse assumée de la `Base`
-déclarative partagée, sont consignés dans les conséquences de
-l'[ADR-0003](../adr/0003-monolithe-modulaire.md).
+Un module n'importe **jamais** l'intérieur d'un autre. Ce que chaque module expose, à qui, et
+les deux réponses opposées au besoin partagé — le technique descend, le vocabulaire se recopie —
+sont sur la [carte de contexte](../architecture/carte-de-contexte.md). Ce que cette étanchéité
+coûte, et l'entorse assumée de la `Base` déclarative partagée, sont consignés dans les
+conséquences de l'[ADR-0003](../adr/0003-monolithe-modulaire.md).
 
 Depuis BACK-04b, la règle n'est plus seulement écrite : le contrat
 [`module-independence`](./qualite-et-typage.md#import-linter) la fait respecter, dans les deux
 sens et **même indirectement**.
 
-**Le piège à éviter** : ne pas calquer les modules sur les trois frontends — ce sont des canaux
-de livraison, pas des contextes métier. L'alternative est instruite et écartée dans
+**Le piège à éviter** — ne pas calquer les modules sur les trois frontends — figure parmi
+[les interdits](../architecture/anti-patterns.md), et l'alternative est instruite et écartée dans
 l'[ADR-0003](../adr/0003-monolithe-modulaire.md).
 
 ## Les modules prévus

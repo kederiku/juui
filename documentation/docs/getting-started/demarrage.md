@@ -45,8 +45,10 @@ conteneurisé la fait tourner sur l'image d'INFRA-04 :
 cd backend/api && uv run uvicorn app.main:app --reload
 ```
 
-La documentation interactive répond sur [http://localhost:8000/docs](http://localhost:8000/docs). L'API ne
-sert encore aucune route — voir la [section Backend](../backend/index.md).
+La documentation interactive répond sur [http://localhost:8000/docs](http://localhost:8000/docs),
+où elle n'affiche que le groupe `health` : **aucune route métier ne vit encore sous `/api/v1`**,
+seules les deux sondes `/health/live` et `/health/ready` répondent — voir
+[Surface HTTP](../backend/surface-http.md).
 
 Depuis BACK-03, elle **valide sa configuration au démarrage** et refuse de partir
 si une variable obligatoire manque — d'où la copie de `backend/api/.env` faite à

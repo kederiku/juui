@@ -11,7 +11,7 @@ import type { PluginOptions as LocalSearchOptions } from '@easyops-cn/docusaurus
  * marketing serait un fichier de plus a maintenir pour un lecteur qui cherche
  * une reponse, pas une presentation.
  *
- * Le CONTENU viendra ensuite -- DOC-02a pour l'architecture, DOC-02b pour les
+ * Le CONTENU est venu ensuite -- DOC-02a pour l'architecture, DOC-02b pour les
  * ADR, DOC-02c pour le guide de contribution. Ce fichier livre le contenant :
  * l'arborescence, la barre laterale, la recherche et les diagrammes.
  */

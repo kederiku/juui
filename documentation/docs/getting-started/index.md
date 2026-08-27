@@ -63,13 +63,40 @@ pnpm --filter documentation build && pnpm --filter documentation start
 | Section                                      | Ce qu'on y trouve                                                     | Apportée par       |
 | -------------------------------------------- | --------------------------------------------------------------------- | ------------------ |
 | [Démarrer](./installation.md)                | Installer le poste, démarrer la pile, les conventions du dépôt.       | livrée             |
-| [Architecture](../architecture/index.md)     | Règles hexagonales, carte de contexte, sens des dépendances.          | DOC-02a            |
+| [Architecture](../architecture/index.md)     | Règles hexagonales, carte de contexte, sens des dépendances.          | livrée             |
 | [Backend](../backend/index.md)               | Le service d'API : modules, persistance, tâches de fond.              | livrée             |
 | [Frontend](../frontend/index.md)             | Les trois applications, la bibliothèque partagée, le client généré.   | livrée             |
 | [Infrastructure](../infrastructure/index.md) | Ports, images Docker, mode développement, services de développement.  | livrée             |
-| [Décisions (ADR)](../adr/index.md)           | Les décisions structurantes, leur motif et les alternatives écartées. | DOC-02b — livrée   |
+| [Décisions (ADR)](../adr/index.md)           | Les décisions structurantes, leur motif et les alternatives écartées. | livrée             |
 | [Écarts assumés](../ecarts/index.md)         | Les écarts entre chaque ticket et son livrable, avec leur raison.     | au fil des tickets |
 
-La section Architecture est une **page d'attente** : DOC-02a la remplira avec le guide normatif —
-règles hexagonales et carte de contexte. Toutes les autres sections sont vivantes : chaque ticket
-livré y dépose ou y met à jour sa page dans la même PR.
+Toutes les sections sont vivantes : chaque ticket livré y dépose ou y met à jour sa page dans la
+même PR. La section Architecture est la seule **normative** — elle dit ce qu'il faut faire, quand
+les autres décrivent ce qui est posé.
+
+:::note Les codes entre parenthèses
+`BACK-04b`, `SHARED-03`, `INFRA-05a`, `DOC-02a`… ces codes reviennent dans presque chaque
+paragraphe du site. Ce sont les **tickets** du tableau de pilotage du projet, qui n'est pas
+public — on ne peut donc pas les ouvrir, et ce n'est pas grave.
+
+Il faut les lire comme des **dates** : « livré par BACK-09 » veut dire « en place depuis ce
+jalon-là ». Ils servent à situer une phrase dans le temps, et à retrouver la pull request qui
+l'a écrite.
+:::
+
+:::tip Par où commencer, selon ce qu'on vient faire
+**Installer le poste et lancer la pile** — [Installation](./installation.md), puis
+[Démarrage](./demarrage.md).
+
+**Comprendre le projet avant d'y toucher** — le
+[vocabulaire](../architecture/glossaire.md) d'abord, il définit les mots employés partout
+ailleurs ; puis la [carte de contexte](../architecture/carte-de-contexte.md), qui situe les
+modules.
+
+**Écrire du code** —
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md), et
+[Ce qui est interdit](../architecture/anti-patterns.md) à garder ouvert à côté.
+
+**Comprendre pourquoi c'est fait ainsi** — les [décisions (ADR)](../adr/index.md), et les
+[écarts assumés](../ecarts/index.md) quand le code ne fait pas ce que la règle annonce.
+:::

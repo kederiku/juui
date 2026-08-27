@@ -17,10 +17,10 @@ import type { SidebarsConfig } from '@docusaurus/plugin-content-docs';
  *
  * UNE ENTREE PLATE PAR SECTION tant qu'une section n'a qu'une page ; des
  * qu'elle en gagne une seconde, l'entree devient une `category` dont le `link`
- * reste la page d'index. Toutes les sections suivent desormais cette forme,
- * sauf Architecture, seule a n'avoir encore qu'une page : DOC-02a et les pages
- * de DOC-02c l'adopteront a leur tour -- une categorie livree vide afficherait
- * une section qui ne se deplie pas.
+ * reste la page d'index. TOUTES les sections suivent desormais cette forme :
+ * Architecture etait la derniere a n'avoir qu'une page, et DOC-02a lui en a
+ * donne quatre. Une categorie livree vide afficherait une section qui ne se
+ * deplie pas -- c'est la raison de la regle, et elle n'a plus d'exception.
  *
  * Les libelles des items d'une categorie restent courts : le numero et le
  * titre complet d'un ADR vivent dans la page, l'ordre du registre suffit ici.
@@ -41,7 +41,21 @@ const sidebars: SidebarsConfig = {
         },
       ],
     },
-    { type: 'doc', id: 'architecture/index', label: 'Architecture' },
+    {
+      type: 'category',
+      label: 'Architecture',
+      link: { type: 'doc', id: 'architecture/index' },
+      items: [
+        { type: 'doc', id: 'architecture/glossaire', label: 'Vocabulaire' },
+        {
+          type: 'doc',
+          id: 'architecture/ecrire-un-module-conforme',
+          label: 'Écrire un module',
+        },
+        { type: 'doc', id: 'architecture/anti-patterns', label: 'Interdits' },
+        { type: 'doc', id: 'architecture/carte-de-contexte', label: 'Carte de contexte' },
+      ],
+    },
     {
       type: 'category',
       label: 'Backend',

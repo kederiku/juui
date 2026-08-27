@@ -16,13 +16,14 @@ justification. Quatre vérifications, toutes lançables depuis ce dossier :
 
 | Commande                       | Raccourci           | Rôle                      |
 | ------------------------------ | ------------------- | ------------------------- |
-| `uv run ruff check .`          | `make lint`         | Lint                      |
+| `uv run ruff check .`          | —                   | Lint                      |
 | `uv run lint-imports`          | `make imports`      | Contrats d'architecture   |
 | `uv run ruff format --check .` | `make format-check` | Formatage (lecture seule) |
 | `uv run mypy src`              | `make typecheck`    | Typage strict             |
 
 `make lint` enchaîne les deux premières — Ruff d'abord, la vérification la moins
-chère. `make check` enchaîne les quatre **dans l'ordre qu'aura la CI** (QA-01) :
+chère. La colonne « Raccourci » reste vide en face de Ruff seul parce qu'aucune
+cible ne le lance seul **en lecture** : `make lint-fix` le fait, mais il corrige. `make check` enchaîne les quatre **dans l'ordre qu'aura la CI** (QA-01) :
 un échec local reproduit donc un échec de CI. `make` seul liste toutes les
 cibles.
 
@@ -90,7 +91,7 @@ six mois plus tard en revue de code.
 
 | #   | Contrat               | Type           | Ce qu'il tient                                                                                        |
 | --- | --------------------- | -------------- | ----------------------------------------------------------------------------------------------------- |
-| 1   | `domain-purity`       | `forbidden`    | `modules/*/domain/` et `shared/domain/` n'importent aucun paquet technique — douze sont nommés        |
+| 1   | `domain-purity`       | `forbidden`    | `modules/*/domain/` et `shared/domain/` n'importent aucun paquet technique — la liste est nommée      |
 | 2   | `module-layers`       | `layers`       | dans chaque module : `infrastructure` → `application` → `domain`, jamais l'inverse                    |
 | 3   | `module-independence` | `independence` | les modules ne s'importent pas mutuellement, **même indirectement**                                   |
 | 4   | `shared-layers`       | `layers`       | dans `shared/` : `infrastructure` → `domain`                                                          |
@@ -99,9 +100,10 @@ six mois plus tard en revue de code.
 Trois choix de configuration méritent d'être connus avant d'y toucher :
 
 - **Les contrats 2 et 3 visent `app.modules.*`, pas une liste de modules.** Ils
-  couvrent `organization` depuis BACK-16, `medical_records` depuis BACK-19, et
-  couvriront les suivants le jour où ceux-ci naîtront — c'est la différence
-  entre un garde-fou et une liste qu'on oublie de tenir à jour.
+  ont couvert `organization` (BACK-16), `medical_records` (BACK-19),
+  `scheduling` (BACK-21) et `notifications` (BACK-22) le jour de leur naissance,
+  sans une ligne de configuration, et couvriront les suivants de même — c'est la
+  différence entre un garde-fou et une liste qu'on oublie de tenir à jour.
 - **Les couches du contrat 2 sont optionnelles** (elles s'écrivent entre
   parenthèses) parce qu'un module vit sans certaines d'entre elles —
   `modules/organization/` n'a pas de couche `application/` avant BACK-25, et un
@@ -111,10 +113,14 @@ Trois choix de configuration méritent d'être connus avant d'y toucher :
   fait échouer le contrat tant qu'il n'est pas déclaré comme une couche. Seul
   `unit_of_work` est exempté — BACK-04 le range volontairement à la racine du
   module, parce qu'il compose les trois couches.
-- **Le contrat 1 nomme douze paquets, pas les cinq du ticket.**
-  `pydantic_settings` est un paquet distinct de `pydantic`, et `jwt` est le nom
-  d'import réel de `pyjwt`. Règle à tenir : **toute dépendance applicative
-  ajoutée au projet s'ajoute à cette liste, dans la même pull request**.
+- **Le contrat 1 nomme bien plus que les cinq paquets du ticket**, et la liste
+  s'allonge à chaque dépendance ajoutée — la compter ici la périmerait, le
+  `pyproject.toml` fait foi. Deux pièges expliquent l'écart : `pydantic_settings`
+  est un paquet distinct de `pydantic`, et `jwt` est le nom d'import réel de
+  `pyjwt`. Règle à tenir : **toute dépendance applicative ajoutée au projet
+  s'ajoute à cette liste, dans la même pull request** — y compris un paquet
+  qu'un adaptateur importe seulement **par son nom**, comme `botocore` sous
+  `boto3`.
 
 **Les exceptions.** Aucune n'est nécessaire aujourd'hui. Le jour où l'une le
 devient, elle s'écrit dans le `ignore_imports` du contrat concerné — jamais en

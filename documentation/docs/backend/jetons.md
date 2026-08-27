@@ -46,10 +46,11 @@ Trois opérations asynchrones : `create_access_token`, `create_refresh_token`, `
 règles les accompagnent, écrites dans la docstring de `TokenService` parce que tout le reste en
 dépend.
 
-**1. Aucune opération ne dégrade.** C'est la réponse la plus sévère des sept ports techniques, et
-pour le motif le plus simple : un jeton émis alors que l'appartenance n'a pas pu être vérifiée est
-une élévation de privilège qui vivra jusqu'à son expiration, sans que personne apprenne qu'elle a eu
-lieu. Un dépôt injoignable, une horloge mal injectée, une clé trop courte : rien de tout cela ne
+**1. Aucune opération ne dégrade.** C'est la réponse que donnent aussi `FileStorage`,
+`EmailTransport` et `PasswordHasher` — l'unité de travail allant plus loin encore, puisqu'elle
+lève **et annule**. Ici, le motif est le plus simple de tous : un jeton émis alors que
+l'appartenance n'a pas pu être vérifiée est une élévation de privilège qui vivra jusqu'à son
+expiration, sans que personne apprenne qu'elle a eu lieu. Un dépôt injoignable, une horloge mal injectée, une clé trop courte : rien de tout cela ne
 produit un jeton par défaut.
 
 **2. Le rôle vient du dépôt, jamais de l'appelant.** `group_role` ne figure dans aucune signature

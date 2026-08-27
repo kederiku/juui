@@ -69,16 +69,18 @@ sur un `any` qui s'ignore.
 La frontière est nette — **tout `.ts` et `.tsx` est typé, aucun `.js` ni `.mjs`
 ne l'est.** Ce n'est pas un arbitrage de confort, c'est l'état du dépôt : les
 `include` des trois applications ne retiennent que les `.ts` et les `.tsx`, celui
-de `packages/ui` que ses sources sous `src/`, et les trois packages de
-configuration n'ont pas de `tsconfig.json`. Aucun fichier JavaScript n'appartient
+de `packages/ui` et de `packages/api-client` que leurs sources sous `src/`, et
+**aucun des quatre packages de configuration** n'a de `tsconfig.json` —
+`config-typescript` ne porte que des presets, `base.json`, `nextjs.json` et
+`react-library.json`, qu'aucun projet ne désigne comme sien. Aucun fichier JavaScript n'appartient
 donc à un projet TypeScript, et le bloc `base-untyped` de `base.js` les en
-dispense explicitement. Sans lui, chacun de ces dix-sept fichiers sort en
+dispense explicitement. Sans lui, chacun de ces fichiers JavaScript sort en
 `Parsing error: […] was not found by the project service` — le parseur s'arrête
 avant même de lire le code, à commencer par les quatre fichiers de configuration
 de la racine.
 
-Ce que la bascule coûte, mesuré sur ce dépôt (66 fichiers lintés : 49 en
-TypeScript, 17 en JavaScript), médiane de trois passes :
+Ce que la bascule a coûté, **mesuré à la livraison de SETUP-06** (66 fichiers
+lintés alors : 49 en TypeScript, 17 en JavaScript), médiane de trois passes :
 
 | Mesure                                                | Avant  | Après  |
 | ----------------------------------------------------- | ------ | ------ |

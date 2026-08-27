@@ -89,8 +89,11 @@ Le budget de dix secondes tient malgré le passage du lint en mode _type-aware_
 TypeScript, ce qui porte sa passe ESLint de 0,5 s à 1,3 s, et un commit touchant
 trois workspaces à la fois de 0,6 s à 2,2 s. Un fichier `.mjs`, hors typage, ne
 bouge pas. C'est le seul endroit du dépôt où ces règles tournent avant une pull
-request, tant que la CI (QA-01 et QA-02) n'existe pas — les en dispenser les rendrait
-facultatives.
+request : la CI existe, mais elle ne rejoue à ce jour que les
+[contrats d'architecture](../backend/qualite-et-typage.md#import-linter), la
+régénération du client d'API et le build du site. Ruff, Mypy et pytest y entreront
+avec QA-01 et QA-02. Dispenser les hooks de ces règles les rendrait donc
+facultatives, pour de bon.
 
 Trois situations, trois gestes :
 
@@ -106,8 +109,14 @@ ultérieur ne réinstalle rien s'il n'a rien à installer, et ne relance donc pa
 `prepare`. `pnpm prepare` repose les hooks en une seconde.
 
 **`--no-verify` est réservé aux urgences** — un correctif de production à 3 h du
-matin, pas un lint qui agace. Ce qu'il laisse passer, la CI (QA-01 et QA-02) le
-rattrapera de toute façon, avec un aller-retour de plus.
+matin, pas un lint qui agace.
+
+:::danger Ce que `--no-verify` laisse passer n'est rattrapé par personne
+Tant que QA-01 et QA-02 ne sont pas livrés, la CI backend ne rejoue que les contrats
+d'architecture. Une erreur Ruff ou Mypy contournée au commit **arrive telle quelle
+sur `main`**. Après un `--no-verify`, lancer `make lint` et `make typecheck` à la
+main est le minimum.
+:::
 
 Le dernier cas vient de ce qu'un client graphique n'hérite pas du `PATH` d'un
 terminal de connexion : il ne trouve donc pas Node, dont dépendent `lint-staged`

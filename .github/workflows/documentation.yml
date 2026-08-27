@@ -6,8 +6,12 @@
 #
 # DEUX DECLENCHEURS, DEUX ROLES :
 #   - sur une pull request, le job `build` sert de garde-fou. Le site est
-#     construit avec `onBrokenLinks: 'throw'` : un renvoi mort ou un diagramme
-#     invalide fait echouer la CI AVANT le merge, pas apres.
+#     construit avec `onBrokenLinks`, `onBrokenAnchors` et
+#     `onBrokenMarkdownLinks` a 'throw' : un renvoi mort ou une ancre fausse
+#     fait echouer la CI AVANT le merge, pas apres. UN DIAGRAMME MERMAID
+#     INVALIDE, LUI, PASSE : le theme le rend cote CLIENT, dans une
+#     ErrorBoundary. Rien ne le verifie au build -- corrige en DOC-02a, qui
+#     avait besoin de le savoir avant d'en livrer quatre.
 #   - sur un push vers `main`, le meme job produit l'artefact que `deploy`
 #     publie sur GitHub Pages.
 name: Documentation
