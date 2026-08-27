@@ -321,6 +321,7 @@ markers = [
     "conformance: suites jouees contre l'implementation reelle ET sa doublure (BACK-06c)",
     "tokens: tests de l'emission et de la verification des jetons (BACK-10a)",
     "passwords: tests de la politique de mot de passe et du controle de fuite (BACK-10b)",
+    "scheduling: tests du socle de la fiche technique praticien (BACK-21)",
 ]
 
 # ---------------------------------------------------------------------------

@@ -166,7 +166,14 @@ class TenantMixin:
         __table_args__ = (ForeignKeyConstraint(["group_id"], ["groups.id"]), ...)
 
     Premier exemple en production : `clinics` (ADR-0015). Un modele qui s'en
-    abstiendrait garde l'integrite par le filtre du depot, pas par la base.
+    abstiendrait garde l'integrite par le filtre du depot, pas par la base --
+    `practitioner_profiles` (BACK-21) en est le premier cas reel : premiere table
+    de tenance HORS d'`organization`, elle ne peut pas consentir a la cle sans
+    franchir une frontiere de module, et la clinique qu'elle designe pourrait
+    donc appartenir a un autre groupe. Elle ne sera jamais LUE hors du sien ; la
+    verification revient au cas d'usage createur. C'est aussi la premiere table
+    du depot dont la garde ci-dessous est satisfaite par une `UniqueConstraint`
+    et non par un `Index`.
     """
 
     group_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, sort_order=-99)

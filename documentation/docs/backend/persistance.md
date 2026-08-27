@@ -193,6 +193,16 @@ pose **table par table, par consentement**, dans le `__table_args__` de chaque m
 jamais d'un module vers un autre — est consignée dans
 l'[ADR-0015](../adr/0015-cles-etrangeres-frontiere-module.md).
 
+Le **refus** de consentir a lui aussi son premier exemple, et il n'est pas un oubli :
+`practitioner_profiles` (BACK-21) est la première table de tenance vivant **hors** d'`organization`,
+et poser la clé y traverserait une frontière de module. Elle s'en abstient donc, et garde
+l'intégrité par le filtre du dépôt plutôt que par la base — avec la conséquence nommée dans
+l'[ADR-0026](../adr/0026-fiche-technique-praticien.md) : la clinique qu'une fiche désigne pourrait
+appartenir à un autre groupe, elle ne sera jamais lue hors du sien, et la vérification revient au
+cas d'usage créateur. C'est aussi la première table du dépôt dont la garde d'index est satisfaite
+par une **contrainte d'unicité** — `(group_id, clinic_id, account_id)` — et non par un `Index`
+déclaré pour elle.
+
 ## Ce que la session promet, et ce qu'elle coûte
 
 `build_sessionmaker(engine)` livre la **fabrique**, pas la session. La différence n'est pas de

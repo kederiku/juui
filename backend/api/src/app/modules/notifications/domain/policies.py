@@ -69,9 +69,11 @@ class NotificationEvent(StrEnum):
     aurait pense a les lire.
 
     Ensemble FERME, et volontairement court : un evenement sans emetteur ni
-    gabarit serait du code mort. Les tickets consommateurs l'etendront -- BACK-31
-    pour la reinitialisation de mot de passe, BACK-21 et les suivants pour le
-    rendez-vous.
+    gabarit serait du code mort. Les trois evenements de rendez-vous sont deja
+    la ; ce qui leur manque est un EMETTEUR, et c'est le moteur de rendez-vous
+    qui l'apportera -- le socle de scheduling (BACK-21) n'a livre que la fiche
+    technique du praticien, sans cas d'usage. BACK-31 etendra le catalogue pour
+    la reinitialisation de mot de passe.
     """
 
     # S105 est un faux positif : la regle traque une variable nommee comme un

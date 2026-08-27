@@ -11,8 +11,14 @@ compris.
 
 `is_window_active` est la COPIE de celle d'organization, jamais son import :
 le contrat `module-independence` interdit toute dependance entre modules,
-meme pour quinze lignes pures. La remontee en `shared/domain` se fera au
-troisieme module date (BACK-21) ; l'ecart est consigne au registre.
+meme pour quinze lignes pures. La remontee en `shared/domain` reste due, mais
+son declencheur a change : elle etait annoncee « au troisieme module date
+(BACK-21) », et scheduling n'en est pas un -- sa fiche technique ne porte ni
+`start_at` ni `end_at`, aucun de ses ports ne prend d'instant, et ses seules
+bornes sont des minutes d'horloge murale, dont la garde est l'INVERSE
+d'`ensure_aware_instant`. Le declencheur passe au moteur de rendez-vous, qui
+sera le premier a manipuler de vraies fenetres datees ; l'ecart est consigne au
+registre.
 """
 
 from datetime import datetime

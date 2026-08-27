@@ -196,6 +196,11 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0025-politique-de-mot-de-passe-et-degradation-hibp',
           label: 'Politique de mot de passe',
         },
+        {
+          type: 'doc',
+          id: 'adr/0026-fiche-technique-praticien',
+          label: 'Fiche technique du praticien',
+        },
       ],
     },
     {
