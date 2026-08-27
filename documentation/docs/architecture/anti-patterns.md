@@ -14,7 +14,7 @@ La troisième colonne est la plus utile, et elle est honnête : certaines règle
 **mécaniques** — un outil les fait échouer — et d'autres ne tiennent que par la **revue**. Les
 secondes demandent davantage d'attention, précisément parce que rien ne les rattrape.
 
-## Les interdits
+## Les interdits, et ce qui les arrête
 
 | Interdit                                                                                     | Ce qui se passe sinon                                                                                                                                      | Ce qui l'attrape                                                                                                              |
 | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -230,7 +230,7 @@ le lint au lieu de survivre en silence à l'import qu'elle couvrait.
 
 **La correction** : retirer l'entrée. Le dépôt n'en déclare **aucune** aujourd'hui.
 
-## Deux exceptions vivantes
+## Deux exceptions vivantes, déjà arbitrées
 
 Ces deux règles ont une entorse assumée, arbitrée et consignée. Les ignorer conduit à rouvrir un
 dossier déjà clos.

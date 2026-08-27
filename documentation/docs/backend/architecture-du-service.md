@@ -20,15 +20,16 @@ d'[Import Linter](./qualite-et-typage.md#import-linter) font échouer la CI sur 
 
 ## Les trois espaces
 
-| Espace     | Ce qu'il porte                                                                           | Ce qu'il importe   |
-| ---------- | ---------------------------------------------------------------------------------------- | ------------------ |
-| `core/`    | réglages du **processus** : configuration (BACK-03), journalisation (BACK-11)            | rien du métier     |
-| `shared/`  | noyau **partagé** : racine des erreurs, ports techniques, socles de persistance et d'API | `core/`            |
-| `modules/` | les **contextes métier**, étanches les uns aux autres                                    | `core/`, `shared/` |
+| Espace     | Ce qu'il porte                                                                           |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `core/`    | réglages du **processus** : configuration (BACK-03), journalisation (BACK-11)            |
+| `shared/`  | noyau **partagé** : racine des erreurs, ports techniques, socles de persistance et d'API |
+| `modules/` | les **contextes métier**, étanches les uns aux autres                                    |
 
-La relation entre les deux derniers est à sens unique : `modules/` → `shared/` est autorisé,
-`shared/` → `modules/` ne l'est jamais — c'est le contrat `service-spaces`
-d'[Import Linter](./qualite-et-typage.md#import-linter) qui le tient.
+Ce que chacun a le **droit d'importer** est une règle, et elle vit avec son schéma sur
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md#le-sens-des-dépendances).
+Elle est tenue par le contrat `service-spaces`
+d'[Import Linter](./qualite-et-typage.md#import-linter).
 
 `core/` **reste en place** et n'a pas été fondu dans `shared/` : ce qu'il contient règle le
 processus, pas l'architecture.
@@ -51,17 +52,12 @@ Les anti-patrons proscrits — entité anémique, session injectée dans un cas 
 
 ## La règle des 3 modèles
 
-Chaque couche a **son** modèle, et le passage de l'un à l'autre s'écrit à la main.
-
-| Modèle                | Fichier                         | Technologie    | Rôle                                                            |
-| --------------------- | ------------------------------- | -------------- | --------------------------------------------------------------- |
-| Schéma d'API          | `infrastructure/api/schemas.py` | Pydantic       | valider l'entrée, mettre en forme la sortie, documenter OpenAPI |
-| Entité du domaine     | `domain/entities.py`            | dataclass      | les règles et l'état ; zéro dépendance technique                |
-| Modèle de persistance | `infrastructure/db/models.py`   | SQLAlchemy 2.0 | colonnes, types et contraintes                                  |
-
-Le mapping s'écrit à la main, et le motif — ce qu'un `Account(**model.__dict__)` casserait en
-silence — est sur
+Chaque couche a **son** modèle, et le passage de l'un à l'autre s'écrit à la main. Le tableau des
+trois, le motif du mapping manuel et ce qu'un `Account(**model.__dict__)` casserait en silence
+sont sur
 [Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md#la-règle-des-3-modèles).
+
+Ce qui suit est le trajet de ces trois modèles **dans le code d'aujourd'hui**.
 
 ## Le trajet, sur le module pilote
 
@@ -106,10 +102,9 @@ Depuis BACK-04b, la règle n'est plus seulement écrite : le contrat
 [`module-independence`](./qualite-et-typage.md#import-linter) la fait respecter, dans les deux
 sens et **même indirectement**.
 
-**Le piège à éviter** : ne pas calquer les modules sur les trois frontends — ce sont des canaux
-de livraison, pas des contextes métier. L'alternative est instruite et écartée dans
-l'[ADR-0003](../adr/0003-monolithe-modulaire.md), et le piège figure parmi
-[les interdits](../architecture/anti-patterns.md).
+**Le piège à éviter** — ne pas calquer les modules sur les trois frontends — figure parmi
+[les interdits](../architecture/anti-patterns.md), et l'alternative est instruite et écartée dans
+l'[ADR-0003](../adr/0003-monolithe-modulaire.md).
 
 ## Les modules prévus
 

@@ -16,13 +16,14 @@ justification. Quatre vérifications, toutes lançables depuis ce dossier :
 
 | Commande                       | Raccourci           | Rôle                      |
 | ------------------------------ | ------------------- | ------------------------- |
-| `uv run ruff check .`          | `make lint`         | Lint                      |
+| `uv run ruff check .`          | —                   | Lint                      |
 | `uv run lint-imports`          | `make imports`      | Contrats d'architecture   |
 | `uv run ruff format --check .` | `make format-check` | Formatage (lecture seule) |
 | `uv run mypy src`              | `make typecheck`    | Typage strict             |
 
 `make lint` enchaîne les deux premières — Ruff d'abord, la vérification la moins
-chère. `make check` enchaîne les quatre **dans l'ordre qu'aura la CI** (QA-01) :
+chère. La colonne « Raccourci » reste vide en face de Ruff seul parce qu'aucune
+cible ne le lance seul **en lecture** : `make lint-fix` le fait, mais il corrige. `make check` enchaîne les quatre **dans l'ordre qu'aura la CI** (QA-01) :
 un échec local reproduit donc un échec de CI. `make` seul liste toutes les
 cibles.
 

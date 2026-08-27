@@ -73,3 +73,30 @@ pnpm --filter documentation build && pnpm --filter documentation start
 Toutes les sections sont vivantes : chaque ticket livré y dépose ou y met à jour sa page dans la
 même PR. La section Architecture est la seule **normative** — elle dit ce qu'il faut faire, quand
 les autres décrivent ce qui est posé.
+
+:::note Les codes entre parenthèses
+`BACK-04b`, `SHARED-03`, `INFRA-05a`, `DOC-02a`… ces codes reviennent dans presque chaque
+paragraphe du site. Ce sont les **tickets** du tableau de pilotage du projet, qui n'est pas
+public — on ne peut donc pas les ouvrir, et ce n'est pas grave.
+
+Il faut les lire comme des **dates** : « livré par BACK-09 » veut dire « en place depuis ce
+jalon-là ». Ils servent à situer une phrase dans le temps, et à retrouver la pull request qui
+l'a écrite.
+:::
+
+:::tip Par où commencer, selon ce qu'on vient faire
+**Installer le poste et lancer la pile** — [Installation](./installation.md), puis
+[Démarrage](./demarrage.md).
+
+**Comprendre le projet avant d'y toucher** — le
+[vocabulaire](../architecture/glossaire.md) d'abord, il définit les mots employés partout
+ailleurs ; puis la [carte de contexte](../architecture/carte-de-contexte.md), qui situe les
+modules.
+
+**Écrire du code** —
+[Comment écrire un module conforme](../architecture/ecrire-un-module-conforme.md), et
+[Ce qui est interdit](../architecture/anti-patterns.md) à garder ouvert à côté.
+
+**Comprendre pourquoi c'est fait ainsi** — les [décisions (ADR)](../adr/index.md), et les
+[écarts assumés](../ecarts/index.md) quand le code ne fait pas ce que la règle annonce.
+:::

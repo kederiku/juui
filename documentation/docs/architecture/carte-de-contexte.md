@@ -56,7 +56,7 @@ composition.
 générique la lève, et le port ne l'expose pas : l'exporter donnerait un nom que personne ne peut
 attraper.
 
-## La carte, aujourd'hui
+## La carte aujourd'hui : un arbre, sans arête horizontale
 
 ```mermaid
 flowchart TD

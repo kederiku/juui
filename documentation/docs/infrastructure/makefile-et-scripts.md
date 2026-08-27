@@ -11,17 +11,18 @@ les recense toutes deux ; sur le poste, `make help` fait foi.
 
 ## Scripts racine
 
-| Commande            | Effet                                                        |
-| ------------------- | ------------------------------------------------------------ |
-| `pnpm prepare`      | Installe les hooks Git. Lancé seul par `pnpm install`.       |
-| `pnpm dev`          | Démarre en parallèle les serveurs de développement.          |
-| `pnpm build`        | Construit chaque workspace, dans l'ordre de ses dépendances. |
-| `pnpm lint`         | Analyse statique ESLint sur tout le dépôt.                   |
-| `pnpm lint:fix`     | Idem, en appliquant les corrections automatiques.            |
-| `pnpm typecheck`    | Vérification des types TypeScript.                           |
-| `pnpm test`         | Suites de tests des workspaces.                              |
-| `pnpm format`       | Reformate le dépôt avec Prettier.                            |
-| `pnpm format:check` | Vérifie le formatage sans rien réécrire (CI).                |
+| Commande            | Effet                                                         |
+| ------------------- | ------------------------------------------------------------- |
+| `pnpm prepare`      | Installe les hooks Git. Lancé seul par `pnpm install`.        |
+| `pnpm dev`          | Démarre en parallèle les serveurs de développement.           |
+| `pnpm build`        | Construit chaque workspace, dans l'ordre de ses dépendances.  |
+| `pnpm lint`         | Analyse statique ESLint sur tout le dépôt.                    |
+| `pnpm lint:fix`     | Idem, en appliquant les corrections automatiques.             |
+| `pnpm typecheck`    | Vérification des types TypeScript.                            |
+| `pnpm test`         | Suites de tests des workspaces.                               |
+| `pnpm generate:api` | Régénère le client d'API depuis l'`openapi.json` (SHARED-03). |
+| `pnpm format`       | Reformate le dépôt avec Prettier.                             |
+| `pnpm format:check` | Vérifie le formatage sans rien réécrire (CI).                 |
 
 `prepare` est un script de **cycle de vie** : personne ne le lance à la main,
 pnpm s'en charge après chaque installation.
@@ -64,7 +65,15 @@ cibles de base de données et de qualité :
 | `make lint`                   | Ruff et contrats d'architecture, puis ESLint.                 |
 | `make format`                 | Ruff côté Python, puis Prettier sur tout le dépôt.            |
 | `make typecheck`              | mypy en mode strict, puis TypeScript workspace par workspace. |
-| `make test`                   | Enchaîne `test-back` (BACK-12) et `test-front` (QA-02).       |
+| `make test`                   | Enchaîne `test-back` et `test-front`.                         |
+| `make test-back`              | La suite pytest du backend (PostgreSQL démarré).              |
+| `make test-front`             | Les suites des workspaces pnpm qui en déclarent une.          |
+| `make generate-api`           | Exporte l'OpenAPI puis régénère le client (SHARED-03).        |
+| `make generate-api-check`     | Échoue si le client généré ne correspond plus au contrat.     |
+| `make verify-api-client`      | Appelle l'API avec le client généré, pile démarrée.           |
+
+**Cette liste est un résumé de lecture, et elle périmera.** `make help`, qui
+s'auto-documente en extrayant les commentaires `##` du fichier, fait foi.
 
 Trois règles gouvernent ces cibles, et elles sont écrites en tête du `Makefile` :
 
@@ -80,9 +89,10 @@ Trois règles gouvernent ces cibles, et elles sont écrites en tête du `Makefil
   lui seul : l'importer dans `make` exporterait `POSTGRES_HOST=postgres` vers
   les cibles `db-*` du poste — et les secrets vers tout sous-processus.
 
-Les cibles `test`, `test-back` et `seed` sont déclarées mais n'exécutent encore
-rien : elles nomment le ticket attendu — BACK-12 pour pytest, QA-02 pour les
-workspaces, INFRA-08 pour le seed — et sortent en succès.
+`make test-back` délègue à la suite pytest du backend, et `make test` l'enchaîne
+avec `make test-front` — un vrai `pnpm test`, qui ignore en silence les
+workspaces sans script `test`, donc tous jusqu'à QA-02. **Seule `make seed`
+reste déclarée sans rien exécuter** : elle nomme INFRA-08 et sort en succès.
 
 Les écarts assumés avec le ticket INFRA-06 sont consignés au
 [registre des écarts](../ecarts/infra.md#écarts-assumés-avec-le-ticket-infra-06).

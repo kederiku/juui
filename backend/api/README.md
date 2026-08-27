@@ -76,25 +76,28 @@ Le détail du service vit dans la
 ne garde que l'entrée en matière. Quand une information existe aux deux endroits, le site fait
 foi.
 
-| Sujet                                               | Page                                                                                           |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| L'arborescence du service et `main.py`              | [Structure du service](https://kederiku.github.io/juui/backend/structure)                      |
-| Les trois espaces, les trois couches, les 3 modèles | [Architecture du service](https://kederiku.github.io/juui/backend/architecture-du-service)     |
-| Les Settings Pydantic et le `.env` strict           | [Configuration](https://kederiku.github.io/juui/backend/configuration)                         |
-| Le moteur SQLAlchemy, les mixins, la tenance        | [Persistance](https://kederiku.github.io/juui/backend/persistance)                             |
-| Le port UnitOfWork et le dépôt générique            | [Unité de travail](https://kederiku.github.io/juui/backend/unite-de-travail)                   |
-| Les doublures en mémoire et la conformité           | [Doublures en mémoire](https://kederiku.github.io/juui/backend/doublures-en-memoire)           |
-| Alembic et le cycle d'une migration                 | [Migrations](https://kederiku.github.io/juui/backend/migrations)                               |
-| Le port de cache Redis                              | [Cache](https://kederiku.github.io/juui/backend/cache)                                         |
-| Le port S3/MinIO et les URLs pré-signées            | [Stockage objet](https://kederiku.github.io/juui/backend/stockage-objet)                       |
-| TaskIQ : broker, worker, politique de reprise       | [Tâches de fond](https://kederiku.github.io/juui/backend/taches-de-fond)                       |
-| Le code de vérification d'adresse, haché et borné   | [Vérification d'adresse (OTP)](https://kederiku.github.io/juui/backend/verification-email-otp) |
-| Le routeur `/api/v1` et les sondes                  | [Surface HTTP](https://kederiku.github.io/juui/backend/surface-http)                           |
-| La hiérarchie d'erreurs et le format unique         | [Erreurs](https://kederiku.github.io/juui/backend/erreurs)                                     |
-| Journaux, identifiant de requête, masquage, CORS    | [Journalisation](https://kederiku.github.io/juui/backend/journalisation)                       |
-| Les dépendances et la version d'`uv`                | [Dépendances](https://kederiku.github.io/juui/backend/dependances)                             |
-| Ruff, Mypy et Import Linter                         | [Qualité et typage](https://kederiku.github.io/juui/backend/qualite-et-typage)                 |
-| Les écarts entre tickets BACK et livrables          | [Écarts assumés — tickets BACK](https://kederiku.github.io/juui/ecarts/back)                   |
+| Sujet                                                            | Page                                                                                                        |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| L'arborescence du service et `main.py`                           | [Structure du service](https://kederiku.github.io/juui/backend/structure)                                   |
+| Les trois espaces et les trois couches, tels qu'ils sont posés   | [Architecture du service](https://kederiku.github.io/juui/backend/architecture-du-service)                  |
+| **Les règles** — sens des dépendances, 3 modèles, ports, erreurs | [Comment écrire un module conforme](https://kederiku.github.io/juui/architecture/ecrire-un-module-conforme) |
+| Le vocabulaire employé partout — port, agrégat, tenance          | [Vocabulaire](https://kederiku.github.io/juui/architecture/glossaire)                                       |
+| Les anti-patterns, et ce qui les arrête                          | [Ce qui est interdit](https://kederiku.github.io/juui/architecture/anti-patterns)                           |
+| Les Settings Pydantic et le `.env` strict                        | [Configuration](https://kederiku.github.io/juui/backend/configuration)                                      |
+| Le moteur SQLAlchemy, les mixins, la tenance                     | [Persistance](https://kederiku.github.io/juui/backend/persistance)                                          |
+| Le port UnitOfWork et le dépôt générique                         | [Unité de travail](https://kederiku.github.io/juui/backend/unite-de-travail)                                |
+| Les doublures en mémoire et la conformité                        | [Doublures en mémoire](https://kederiku.github.io/juui/backend/doublures-en-memoire)                        |
+| Alembic et le cycle d'une migration                              | [Migrations](https://kederiku.github.io/juui/backend/migrations)                                            |
+| Le port de cache Redis                                           | [Cache](https://kederiku.github.io/juui/backend/cache)                                                      |
+| Le port S3/MinIO et les URLs pré-signées                         | [Stockage objet](https://kederiku.github.io/juui/backend/stockage-objet)                                    |
+| TaskIQ : broker, worker, politique de reprise                    | [Tâches de fond](https://kederiku.github.io/juui/backend/taches-de-fond)                                    |
+| Le code de vérification d'adresse, haché et borné                | [Vérification d'adresse (OTP)](https://kederiku.github.io/juui/backend/verification-email-otp)              |
+| Le routeur `/api/v1` et les sondes                               | [Surface HTTP](https://kederiku.github.io/juui/backend/surface-http)                                        |
+| La hiérarchie d'erreurs et le format unique                      | [Erreurs](https://kederiku.github.io/juui/backend/erreurs)                                                  |
+| Journaux, identifiant de requête, masquage, CORS                 | [Journalisation](https://kederiku.github.io/juui/backend/journalisation)                                    |
+| Les dépendances et la version d'`uv`                             | [Dépendances](https://kederiku.github.io/juui/backend/dependances)                                          |
+| Ruff, Mypy et Import Linter                                      | [Qualité et typage](https://kederiku.github.io/juui/backend/qualite-et-typage)                              |
+| Les écarts entre tickets BACK et livrables                       | [Écarts assumés — tickets BACK](https://kederiku.github.io/juui/ecarts/back)                                |
 
 ## Ce qui n'est pas encore là
 

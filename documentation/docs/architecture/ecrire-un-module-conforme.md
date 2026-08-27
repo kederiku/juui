@@ -8,9 +8,9 @@ import TabItem from '@theme/TabItem';
 
 # Comment écrire un module conforme
 
-Cette page est **normative** : elle dit ce qu'il faut faire, et ce qui se passe quand on ne le
-fait pas. Elle décrit l'état des lieux le moins possible — pour savoir ce qui est posé
-aujourd'hui et où, la section [Backend](../backend/index.md) est là pour ça.
+Cette page dit **ce qu'il faut faire pour écrire un module**, dans l'ordre où on le découvre :
+le découpage d'abord, puis le sens des dépendances, puis le trajet d'une requête, puis un module
+entier fichier par fichier, et enfin les cinq règles qu'il applique.
 
 **Le vocabulaire de cette page — module, couche, port, agrégat, unité de travail, doublure — est
 défini au [glossaire](./glossaire.md).** Rien n'y est supposé connu, et il vaut la peine de
@@ -113,9 +113,13 @@ perdre du temps à la première violation de contrat.
 
 `unit_of_work.py` est une **exemption déclarée**. Il vit à la racine du module, hors des trois
 couches, parce qu'il est le point d'assemblage du module : il importe l'infrastructure pour
-servir les dépôts au cas d'usage. Le contrat 2 le nomme explicitement dans ses
-`exhaustive_ignores`. C'est écrit dans la configuration, cela se relit, et cela ne surprend
-personne.
+servir les dépôts au cas d'usage.
+
+Le contrat 2 le nomme explicitement, dans son propre bloc
+`[[tool.importlinter.contracts]]` de `backend/api/pyproject.toml` :
+`exhaustive_ignores = ["unit_of_work"]`. Le nom vaut pour **tout** module,
+présent ou à venir, parce que le contrat vise `app.modules.*`. C'est écrit dans la
+configuration, cela se relit, et cela ne surprend personne.
 
 `discovery.py` et `alembic/env.py` sont des **angles morts**. Ils atteignent les modules par
 `importlib`, c'est-à-dire par une chaîne de caractères, et Import Linter ne suit pas les imports
@@ -158,7 +162,7 @@ Il n'y en a **aucune** aujourd'hui, et c'est un chiffre qu'on aimerait garder.
 
 ---
 
-## Le cycle de vie d'une requête
+## Le cycle de vie d'une requête, de la page à la base
 
 Voici le chemin que suit une donnée, de la page affichée à la ligne écrite en base. Chaque
 flèche traverse une frontière, et chaque frontière a son modèle : c'est ce qui rend la
@@ -215,7 +219,7 @@ Le trajet complet écrit fichier par fichier, sur le module pilote, est sur la p
 
 ---
 
-## Le squelette d'un module
+## Le squelette d'un module, fichier par fichier
 
 Ce qui suit est un module entier — les **treize** fichiers, en entier, pas des extraits. Il
 s'appelle `demo` et n'existe **pas** dans le dépôt : il a été écrit, déposé dans
@@ -225,7 +229,7 @@ Ce que la page affiche est le contenu exact de ces fichiers-là. Un lecteur qui 
 obtient un module qui compile, que Mypy accepte en mode strict, et que les cinq contrats
 acceptent.
 
-### L'arborescence
+### Les treize fichiers, et où chacun va
 
 ```text
 backend/api/src/app/modules/demo/
@@ -254,25 +258,37 @@ Ils sont donnés à l'étape 9, et l'avertissement qui les accompagne mérite d'
 d'en oublier un.
 
 :::warning Ce que ce squelette n'a pas, et qu'un vrai module aura
-Ce module s'arrête au domaine, au cas d'usage et à la persistance. Il lui manque quatre choses,
+
+Ce module s'arrête au domaine, au cas d'usage et à la persistance. Il lui manque cinq choses,
 délibérément, parce que chacune appelle un développement que le guide ne peut pas tenir dans une
-page :
+page. Les voici toutes, avec où aller les chercher :
 
 - **la couche d'API** — `infrastructure/api/schemas.py` et `routes.py`, c'est-à-dire le premier
   des [trois modèles](#la-règle-des-3-modèles) et le routeur qui l'expose. Le trajet complet,
-  fichier par fichier, est décrit sur
+  étape par étape, est décrit sur
   [Architecture du service](../backend/architecture-du-service.md#le-trajet-sur-le-module-pilote) ;
+- **le montage du routeur** — deux tuples à compléter dans `main.py`, `_MODULE_ROUTERS` et
+  `_OPENAPI_TAGS`, qui doivent rester appariés. Voir
+  [Structure du service](../backend/structure.md#mainpy) ;
 - **la commande** — `PublishNote.execute()` reçoit ici un `UUID` nu, ce qui suffit à une
   intention aussi simple. Dès qu'un cas d'usage prend plus d'un argument, il prend une
   **commande** gelée, comme `CreateAccountCommand` dans `identity` ;
 - **la doublure en mémoire et sa suite de conformité** — `infrastructure/memory/`, et la classe
   de base de conformité jouée des deux côtés. Voir
   [Doublures en mémoire](../backend/doublures-en-memoire.md) ;
-- **la migration** — et surtout la ligne à ajouter dans `backend/api/alembic/env.py`, qui tient
-  une **liste écrite à la main** des modules dont il importe les modèles. Un module absent de
-  cette liste n'a jamais de table, et **rien ne le signale** : les contrats, Ruff et Mypy restent
-  tous verts.
-  :::
+- **la migration** — et surtout la ligne à ajouter à `_MODEL_MODULES`, dans
+  `backend/api/alembic/env.py`, qui tient une **liste écrite à la main** des modules dont il
+  importe les modèles. Voir [Migrations](../backend/migrations.md).
+
+:::
+
+:::danger Le piège silencieux : `_MODEL_MODULES`
+C'est le seul manquant de cette liste que **rien ne signale**. Un module absent de
+`_MODEL_MODULES` n'entre jamais dans `Base.metadata` : sa table n'existe pas, aucune migration
+ne la crée — et `make imports`, `make lint`, `make typecheck` restent tous verts.
+
+Les quatre autres oublis se font remarquer tôt. Celui-là se découvre en production.
+:::
 
 ### 1. L'entité — elle porte ses règles
 
@@ -657,9 +673,12 @@ Un `__init__.py` oublié ne casse donc rien. Il éteint silencieusement les cinq
 tout un dossier.
 :::
 
-### Vérifier son module
+### Vérifier son module : trois commandes, trois réponses
 
-Trois commandes, depuis `backend/api/`. Elles ne disent pas la même chose et il faut les trois.
+Trois commandes, depuis `backend/api/`. Elles ne disent pas la même chose, et il faut les trois.
+
+Si elles échouent sur un `command not found` plutôt que sur une règle, c'est que le poste n'est
+pas encore installé : voir [Installation](../getting-started/installation.md).
 
 Les **règles d'architecture** — c'est ce qui répond « ce module est-il à sa place ». Attendu :
 `Contracts: 5 kept, 0 broken.`
@@ -682,6 +701,13 @@ Le **typage**, en mode strict. Attendu : `Success: no issues found`.
 
 ```bash
 make typecheck
+```
+
+Et, dès que le module a des tests — c'est-à-dire dès qu'il a un comportement — la **suite
+pytest**, qui demande un PostgreSQL démarré (`make up` depuis la racine) :
+
+```bash
+make test
 ```
 
 ## La règle des 3 modèles
@@ -723,7 +749,7 @@ commande déjà transmise ne se corrige pas en chemin.
 
 ---
 
-## Un port, ses adaptateurs
+## Un port, ses adaptateurs : le domaine ignore la technologie
 
 Un **port** exprime un besoin du métier. L'**adaptateur** le remplit avec une technologie. Le
 domaine ne connaît que le port, ce qui laisse remplacer MinIO par Amazon S3, ou Redis par autre
@@ -823,12 +849,19 @@ donc lister et supprimer. Le port, lui, n'expose ni `list` ni `delete` : **le po
 pas parce que la classe sait faire plus.** Ce que le port ne nomme pas, aucun cas d'usage ne
 peut l'appeler.
 
-**Chaque port dit ce qui se passe en cas de panne**, et cette réponse **ne s'hérite pas** du port
-précédent. `Cache` dégrade, parce qu'un cache absent ne change qu'une latence. `FileStorage`
-lève, parce qu'un stockage absent change les résultats — un envoi silencieux est un fichier
-perdu. `BreachChecker` dégrade lui aussi, mais pour un motif sans rapport avec celui du cache :
-refuser une inscription parce qu'un service tiers est muet coûte plus cher que le risque
-couvert.
+**Chaque port dit ce qui se passe en cas de panne.** C'est la question à se poser en écrivant le
+prochain, et la réponse **ne s'hérite pas** du port précédent :
+
+- `Cache` **dégrade** — un cache absent ne change qu'une latence ;
+- `FileStorage` **lève** — un stockage absent change les résultats, et un envoi silencieux est un
+  fichier perdu ;
+- `BreachChecker` **dégrade** lui aussi, mais pour un motif sans aucun rapport avec celui du
+  cache : refuser une inscription parce qu'un service tiers est muet coûte plus cher que le
+  risque couvert.
+
+Deux ports qui dégradent peuvent donc le faire pour des raisons opposées. La question se pose
+port par port ; les réponses déjà rendues sont rassemblées sur
+[Doublures en mémoire](../backend/doublures-en-memoire.md).
 
 **Écrire un port sans son adaptateur est l'exception**, et elle se justifie par un ticket
 **antérieur** qui en a besoin — pas par un emplacement qu'on se réserve.
@@ -855,7 +888,9 @@ pas leur atomicité — plutôt qu'une dette invisible que le premier incident r
 
 **Le cas d'usage reçoit un port, jamais une session.** C'est le type déclaré dans son
 constructeur, et c'est l'assemblage — la route, le test, la tâche de fond — qui décide quel
-adaptateur arrive là.
+adaptateur arrive là. **Aucun contrat n'attrape cette règle-là** : le contrat 2 voit les
+imports, pas les arguments d'un constructeur. Elle tient par la revue — comme huit autres
+interdits, que [la page des interdits](./anti-patterns.md) marque « Revue » sans détour.
 
 **Le commit est explicite.** Sortir du bloc sans avoir appelé `commit()` n'écrit rien : le
 rollback est structurel, porté par la seule méthode concrète du port.

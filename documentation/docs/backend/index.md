@@ -9,6 +9,12 @@ Le service d'API vit dans `backend/api/`. Il est écrit en **Python** avec **Fas
 architecture **hexagonale à l'intérieur de modules métier**, et il est outillé par `uv`, Ruff, Mypy
 et Pytest.
 
+Cette section décrit **ce qui est posé aujourd'hui**, où, et par quel ticket. Les **règles** à
+suivre pour écrire du code conforme vivent à part, dans la section
+[Architecture](../architecture/index.md) — dont le
+[vocabulaire](../architecture/glossaire.md) définit les termes employés dans toutes les pages
+ci-dessous.
+
 Il est volontairement **absent des workspaces pnpm** : c'est un projet Python, piloté par sa propre
 chaîne d'outils, et le dépôt assume d'en avoir deux. Son
 [README](https://github.com/kederiku/juui/blob/main/backend/api/README.md) garde l'entrée en
@@ -29,6 +35,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Stockage objet](./stockage-objet.md)                       | Le port S3/MinIO et les URLs pré-signées.                                  |
 | [Tâches de fond](./taches-de-fond.md)                       | TaskIQ : le broker, le worker, la politique de reprise.                    |
 | [Vérification d'adresse (OTP)](./verification-email-otp.md) | Le code à six chiffres : haché, poivré, à usage unique, borné.             |
+| [Notifications](./notifications.md)                         | Les préférences par événement, le catalogue, la résolution des canaux.     |
 | [Jetons d'authentification](./jetons.md)                    | Les neuf claims, l'audience par application, l'appartenance vérifiée.      |
 | [Mots de passe](./mots-de-passe.md)                         | La politique 14–128 sans composition, argon2id, la k-anonymity HIBP.       |
 | [Surface HTTP](./surface-http.md)                           | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
@@ -39,38 +46,22 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 
 ## Où en est le service
 
-La structure modulaire et hexagonale est posée (BACK-04) et ses règles sont
-désormais tenues par [Import Linter](./qualite-et-typage.md#import-linter) (BACK-04b), le socle de
-persistance est en place (BACK-05), l'[unité de travail](./unite-de-travail.md)
-avec son dépôt générique le coiffe (BACK-06a) et le schéma est sous contrôle de
-version par les [migrations](./migrations.md) (BACK-07), les huit ports
-techniques du noyau partagé sont livrés — [cache](./cache.md) (BACK-14),
-[stockage objet](./stockage-objet.md) (BACK-13), transport e-mail (BACK-22), unité
-de travail et dépôt générique (BACK-06a), contrôle de fuite de mot de passe
-(BACK-06c) avec son adaptateur en k-anonymity, le
-[hachage des mots de passe](./mots-de-passe.md) et la politique du cahier des charges
-(BACK-10b, [ADR-0025](../adr/0025-politique-de-mot-de-passe-et-degradation-hibp.md)) et les
-[jetons d'authentification](./jetons.md), émis derrière un port avec une audience
-par application et une appartenance vérifiée à l'émission (BACK-10a,
-[ADR-0024](../adr/0024-jetons-audience-par-application.md)) —, leurs
-[doublures en mémoire](./doublures-en-memoire.md) et la suite de
-conformité qui les tient au contrat (BACK-06c), la
-[surface HTTP](./surface-http.md) versionnée et ses sondes sont en place (BACK-08)
-et toute [erreur](./erreurs.md) y sort désormais au format unique, codes namespacés
-et 404-jamais-403 compris (BACK-09,
-[ADR-0014](../adr/0014-traduction-des-erreurs-a-la-bordure.md)),
-les [tâches de fond](./taches-de-fond.md) ont leur broker, leur worker et leur
-politique de reprise (BACK-15) — et leur premier consommateur métier, la
-[vérification d'adresse par code OTP](./verification-email-otp.md), dont le code
-est haché, poivré et engendré dans le worker (BACK-17,
-[ADR-0020](../adr/0020-otp-hache-et-echec-ferme.md)) —, le service est
-[observable](./journalisation.md) — journaux structurés, identifiant de requête
-propagé de bout en bout, contexte de tenance automatique, secrets masqués — et
-joignable depuis les trois frontends (BACK-11,
-[ADR-0018](../adr/0018-journalisation-bibliotheque-standard.md)),
-le filtrage multi-tenant est mécanique et prouvé
-par les premiers tests du service — la suite `tenant_isolation`, `make test` —
-(BACK-06b, [ADR-0013](../adr/0013-filtre-de-tenance-dans-le-depot.md)), Ruff et
-Mypy sont configurés (BACK-02). Ce qui
-n'est pas encore là est listé dans le
+Le socle est en place. Plutôt qu'une phrase qui périmerait, voici ce qui existe, par famille.
+
+| Ce qui est posé                                                                                        | Où le lire                                                                                   |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| La structure modulaire et hexagonale, et ses règles rendues **mécaniques**                             | [Structure](./structure.md), [Qualité et typage](./qualite-et-typage.md#import-linter)       |
+| Le socle de persistance, l'unité de travail, le dépôt générique et le filtrage multi-tenant **prouvé** | [Persistance](./persistance.md), [Unité de travail](./unite-de-travail.md)                   |
+| Le schéma sous contrôle de version                                                                     | [Migrations](./migrations.md)                                                                |
+| Les **huit** ports techniques du noyau partagé, et leurs doublures tenues par une suite de conformité  | [Doublures en mémoire](./doublures-en-memoire.md)                                            |
+| La surface HTTP versionnée, ses sondes, la pagination, et le format d'erreur unique                    | [Surface HTTP](./surface-http.md), [Erreurs](./erreurs.md)                                   |
+| Les tâches de fond, et leur premier consommateur métier                                                | [Tâches de fond](./taches-de-fond.md), [Vérification d'adresse](./verification-email-otp.md) |
+| Les jetons, les mots de passe et le contrôle de fuite                                                  | [Jetons](./jetons.md), [Mots de passe](./mots-de-passe.md)                                   |
+| Le service observable — journaux structurés, identifiant de requête, secrets masqués                   | [Journalisation](./journalisation.md)                                                        |
+| Cinq modules métier, dont `identity` complet                                                           | [Carte de contexte](../architecture/carte-de-contexte.md)                                    |
+
+**Ce tableau est un résumé de lecture, et il périmera.** Ce qui existe vraiment se lit sur
+l'arbre de [Structure du service](./structure.md) et sur la
+[carte de contexte](../architecture/carte-de-contexte.md), qui font foi. Ce qui n'est pas encore
+là est listé dans le
 [README du service](https://github.com/kederiku/juui/blob/main/backend/api/README.md#ce-qui-nest-pas-encore-là).
