@@ -316,8 +316,9 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             await connection.run_sync(_upgrade_to_head)
             # Les deux tables stubs ne figurent dans AUCUNE migration, a dessein :
             # `env.py` n'importe jamais `tenancy_stubs`, donc `alembic check` ne
-            # les voit pas. Elles se creent donc a la main, APRES les migrations,
-            # et elles seules seront detruites en sortie.
+            # les voit pas. Elles se creent donc a la main, APRES les migrations
+            # et SOUS LE MEME VERROU -- `create_all` est `checkfirst=True`, mais
+            # deux sessions concurrentes le verraient toutes deux absent.
             await connection.run_sync(Base.metadata.create_all, tables=_STUB_TABLES)
             await connection.commit()
     except (OSError, SQLAlchemyError, CommandError) as error:
@@ -333,13 +334,21 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             ),
         )
     yield test_engine
-    # `tables=` OBLIGATOIRE. Un `drop_all()` nu detruirait ici tout le schema
-    # migre en laissant `alembic_version` a la tete : l'execution suivante
-    # verrait un `upgrade head` sans rien a faire contre une base VIDE, et chaque
-    # test echouerait sur `UndefinedTable` sans que la cause soit visible nulle
-    # part. `test_schema_matches_models` est le filet qui nomme ce sabotage.
-    async with test_engine.begin() as connection:
-        await connection.run_sync(Base.metadata.drop_all, tables=_STUB_TABLES)
+    # RIEN N'EST DETRUIT EN SORTIE, ET C'EST UNE CORRECTION. Cette fixture
+    # detruisait les deux tables stubs au demontage. Le verrou consultatif ne
+    # couvre QUE les migrations -- il tombe avec la connexion ci-dessus, a
+    # dessein, pour que deux executions puissent cohabiter une fois le schema
+    # pose. Mais alors, la premiere session a se terminer arrachait les tables
+    # sous les pieds de la seconde : `UndefinedTableError: relation
+    # "plain_notes_test" does not exist`, en plein milieu d'une suite verte
+    # ailleurs. Constate en jouant quatre suites en parallele.
+    #
+    # Les tables stubs ont donc EXACTEMENT le meme cycle de vie que les tables
+    # migrees : creees si absentes, jamais detruites. C'est la base de test qui
+    # les porte, pas la session -- et cela supprime au passage la ligne la plus
+    # dangereuse du harnais, un `drop_all` a une virgule de vaporiser le schema
+    # migre. La base se remet a neuf par `--db-reset`, ou par
+    # `docker compose down -v`.
     await test_engine.dispose()
 
 
