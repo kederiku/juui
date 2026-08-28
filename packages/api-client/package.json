@@ -7,7 +7,7 @@
   "sideEffects": false,
   "exports": {
     "./mutator": "./src/mutator.ts",
-    "./errors": "./src/errors.ts",
+    "./errors/*": "./src/errors/*.ts",
     "./runtime": "./src/runtime.ts",
     "./query-keys": "./src/query-keys.ts",
     "./query-client": "./src/query-client.ts",
@@ -27,7 +27,7 @@
   "scripts": {
     "generate": "orval --config ./orval.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/verify-query-keys.ts"
+    "test": "node scripts/verify-query-keys.ts && node scripts/verify-errors.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.101.4",

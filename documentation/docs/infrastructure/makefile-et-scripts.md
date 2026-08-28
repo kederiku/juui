@@ -92,8 +92,9 @@ Trois règles gouvernent ces cibles, et elles sont écrites en tête du `Makefil
 `make test-back` délègue à la suite pytest du backend, et `make test` l'enchaîne
 avec `make test-front` — un vrai `pnpm test`, qui ignore en silence les
 workspaces sans script `test`. Depuis FRONT-04, `packages/api-client` en déclare
-un — la preuve hors ligne de la portée des clés de cache — et c'est le seul
-jusqu'à QA-02. **Seule `make seed`
+un — la portée des clés de cache, puis la traduction des erreurs depuis
+FRONT-10 —, et `packages/config-eslint` en a gagné un avec FRONT-09, pour les
+frontières entre features. Ce sont les deux seuls jusqu'à QA-02. **Seule `make seed`
 reste déclarée sans rien exécuter** : elle nomme INFRA-08 et sort en succès.
 
 Les écarts assumés avec le ticket INFRA-06 sont consignés au

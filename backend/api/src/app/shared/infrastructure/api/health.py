@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel
 
 from app.core import Settings, SettingsDep
+from app.shared.infrastructure.api.schemas.error import ErrorResponse
 from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY
 from app.shared.infrastructure.db.engine import DatabaseUnavailableError, verify_connectivity
 from app.shared.infrastructure.db.session import Database, get_database
@@ -121,6 +122,23 @@ async def check_liveness() -> LivenessReport:
         status.HTTP_503_SERVICE_UNAVAILABLE: {
             "model": ReadinessReport,
             "description": "Au moins un composant est injoignable.",
+        },
+        # LE 500 SE DECLARE ICI, ET C'EST FRONT-10 QUI LE DEMANDE.
+        # Cette route repond DEJA `http.server.internal_error` au format unique de
+        # BACK-09 quand l'application est cassee -- `tests/shared/test_error_handlers.py`
+        # le prouve depuis toujours. Ce qui manquait, c'est que le CONTRAT le dise :
+        # `ErrorResponse` n'etait declare que sur le 422 du routeur v1, qui n'a
+        # encore aucune route, si bien que le composant n'entrait pas dans l'OpenAPI
+        # et qu'Orval n'en generait aucun type. Le client d'API devait donc reecrire
+        # a la main un type que le serveur possede.
+        #
+        # SUR LA ROUTE ET NON SUR LE ROUTEUR : `/health/live` ne touche a aucune
+        # dependance externe, et l'ecart consigne en BACK-09 refuse nommement de
+        # declarer un statut sur une route qui ne le produit pas. Les statuts METIER
+        # des routes v1 restent a BACK-28.
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "model": ErrorResponse,
+            "description": "Une erreur interne est survenue.",
         },
     },
 )

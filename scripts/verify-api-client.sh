@@ -18,11 +18,11 @@
 # registre.
 #
 # CE QUI NE PASSE PAS PAR ICI
-# L'algebre des clefs de cache se prouve HORS LIGNE, sans backend et sans
-# compilation : `pnpm --filter @repo/api-client test`
-# (packages/api-client/scripts/verify-query-keys.ts). Une preuve qui exigerait la
-# pile pour comparer deux tableaux ne tournerait jamais en integration
-# continue.
+# L'algebre des clefs de cache et la traduction des erreurs se prouvent HORS
+# LIGNE, sans backend et sans compilation : `pnpm --filter @repo/api-client test`
+# (scripts/verify-query-keys.ts et scripts/verify-errors.ts). Une preuve qui
+# exigerait la pile pour comparer deux tableaux ne tournerait jamais en
+# integration continue.
 #
 # POURQUOI UNE COMPILATION JETABLE
 # Node 24 efface les types a la volee, mais reste un resolveur ESM : il exige

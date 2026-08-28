@@ -66,7 +66,13 @@ clés, **toujours présentes**, `null` compris :
 ```
 
 Le schéma vit dans `shared/infrastructure/api/schemas/error.py` ; c'est lui que le mutator d'Orval
-([ADR-0007](../adr/0007-client-api-genere-orval.md)) normalisera en un seul endroit. `details` est
+([ADR-0007](../adr/0007-client-api-genere-orval.md)) normalise en un seul endroit — et **le client
+en dérive désormais son type** plutôt que de le recopier. Il a fallu pour cela que le contrat
+l'annonce : le 422 du routeur v1 le déclarait déjà, mais aucune route v1 n'existe encore, si bien
+que le composant n'entrait pas dans l'OpenAPI. FRONT-10 a donc déclaré le **500 sur `/health/ready`**,
+qui le produit réellement — la sonde 4 ci-dessous le prouve depuis BACK-09. Les statuts métier des
+routes v1 restent à déclarer par les tickets qui les livrent (BACK-28), comme le veut l'écart
+consigné avec ce ticket. `details` est
 toujours un **objet** ou `null`, jamais une liste au sommet : un objet s'étend sans casser le
 contrat. `request_id` porte l'identifiant de la requête, posé par l'intergiciel de corrélation
 ([Journalisation](./journalisation.md)) et renvoyé au client dans l'en-tête `X-Request-ID` : le
@@ -147,7 +153,7 @@ print('format unique tenu')
 
 ```bash
 uv run pytest tests/shared/test_error_handlers.py tests/shared/test_exceptions.py -q
-# 29 passed
+# 36 passed
 ```
 
 **5. La non-divulgation, preuve HTTP.** PostgreSQL requis (`make up` à la racine).

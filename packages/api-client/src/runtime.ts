@@ -25,7 +25,7 @@
  * FRONT-07, dans `src/auth/`. Ici il n'y a qu'une prise de courant.
  */
 
-import { ApiConfigurationError } from './errors';
+import { ApiConfigurationError } from './errors/api-error';
 
 /** De quoi le mutator a besoin pour signer une requete (ADR-0012). */
 export type RequestIdentity = {

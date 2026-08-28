@@ -20,6 +20,10 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ErrorResponse
+} from '../model/error-response';
+
+import type {
   LivenessReport
 } from '../model/liveness-report';
 
@@ -28,6 +32,7 @@ import type {
 } from '../model/readiness-report';
 
 import { customFetch } from '../../../mutator';
+import type { ErrorType } from '../../../mutator';
 
 
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
@@ -87,7 +92,7 @@ export const getCheckLivenessQueryKey = () => {
     }
 
 
-export const getCheckLivenessQueryOptions = <TData = Awaited<ReturnType<typeof checkLiveness>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getCheckLivenessQueryOptions = <TData = Awaited<ReturnType<typeof checkLiveness>>, TError = ErrorType<unknown>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -106,10 +111,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type CheckLivenessQueryResult = NonNullable<Awaited<ReturnType<typeof checkLiveness>>>
-export type CheckLivenessQueryError = unknown
+export type CheckLivenessQueryError = ErrorType<unknown>
 
 
-export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = unknown>(
+export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = ErrorType<unknown>>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof checkLiveness>>,
@@ -119,7 +124,7 @@ export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = unknown>(
+export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof checkLiveness>>,
@@ -129,7 +134,7 @@ export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = unknown>(
+export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -137,7 +142,7 @@ export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness
  * @summary Sonde de vie
  */
 
-export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = unknown>(
+export function useCheckLiveness<TData = Awaited<ReturnType<typeof checkLiveness>>, TError = ErrorType<unknown>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkLiveness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
@@ -204,7 +209,7 @@ export const getCheckReadinessQueryKey = () => {
     }
 
 
-export const getCheckReadinessQueryOptions = <TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ReadinessReport>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getCheckReadinessQueryOptions = <TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ErrorType<ErrorResponse | ReadinessReport>>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -223,10 +228,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type CheckReadinessQueryResult = NonNullable<Awaited<ReturnType<typeof checkReadiness>>>
-export type CheckReadinessQueryError = ReadinessReport
+export type CheckReadinessQueryError = ErrorType<ErrorResponse | ReadinessReport>
 
 
-export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ReadinessReport>(
+export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ErrorType<ErrorResponse | ReadinessReport>>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof checkReadiness>>,
@@ -236,7 +241,7 @@ export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadine
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ReadinessReport>(
+export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ErrorType<ErrorResponse | ReadinessReport>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof checkReadiness>>,
@@ -246,7 +251,7 @@ export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadine
       >, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ReadinessReport>(
+export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ErrorType<ErrorResponse | ReadinessReport>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -254,7 +259,7 @@ export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadine
  * @summary Sonde de disponibilite
  */
 
-export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ReadinessReport>(
+export function useCheckReadiness<TData = Awaited<ReturnType<typeof checkReadiness>>, TError = ErrorType<ErrorResponse | ReadinessReport>>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof checkReadiness>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

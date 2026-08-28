@@ -17,8 +17,39 @@
  * ajoute se greffe autour ; rien ne remplace ce que le genere a decide.
  */
 
-import { normalizeErrorResponse, transportFailure } from './errors';
+import { normalizeErrorResponse, transportFailure } from './errors/api-error';
 import { readRequestIdentity, resolveBaseUrl } from './runtime';
+
+import type { ApiError } from './errors/api-error';
+
+/**
+ * FRONT-10 -- Le type d'erreur des hooks generes, aligne sur ce qui est LEVE.
+ *
+ * ORVAL LIT CE NOM DANS CE FICHIER. Le generateur cherche litteralement
+ * « export type ErrorType » dans le mutator ; s'il le trouve, chaque hook est
+ * type `TError = ErrorType<...>` au lieu de deduire son erreur des reponses
+ * declarees dans l'OpenAPI.
+ *
+ * CE QU'ON CORRIGE : la deduction est FAUSSE ici. Le code genere croyait que
+ * `useCheckReadiness` echouait avec un `ReadinessReport` -- le modele du 503 --
+ * alors que ce fichier leve une `ApiError` sur tout echec. Un appelant qui lisait
+ * `error.status` compilait sur un type qui ne le porte pas. Depuis que le 500
+ * est declare (FRONT-10), la deduction rendrait `ReadinessReport | ErrorResponse`,
+ * c'est-a-dire le corps JSON brut : toujours faux, et plus credible.
+ *
+ * `_TBody` RESTE INUTILISE A DESSEIN, et le souligne le dit au lint comme au
+ * lecteur : Orval passe la le corps qu'il a deduit de l'OpenAPI, dont
+ * `ApiError` porte deja la substance -- `code`, `details`, et le corps brut
+ * dans `rawBody`. Le parametre existe parce que le generateur ecrit
+ * `ErrorType<...>`, pas parce qu'on en attend quelque chose.
+ *
+ * C'EST UNE ASSERTION, PAS UNE DEDUCTION, et la nuance a son cas : un ABANDON
+ * de requete est re-leve tel quel un peu plus bas, donc un `DOMException`
+ * traverse ce type. TanStack Query le traite comme une annulation et n'en fait
+ * jamais un etat d'erreur -- aucun ecran ne le voit --, et `resolveApiError`
+ * (FRONT-10) digere de toute facon ce qui n'est pas une `ApiError`.
+ */
+export type ErrorType<_TBody> = ApiError;
 
 /**
  * Execute un appel a l'API : base URL, identite, erreurs normalisees.
