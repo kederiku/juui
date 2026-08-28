@@ -17,7 +17,7 @@ from app.core.correlation import use_account_id, use_clinic_id, use_request_id
 from app.core.logging import ConsoleFormatter, JsonFormatter
 from app.shared.infrastructure.tasks.middlewares import REQUEST_ID_LABEL, CorrelationMiddleware
 from app.shared.infrastructure.tenancy import current_group_label, use_all_groups, use_group
-from tests.core.logging_probes import make_record
+from tests.support.logs import make_record
 
 pytestmark = pytest.mark.observability
 

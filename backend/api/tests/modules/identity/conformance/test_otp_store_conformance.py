@@ -31,6 +31,7 @@ from app.modules.identity.domain.ports import OtpConsumption, OtpStore
 from app.modules.identity.infrastructure.clients.redis_otp_store import build_otp_store
 from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
 from tests.modules.identity.helpers import a_client_ip, otp_rules
+from tests.support.services import REDIS, REDIS_REMEDY, require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -186,8 +187,16 @@ class OtpStoreConformance:
 class TestRedisOtpStoreConformance(OtpStoreConformance):
     """La suite, jouee contre le Redis du poste."""
 
+    # SUR LA CLASSE, ET JAMAIS SUR LE MODULE (BACK-12) : un `pytestmark`
+    # de module marquerait aussi la moitie EN MEMOIRE, que
+    # `-m "not integration"` cesserait alors de jouer -- l'inverse exact de
+    # ce que la doublure existe pour permettre. La deduction automatique ne
+    # peut pas trancher ici : les deux moities demandent une fixture du meme
+    # nom, seul Redis distingue celle-ci.
+    pytestmark = pytest.mark.integration
+
     @pytest_asyncio.fixture
-    async def store(self) -> AsyncIterator[OtpStore]:
+    async def store(self, pytestconfig: pytest.Config) -> AsyncIterator[OtpStore]:
         """Magasin Redis reel, ou test ignore si l'instance ne repond pas.
 
         Les identifiants de compte sont tires au hasard a chaque test et les
@@ -197,7 +206,7 @@ class TestRedisOtpStoreConformance(OtpStoreConformance):
         opened = build_otp_store(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            pytest.skip("Redis n'est pas joignable : `make up` a la racine (INFRA-02).")
+            require_service(pytestconfig, name=REDIS, remedy=REDIS_REMEDY)
         yield opened
         await opened.aclose()
 

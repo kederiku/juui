@@ -102,6 +102,28 @@ class PlainNoteModel(UUIDPrimaryKey, Base):
     label: Mapped[str] = mapped_column(String(100))
 
 
+class DurableNoteModel(UUIDPrimaryKey, Base):
+    """Table du SEUL test qui commite pour de bon, et d'aucun autre.
+
+    POURQUOI UNE TROISIEME TABLE (BACK-12). Toute la suite ecrit dans la
+    transaction annulee de son test -- sauf
+    `test_a_commit_is_visible_from_another_connection`, qui doit commiter
+    REELLEMENT pour prouver qu'un commit franchit la connexion. Tant qu'il
+    ecrivait dans `plain_notes_test`, sa ligne etait VISIBLE, pendant les
+    quelques microsecondes de sa vie, d'une seconde execution de la suite tournant
+    sur le meme cluster -- et les tests de pagination de la conformite affirment
+    des totaux ABSOLUS sur cette table. Mesure : un echec sur seize executions
+    paralleles, `assert 2 == 1` sur un `PageResult.total`.
+
+    Une table a lui seul ferme la fenetre par construction, la ou une purge ne
+    peut que la reduire. Personne d'autre ne compte ses lignes.
+    """
+
+    __tablename__ = "durable_notes_test"
+
+    label: Mapped[str] = mapped_column(String(100))
+
+
 class TenantNoteRepository(TenantSqlAlchemyRepository[TenantNote, TenantNoteModel]):
     """Depot tenant factice : herite du filtre, ne declare que son mapping."""
 
@@ -175,9 +197,13 @@ class NoteUnitOfWork(AbstractUnitOfWork):
 class SqlAlchemyNoteUnitOfWork(SqlAlchemyUnitOfWork, NoteUnitOfWork):
     """Cote REEL de la conformite : PostgreSQL, par la base de test.
 
-    Elle COMMITE pour de bon -- c'est le sujet meme du critere 1, et c'est
-    pourquoi la fixture de conformite purge les deux tables avant et apres chaque
-    test au lieu de compter sur le rollback de la fixture `session`.
+    Elle COMMITE pour de bon -- c'est le sujet meme du critere 1. Depuis
+    BACK-12, la fixture de conformite ne purge plus rien pour autant : elle la
+    construit sur `bound_sessionmaker`, dont les sessions s'inscrivent en
+    SAVEPOINT dans la transaction du test, que le teardown annule. Le commit
+    reste un vrai commit du point de vue de la session ; ce qu'il ne franchit
+    plus, c'est la frontiere de la connexion -- et c'est l'objet du seul test qui
+    sort du patron, `test_a_commit_is_visible_from_another_connection`.
     """
 
     @property

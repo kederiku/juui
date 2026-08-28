@@ -87,7 +87,7 @@ dev = [
     # `uv sync`.
     "import-linter==2.13",
 
-    # Tests -- la strategie a trois niveaux est l'objet de BACK-12.
+    # Tests -- le harnais et ses deux niveaux sont l'objet de BACK-12.
     "pytest~=9.1",
     "pytest-asyncio~=1.4",
     "pytest-cov~=7.1",
@@ -232,15 +232,16 @@ extend-immutable-calls = ["taskiq.TaskiqDepends"]
 
 [tool.ruff.lint.per-file-ignores]
 # La regle a ete posee avant tests/ pour que la suite de tests naisse conforme ;
-# BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 apportera le
+# BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 a hisse le
 # harnais complet.
 #
 # S101 : `assert` est la maniere normale d'ecrire un test, pas une faille.
 # D1   : un test se nomme, il ne se documente pas.
 #
-# ANN reste ACTIF ici : le ticket ne demandait d'assouplir que ces deux points,
-# et `-> None` sur une fonction de test coute huit caracteres. A rediscuter en
-# BACK-12 si la contrainte se revele penible.
+# ANN reste ACTIF ici, et BACK-12 a FERME cet arbitrage : la contrainte ne s'est
+# pas revelee penible -- la suite entiere la tient sans une seule derogation --,
+# et la relacher au moment ou `tests/` reste hors de Mypy retirerait la seule
+# barriere de typage qui y court encore.
 "tests/**/*.py" = ["S101", "D1"]
 
 # Le resume d'une migration est le message passe a `alembic revision -m` : un
@@ -276,8 +277,10 @@ mypy_path = "src"
 # premiers .py hors de src/ les seuls non verifies. scripts/ y entre avec
 # SHARED-03, et pour une raison plus forte encore : c'est le seul code Python du
 # depot dont la SORTIE est commitee, il ne pouvait pas etre le seul non verifie.
-# tests/ reste volontairement hors perimetre : c'est BACK-12 qui decidera de l'y
-# faire entrer.
+# tests/ reste hors perimetre, et BACK-12 a rendu cette decision : la mesure en
+# donne des dizaines d'erreurs, dont la majorite porte sur des tests qu'on ne
+# ferait taire qu'en annotant le mensonge qu'ils denoncent. Reproductible par
+# `uv run mypy --cache-dir=/dev/null tests` ; l'ecart est chiffre au registre.
 files = ["src", "alembic", "scripts"]
 
 # Une seule derogation, et elle est declaree PAR MODULE -- jamais globalement,
@@ -301,19 +304,54 @@ init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
-# Configuration MINIMALE de pytest, tiree en avant par BACK-06b pour ses tests
-# d'isolation -- ecart consigne au registre. Le harnais complet appartient a
-# BACK-12 : les marqueurs unit/integration/slow, --strict-markers, la
-# couverture et les fixtures generales s'ajouteront ici.
+# ---------------------------------------------------------------------------
+# Harnais de test : le niveau se deduit, le sujet se declare (BACK-12)
+# ---------------------------------------------------------------------------
+# DEUX AXES DE MARQUEURS, ET ILS NE REPONDENT PAS A LA MEME QUESTION. Le NIVEAU
+# dit ce qu'un test COUTE -- « puis-je le lancer sans Docker ? » ; il est pose
+# automatiquement par `pytest_collection_modifyitems` (tests/conftest.py). Le
+# SUJET dit quel comportement il garde -- « qu'est-ce que BACK-17 a livre ? » ;
+# il se pose a la main, par le ticket qui livre le comportement. Les deux se
+# cumulent : `-m "otp and not integration"` est une selection legitime.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Mode auto : chaque test async tourne sans decorateur, decision anticipee sur
-# BACK-12 -- necessaire pour ecrire le premier test asynchrone.
+# Mode auto : chaque test async tourne sans decorateur.
 asyncio_mode = "auto"
 # Fige le defaut actuel de pytest-asyncio et fait taire son avertissement.
 asyncio_default_fixture_loop_scope = "function"
+# `--strict-markers` : un marqueur non declare devient une ERREUR de collecte.
+#   Sans lui `pytest.mark.integrtion` est un no-op silencieux, et
+#   `make test-integration` annoncerait « 0 selected » sans que rien ne soit
+#   faux. C'est la contrepartie indispensable de la liste ci-dessous, et ce qui
+#   rend la categorie obligatoire `tenant_isolation` autre chose qu'un voeu.
+# `--strict-config` : une cle inconnue dans cette section echoue au lieu d'etre
+#   ignoree -- meme raison, appliquee a la configuration.
+# PAS DE `-rs`, ET C'EST MESURE. Le rendre permanent semblait etre la piece qui
+#   empeche une suite verte de cacher une moitie non jouee. Il fait l'inverse :
+#   TOUS les sauts de cette suite viennent de `require_service`, donc `-rs`
+#   repete le meme motif -- 146 lignes identiques quand PostgreSQL manque --, et
+#   pytest ecrit ce bloc APRES tous les `pytest_terminal_summary`, `trylast`
+#   compris. Le recensement, qui dit la meme chose en trois lignes, se
+#   retrouvait pousse hors de l'ecran par ce qu'il existe pour remplacer.
+#   `-rs` reste disponible a la demande, et `--require-services` reste la piece
+#   qui transforme un saut en echec.
+# PAS DE `--cov` ICI NON PLUS, a dessein : il rendrait `pytest -k foo` echouant
+#   au seuil, et un seuil qui mord sur chaque execution ciblee finit desactive.
+#   La barriere vit dans `make test-cov`.
+addopts = ["--strict-markers", "--strict-config"]
 markers = [
-    "tenant_isolation: tests d'isolation multi-tenant (BACK-06b)",
+    # --- NIVEAU : pose automatiquement, exactement un par test --------------
+    "unit: test qui ne demande aucun service reel -- tourne sans Docker (BACK-12)",
+    "integration: test adosse a un service reel -- PostgreSQL, Redis, MinIO, Mailpit (BACK-12)",
+    # `slow` est un QUALIFICATIF, pas un troisieme niveau : un test peut etre
+    # `unit` ET `slow`. C'est pourquoi `make test-unit` joue `-m unit` tout court.
+    # La forme `-m "unit and not slow"` a ete essayee et retiree : elle laissait
+    # le seul test des deux categories hors des DEUX cibles de niveau, sans que
+    # rien ne le dise -- exactement l'accident que ce marqueur existe pour eviter.
+    "slow: test dont la duree justifie de pouvoir l'ecarter a la main (BACK-12)",
+
+    # --- SUJET : pose a la main, cumulable avec le niveau -------------------
+    "tenant_isolation: tests d'isolation multi-tenant (BACK-06b, obligatoires depuis BACK-12)",
     "pagination: tests de la convention de pagination (BACK-24)",
     "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
     "otp: tests de la verification d'adresse par code OTP (BACK-17)",
@@ -323,6 +361,44 @@ markers = [
     "authorization: tests des dependances d'authentification et d'autorisation (BACK-10c)",
     "passwords: tests de la politique de mot de passe et du controle de fuite (BACK-10b)",
     "scheduling: tests du socle de la fiche technique praticien (BACK-21)",
+]
+
+# ---------------------------------------------------------------------------
+# Couverture (BACK-12)
+# ---------------------------------------------------------------------------
+# `--cov` N'EST PAS DANS LES `addopts` DE PYTEST, A DESSEIN. Il y rendrait
+# `pytest tests/modules/identity/domain` mesurable a quelques pour cent du
+# service entier, donc EN ECHEC au seuil -- et un seuil qui mord sur chaque
+# execution ciblee, celle qu'on lance quarante fois par heure, finit desactive.
+# La barriere vit dans `make test-cov`, et c'est la seule qui doive exister.
+#
+# LE SEUIL NE PORTE QUE SUR `domain/` ET `application/`, ce que le ticket
+# demande et qui n'est pas un detail : ce sont les couches dont le COMPORTEMENT
+# est le sujet des tests. L'infrastructure est couverte par les tests
+# d'integration, dont le taux depend des services joignables sur le poste -- un
+# seuil qui bougerait selon que Redis tourne ou non ne serait pas un seuil.
+# `make test-cov` produit donc DEUX rapports : le service entier, informatif, et
+# les deux couches gardees, bloquant.
+[tool.coverage.run]
+# Le paquet installe et non un chemin : `uv sync` installe le projet lui-meme,
+# et c'est sous ce nom que les modules sont importes.
+source = ["app"]
+# La couverture de BRANCHES, pas seulement de lignes : un `if` dont un seul cote
+# est joue est un `if` a moitie teste, et c'est precisement la moitie qui casse.
+# Mesure a l'activation : elle ne coute rien ici, le taux est le meme.
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+# Un fichier VIDE -- les `__init__.py` de paquet -- n'a rien a couvrir et ne dit
+# rien au lecteur du rapport.
+skip_empty = true
+exclude_also = [
+    # Le corps d'une methode de Protocol ou d'une methode abstraite. Les ports du
+    # depot ont pour la plupart un corps fait d'une docstring seule, que coverage
+    # ne compte deja pas ; ceux qui portent `...` sont ici.
+    "^\\s*\\.\\.\\.$",
 ]
 
 # ---------------------------------------------------------------------------
@@ -354,10 +430,15 @@ markers = [
 # a l'import qu'elle couvrait.
 
 [tool.importlinter]
-# Le paquet a analyser. Il doit etre IMPORTABLE : c'est le cas, `uv sync`
-# installe le projet lui-meme, et `module-name = "app"` plus haut lui donne ce
-# nom-la.
-root_package = "app"
+# Les paquets a analyser. Ils doivent etre IMPORTABLES : `uv sync` installe le
+# projet lui-meme, et `module-name = "app"` plus haut lui donne ce nom-la ; le
+# paquet `tests` l'est par ses `__init__.py`.
+#
+# `tests` y entre avec BACK-12, pour le contrat 6 : le ticket range les tests par
+# module en disant pourquoi -- « sinon la frontiere de module n'existe que dans
+# src/ ». Or un arbre ne TIENT pas une frontiere, il l'affiche. Un contrat la
+# tient.
+root_packages = ["app", "tests"]
 
 # Fait entrer les paquets EXTERNES dans le graphe. Sans cette ligne, `fastapi`
 # ou `sqlalchemy` n'y existeraient pas et le contrat 1 ne pourrait pas les
@@ -503,6 +584,28 @@ id = "module-independence"
 name = "3. Independance des modules"
 type = "independence"
 modules = ["app.modules.*"]
+
+# --- Contrat 6 : l'independance des modules, dans la suite de tests aussi -----
+# Le miroir du contrat 3, applique a `tests.modules.*`. BACK-12 range les tests
+# par module en disant pourquoi -- « sinon la frontiere de module n'existe que
+# dans src/ ». Or un arbre AFFICHE une frontiere, il ne la tient pas : sans ce
+# contrat, un test d'`organization` important le `helpers.py` d'`identity` la
+# traverserait sans bruit, et le rangement deviendrait decoratif. Mesure : ce cas
+# precis fait bien echouer `lint-imports`.
+#
+# CE QU'IL NE GARDE PAS, et il faut le dire pour ne pas se reposer sur lui a
+# tort : un contrat d'independance regarde les imports ENTRE LES MODULES QU'IL
+# NOMME. Un test d'`organization` qui importerait `app.modules.identity` -- du
+# code de PRODUCTION, pas du code de test -- passe au travers. Ce cas-la reste
+# une affaire de revue ; `tests/test_species_vocabulary.py` en est l'exemple
+# legitime, un invariant inter-contextes qui compare les deux vocabulaires
+# d'especes et vit pour cette raison a la racine, avec les autres tests qui
+# n'appartiennent a aucun module.
+[[tool.importlinter.contracts]]
+id = "test-module-independence"
+name = "6. Independance des modules dans la suite de tests"
+type = "independence"
+modules = ["tests.modules.*"]
 
 # --- Contrat 4 : le sens des couches du noyau partage -----------------------
 # Hors portee litterale du ticket, et pourtant du meme bois : `app.shared` a un

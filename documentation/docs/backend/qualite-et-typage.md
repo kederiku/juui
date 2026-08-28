@@ -50,7 +50,9 @@ et `D` (docstrings).
 
 Dans `tests/` — ouvert par BACK-06b avec les tests d'isolation, complété par
 BACK-12 — `assert` (S101) et les docstrings (D1xx) sont relâchés. Les
-annotations, non : `-> None` sur une fonction de test coûte huit caractères.
+annotations, non : `-> None` sur une fonction de test coûte huit caractères, et
+**BACK-12 a fermé cet arbitrage** — la suite le tient sans une seule
+dérogation.
 
 À noter : `ruff format` traite aussi les blocs de code Python **de la
 documentation Markdown**, ce qui garde les exemples conformes. Un extrait
@@ -59,8 +61,12 @@ les fichiers Markdown.
 
 ## Mypy
 
-Mode `strict`, plugin Pydantic activé, périmètre `src/` (les tests y entreront
-avec BACK-12 si ce ticket le décide). `strict` couvre à lui seul
+Mode `strict`, plugin Pydantic activé, périmètre `src/`, `alembic/` et
+`scripts/`. **`tests/` en reste dehors, et c'est une décision rendue par
+BACK-12** : la mesure en donne des dizaines d'erreurs, dont la majorité porte sur
+des tests qu'on ne ferait taire qu'en annotant le mensonge qu'ils dénoncent
+([écart chiffré](../ecarts/back.md#écarts-assumés-avec-le-ticket-back-12)).
+`strict` couvre à lui seul
 `disallow_untyped_defs`, `warn_return_any` et `warn_unused_ignores`, entre
 autres — d'où l'absence de ces clés dans le `pyproject.toml`.
 

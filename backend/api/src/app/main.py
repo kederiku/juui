@@ -29,8 +29,9 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.core import AppSettings, configure_logging, get_settings
+from app.core import AppSettings, Settings, configure_logging, get_settings
 from app.modules.identity import router as identity_router
 from app.modules.identity.infrastructure.clients.redis_otp_store import (
     OTP_STORE_STATE_KEY,
@@ -55,6 +56,64 @@ from app.shared.infrastructure.db.engine import build_engine, verify_connectivit
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
 from app.shared.infrastructure.security.jwt_service import build_token_service
 from app.shared.infrastructure.tenancy import current_group_label
+
+
+def build_authentication(
+    settings: Settings, sessionmaker: async_sessionmaker[AsyncSession]
+) -> Authentication:
+    """Assemble le montage d'authentification sur une fabrique de sessions.
+
+    Les quatre resolveurs sont le POINT DE PASSAGE entre `shared`, qui porte les
+    dependances, et les deux modules qui detiennent les donnees. Chacun ouvre son
+    unite de travail sur le `sessionmaker` : une lecture breve, close avant que la
+    route ne commence la sienne -- l'authentification ne s'inscrit pas dans la
+    transaction du cas d'usage, et n'a aucune raison de la tenir ouverte.
+
+    AU NIVEAU DU MODULE, ET PAS DANS LE `lifespan` : C'EST POUR LE HARNAIS
+    (BACK-12). Tant que ces closures vivaient dans le `lifespan`, un test ne
+    pouvait que les RECOPIER -- ce qu'ont du faire `test_auth_integration.py` et
+    `test_jwt_service_integration.py`, chacun a sa facon, testant donc une
+    composition qui n'est pas celle qui tourne. Le `lifespan` n'y perd rien : il
+    appelle cette fonction avec le `sessionmaker` qu'il vient de construire.
+
+    Args:
+        settings: la configuration du service, dont la section des jetons.
+        sessionmaker: la fabrique sur laquelle les resolveurs liront. Le harnais
+            y passe la sienne, liee a la transaction annulee du test, si bien
+            que les resolveurs voient un semis non commite.
+
+    Returns:
+        Le montage, a ranger sous `AUTH_STATE_KEY` dans `app.state`.
+    """
+
+    async def resolve_group_role(account_id: UUID, group_id: UUID, at: datetime) -> str | None:
+        """Rend le role de groupe d'un compte, a l'emission d'un jeton."""
+        async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+            return await uow.memberships.find_active_role(account_id, group_id, at)
+
+    async def resolve_account(account_id: UUID) -> AccountRecord:
+        """Rend le compte porteur d'un jeton verifie."""
+        async with SqlAlchemyIdentityUnitOfWork(sessionmaker) as uow:
+            return await uow.accounts.get(account_id)
+
+    async def resolve_active_assignments(
+        account_id: UUID, at: datetime
+    ) -> Sequence[ActiveAssignment]:
+        """Rend les affectations actives d'un compte dans le groupe actif."""
+        async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+            return await uow.assignments.list_active_for_account(account_id, at)
+
+    async def resolve_clinic_group(clinic_id: UUID) -> UUID | None:
+        """Rend le groupe proprietaire d'une clinique, sans filtre de tenance."""
+        async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+            return await uow.clinics.find_group_id(clinic_id)
+
+    return Authentication(
+        tokens=build_token_service(settings, resolve_group_role),
+        resolve_account=resolve_account,
+        resolve_active_assignments=resolve_active_assignments,
+        resolve_clinic_group=resolve_clinic_group,
+    )
 
 
 @asynccontextmanager
@@ -119,49 +178,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         sessionmaker = build_sessionmaker(engine)
         setattr(app.state, STATE_KEY, Database(engine=engine, sessionmaker=sessionmaker))
 
-        # Montage de l'authentification (BACK-10c). Les quatre resolveurs sont
-        # le POINT DE PASSAGE entre `shared`, qui porte les dependances, et les
-        # deux modules qui detiennent les donnees. Chacun ouvre son unite de
-        # travail sur le `sessionmaker` : une lecture breve, close avant que la
-        # route ne commence la sienne -- l'authentification ne s'inscrit pas
-        # dans la transaction du cas d'usage, et n'a aucune raison de la tenir
-        # ouverte.
-        #
-        # Ici, et pas dans `create_app()` : ces closures capturent le
-        # `sessionmaker`, qui n'existe qu'une fois le moteur construit.
-
-        async def resolve_group_role(account_id: UUID, group_id: UUID, at: datetime) -> str | None:
-            """Rend le role de groupe d'un compte, a l'emission d'un jeton."""
-            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
-                return await uow.memberships.find_active_role(account_id, group_id, at)
-
-        async def resolve_account(account_id: UUID) -> AccountRecord:
-            """Rend le compte porteur d'un jeton verifie."""
-            async with SqlAlchemyIdentityUnitOfWork(sessionmaker) as uow:
-                return await uow.accounts.get(account_id)
-
-        async def resolve_active_assignments(
-            account_id: UUID, at: datetime
-        ) -> Sequence[ActiveAssignment]:
-            """Rend les affectations actives d'un compte dans le groupe actif."""
-            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
-                return await uow.assignments.list_active_for_account(account_id, at)
-
-        async def resolve_clinic_group(clinic_id: UUID) -> UUID | None:
-            """Rend le groupe proprietaire d'une clinique, sans filtre de tenance."""
-            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
-                return await uow.clinics.find_group_id(clinic_id)
-
-        setattr(
-            app.state,
-            AUTH_STATE_KEY,
-            Authentication(
-                tokens=build_token_service(settings, resolve_group_role),
-                resolve_account=resolve_account,
-                resolve_active_assignments=resolve_active_assignments,
-                resolve_clinic_group=resolve_clinic_group,
-            ),
-        )
+        # Montage de l'authentification (BACK-10c), assemble hors d'ici depuis
+        # BACK-12 : voir `build_authentication`.
+        setattr(app.state, AUTH_STATE_KEY, build_authentication(settings, sessionmaker))
 
         # Troisieme ressource : le cache Redis (BACK-14), base 0. Comme le
         # moteur, le construire n'ouvre aucune connexion.
@@ -300,14 +319,14 @@ def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
     """Construit une instance neuve et independante de l'application.
 
     Passer par une factory plutot que de configurer un objet global est ce qui
-    rendra les tests de BACK-12 possibles : chaque test construit son
-    application, avec ses propres surcharges de dependances, sans heriter de
-    l'etat laisse par le test precedent.
+    rend le harnais de BACK-12 possible : la fixture `application` construit une
+    instance neuve par test, avec ses propres surcharges de dependances, sans
+    heriter de l'etat laisse par le precedent.
 
     Args:
         app_settings: reglages generaux employes A LA CONSTRUCTION -- fermeture
-            de /docs comprise. `None` les lit de l'environnement ; les tests de
-            BACK-12 passeront les leurs sans manipuler de variables.
+            de /docs comprise. `None` les lit de l'environnement ; les sondes
+            d'intergiciels passent les leurs sans manipuler de variables.
 
     Returns:
         L'application FastAPI, sondes et routeur v1 deja montes.

@@ -14,7 +14,7 @@ UNE FONCTION DE `Settings`, ET NON UN LECTEUR DE CONFIGURATION
 ecrite dans `db/engine.py` et `redis_cache.py` : `get_settings()` est mise en
 cache par `lru_cache`, et un constructeur qui l'appellerait de l'interieur ne
 saurait pas fabriquer un client different de celui du processus. Le worker TaskIQ
-(BACK-15) et les fixtures de BACK-12 auront besoin du leur.
+(BACK-15) et les fixtures de BACK-12 ont besoin du leur.
 
 L'ASYMETRIE A TROIS TEMPS DU SERVICE, ET LA PLACE DE CE FICHIER DEDANS
 BACK-05 livre `verify_connectivity`, qui LEVE et arrete le processus : sans base,
@@ -138,8 +138,8 @@ _HTTP_NOT_FOUND: Final = 404
 # `BotoCoreError` couvre `EndpointConnectionError`, `ConnectTimeoutError` et
 # `ReadTimeoutError`, qui en heritent tous -- verifie. `OSError` n'est pas
 # redondant : une resolution DNS en echec peut remonter telle quelle avant que
-# botocore ne l'enveloppe. Meme raisonnement que les `_UNREACHABLE` de
-# `db/engine.py` et de `redis_cache.py`.
+# botocore ne l'enveloppe. Meme raisonnement que le `UNREACHABLE_ERRORS` de
+# `db/engine.py` et le `_UNREACHABLE` de `redis_cache.py`.
 #
 # `ClientError` n'y figure PAS : elle porte une reponse du serveur, donc une
 # information a lire -- c'est `_translate` qui la trie.

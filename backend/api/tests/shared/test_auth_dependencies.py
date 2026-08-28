@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import APIRouter, Depends
+from httpx import AsyncClient
 
 from app.core.correlation import current_account_id
 from app.modules.identity.domain.entities import Account, AccountStatus, AccountType
@@ -30,19 +31,22 @@ from app.shared.infrastructure.security.jwt_service import (
     ACCOUNT_TYPE_PROFESSIONAL,
 )
 from app.shared.infrastructure.tenancy import current_group_id
-from tests.shared.auth_probes import (
-    ACCOUNT_ID,
-    AUDIENCE_INDIVIDUAL,
-    AUDIENCE_PRO,
-    GROUP_ID,
-    OTHER_SIGNING_KEY,
+from tests.support.api import asgi_client
+from tests.support.auth import (
     Calls,
     FakeAccount,
     an_authentication,
     bearer,
     build_probe_app,
-    client,
     token_service,
+)
+from tests.support.tokens import (
+    ACCOUNT_ID,
+    AUDIENCE_INDIVIDUAL,
+    AUDIENCE_PRO,
+    GROUP_ID,
+    OTHER_SIGNING_KEY,
+    TokenFactory,
 )
 
 pytestmark = pytest.mark.authorization
@@ -53,12 +57,11 @@ pytestmark = pytest.mark.authorization
 # ---------------------------------------------------------------------------
 
 
-async def test_a_valid_bearer_token_identifies_the_account() -> None:
+async def test_a_valid_bearer_token_identifies_the_account(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Le chemin nominal : un jeton emis par le service ouvre la route."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
-        response = await opened.get("/pro/me", headers=await bearer(service))
+    response = await probe_client.get("/pro/me", headers=await tokens.bearer())
     assert response.status_code == 200
     assert response.json() == {"account_id": str(ACCOUNT_ID)}
 
@@ -105,12 +108,11 @@ async def _refused_headers(case: str) -> dict[str, str]:
         "refresh_token",
     ],
 )
-async def test_every_token_failure_produces_the_same_response(case: str) -> None:
+async def test_every_token_failure_produces_the_same_response(
+    case: str, probe_client: AsyncClient
+) -> None:
     """Sept causes distinctes, une seule reponse : aucune ne se distingue."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
-        response = await opened.get("/pro/me", headers=await _refused_headers(case))
+    response = await probe_client.get("/pro/me", headers=await _refused_headers(case))
     assert response.status_code == 401
     body = response.json()
     assert body["code"] == "http.request.unauthorized"
@@ -121,7 +123,7 @@ async def test_every_token_failure_produces_the_same_response(case: str) -> None
 async def test_the_refusal_carries_a_bearer_challenge_naming_neither_realm_nor_error() -> None:
     """Le defi est nu : un `realm` nommerait la structure, un `error=` serait un oracle."""
     application = build_probe_app()
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me")
     assert response.headers["www-authenticate"] == "Bearer"
 
@@ -129,7 +131,7 @@ async def test_the_refusal_carries_a_bearer_challenge_naming_neither_realm_nor_e
 async def test_the_refusal_keeps_the_four_keys_of_the_error_format() -> None:
     """Un 401 est une erreur comme les autres : meme enveloppe (BACK-09)."""
     application = build_probe_app()
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me")
     assert set(response.json()) == {"code", "message", "details", "request_id"}
 
@@ -138,42 +140,39 @@ async def test_a_token_whose_subject_has_no_account_is_refused_as_unauthenticate
     """Un `sub` inconnu ne sort PAS en 404 : ce serait un oracle sur la cle."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, accounts={}))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=await bearer(service))
     assert response.status_code == 401
     assert response.json()["code"] == "http.request.unauthorized"
 
 
-async def test_two_authorization_headers_are_refused_rather_than_resolved() -> None:
+async def test_two_authorization_headers_are_refused_rather_than_resolved(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Une valeur cliente ne se rectifie jamais -- on ne choisit pas la premiere."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    valid = (await bearer(service))["Authorization"]
-    async with client(application) as opened:
-        response = await opened.get(
-            "/pro/me",
-            headers=[("authorization", valid), ("authorization", "Bearer autre")],
-        )
+    valid = (await tokens.bearer())["Authorization"]
+    response = await probe_client.get(
+        "/pro/me",
+        headers=[("authorization", valid), ("authorization", "Bearer autre")],
+    )
     assert response.status_code == 401
 
 
-async def test_a_token_placed_in_a_cookie_does_not_authenticate() -> None:
+async def test_a_token_placed_in_a_cookie_does_not_authenticate(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Aucun repli cookie : ce serait rendre toutes les routes vulnerables au CSRF."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    token = (await bearer(service))["Authorization"].removeprefix("Bearer ")
-    async with client(application) as opened:
-        response = await opened.get("/pro/me", headers={"Cookie": f"access_token={token}"})
+    token = (await tokens.bearer())["Authorization"].removeprefix("Bearer ")
+    response = await probe_client.get("/pro/me", headers={"Cookie": f"access_token={token}"})
     assert response.status_code == 401
 
 
-async def test_a_token_placed_in_the_query_string_does_not_authenticate() -> None:
+async def test_a_token_placed_in_the_query_string_does_not_authenticate(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Aucun repli sur l'URL : elle se journalise chez les mandataires."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    token = (await bearer(service))["Authorization"].removeprefix("Bearer ")
-    async with client(application) as opened:
-        response = await opened.get(f"/pro/me?access_token={token}")
+    token = (await tokens.bearer())["Authorization"].removeprefix("Bearer ")
+    response = await probe_client.get(f"/pro/me?access_token={token}")
     assert response.status_code == 401
 
 
@@ -182,7 +181,7 @@ async def test_a_token_failure_never_reaches_the_database() -> None:
     calls = Calls()
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, calls=calls))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         await opened.get("/pro/me", headers=await bearer(token_service(key=OTHER_SIGNING_KEY)))
     assert calls.accounts == 0
 
@@ -207,7 +206,7 @@ async def test_an_individual_token_is_refused_by_a_professional_route() -> None:
         audience=AUDIENCE_INDIVIDUAL,
         active_group_id=None,
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=headers)
     assert response.status_code == 401
 
@@ -227,7 +226,7 @@ async def test_an_individual_token_is_accepted_by_the_individual_route() -> None
         audience=AUDIENCE_INDIVIDUAL,
         active_group_id=None,
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/individual/me", headers=headers)
     assert response.status_code == 200
 
@@ -244,7 +243,7 @@ async def test_a_token_whose_audience_contradicts_its_account_type_is_refused() 
     # L'emission actuelle ne confronte pas les deux (ADR-0024 le laissait a
     # BACK-29) : on peut donc produire ce jeton, et la bordure doit le refuser.
     headers = await bearer(service, account_type=ACCOUNT_TYPE_INDIVIDUAL, audience=AUDIENCE_PRO)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=headers)
     assert response.status_code == 401
 
@@ -264,7 +263,7 @@ async def test_the_expected_audience_is_not_read_from_any_request_header() -> No
         audience=AUDIENCE_INDIVIDUAL,
         active_group_id=None,
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/me", headers={**headers, "X-App": "individual", "X-Audience": AUDIENCE_INDIVIDUAL}
         )
@@ -288,7 +287,7 @@ async def test_a_route_declaring_an_unknown_audience_fails_loudly() -> None:
         return {"ok": True}
 
     application.include_router(router)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         with_token = await opened.get("/typo/me", headers=await bearer(service))
         without_token = await opened.get("/typo/me")
     assert with_token.status_code == 500
@@ -299,7 +298,7 @@ async def test_a_route_mounted_without_its_audience_marker_fails_loudly() -> Non
     """Defaut de cablage : 500, jamais un acces accorde ni un 401 trompeur."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/unmarked", headers=await bearer(service))
     assert response.status_code == 500
 
@@ -317,7 +316,7 @@ async def test_a_suspended_account_is_refused_by_the_lower_dependency() -> None:
             tokens=service, accounts={ACCOUNT_ID: FakeAccount(status=ACCOUNT_STATUS_SUSPENDED)}
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=await bearer(service))
     assert response.status_code == 403
     assert response.json()["code"] == "shared.account.suspended"
@@ -330,7 +329,7 @@ async def test_an_unverified_account_stays_authenticated_but_is_refused_by_the_a
         an_authentication(tokens=service, accounts={ACCOUNT_ID: FakeAccount(email_verified=False)})
     )
     headers = await bearer(service)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         identified = await opened.get("/pro/me", headers=headers)
         blocked = await opened.get("/pro/active", headers=headers)
     assert identified.status_code == 200
@@ -349,7 +348,7 @@ async def test_a_suspended_and_unverified_account_is_answered_suspended() -> Non
             },
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/active", headers=await bearer(service))
     assert response.json()["code"] == "shared.account.suspended"
 
@@ -377,7 +376,7 @@ async def test_an_account_in_an_unknown_status_is_refused_by_default() -> None:
     application = build_probe_app(
         an_authentication(tokens=service, accounts={ACCOUNT_ID: FakeAccount(status="closed")})
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=await bearer(service))
     assert response.status_code == 403
     assert response.json()["code"] == "shared.account.suspended"
@@ -402,7 +401,7 @@ async def test_the_active_group_claim_becomes_the_tenant_context() -> None:
     """Aucun cas d'usage ne pose ce groupe a la main : il vient du claim."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/context", headers=await bearer(service))
     assert response.json()["group_id"] == str(GROUP_ID)
 
@@ -411,7 +410,7 @@ async def test_the_account_and_the_clinic_are_stamped_in_the_logging_context() -
     """Le compte est pose ; la clinique reste vide sans en-tete, et c'est normal."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/context", headers=await bearer(service))
     body = response.json()
     assert body["account_id"] == str(ACCOUNT_ID)
@@ -422,7 +421,7 @@ async def test_a_public_route_served_after_an_authenticated_one_sees_no_tenant_c
     """Le contexte est relache : la requete suivante repart de zero."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         await opened.get("/pro/context", headers=await bearer(service))
         response = await opened.get("/public")
     assert response.json() == {"group_id": None, "account_id": None}
@@ -434,7 +433,7 @@ async def test_a_refusal_in_a_later_dependency_still_releases_the_context() -> N
     application = build_probe_app(
         an_authentication(tokens=service, accounts={ACCOUNT_ID: FakeAccount(email_verified=False)})
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         refused = await opened.get("/pro/active", headers=await bearer(service))
         public = await opened.get("/public")
     assert refused.status_code == 403
@@ -454,7 +453,7 @@ async def test_concurrent_requests_never_share_a_tenant_context() -> None:
             accounts={ACCOUNT_ID: FakeAccount(), other_account: FakeAccount(id=other_account)},
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         first, second = await asyncio.gather(
             opened.get("/pro/context", headers=await bearer(service)),
             opened.get(
@@ -488,7 +487,7 @@ async def test_the_dependencies_read_the_authentication_opened_by_the_lifespan()
     """Sans surcharge : c'est l'accesseur et la cle d'etat qui sont eprouves."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service), override=False)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=await bearer(service))
     assert response.status_code == 200
 
@@ -498,6 +497,6 @@ async def test_an_application_built_without_its_lifespan_answers_500_and_never_4
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service), override=False)
     delattr(application.state, "authentication")
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/me", headers=await bearer(service))
     assert response.status_code == 500

@@ -34,6 +34,7 @@ from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
 from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
 from app.modules.identity.infrastructure.tasks.otp import send_email_verification_otp
 from tests.modules.identity.helpers import an_account, stored_account
+from tests.support.services import MAILPIT, MAILPIT_REMEDY, require_service
 
 pytestmark = pytest.mark.otp
 
@@ -50,13 +51,13 @@ _CODE_IN_BODY = re.compile(r"Votre code de verification est : (\d{6})")
 
 
 @pytest.fixture
-async def mailpit() -> httpx.AsyncClient:
+async def mailpit(pytestconfig: pytest.Config) -> httpx.AsyncClient:
     """Client de l'API de Mailpit, ou test ignore si la boite ne repond pas."""
     async with httpx.AsyncClient(base_url=_MAILPIT_URL, timeout=5.0) as client:
         try:
             await client.get("/api/v1/messages", params={"limit": 1})
         except httpx.HTTPError:
-            pytest.skip(f"Mailpit ne repond pas sur {_MAILPIT_URL} : `make up` a la racine.")
+            require_service(pytestconfig, name=MAILPIT, remedy=MAILPIT_REMEDY)
         yield client
 
 

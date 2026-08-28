@@ -42,6 +42,7 @@ from app.shared.infrastructure.clients.s3_storage import (
 )
 from app.shared.infrastructure.clients.storage_keys import build_storage_key
 from app.shared.infrastructure.memory.file_storage import InMemoryFileStorage
+from tests.support.services import MINIO, MINIO_REMEDY, require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -193,13 +194,21 @@ class FileStorageConformance:
 class TestS3FileStorageConformance(FileStorageConformance):
     """La suite, jouee contre le MinIO du poste."""
 
+    # SUR LA CLASSE, ET JAMAIS SUR LE MODULE (BACK-12) : un `pytestmark`
+    # de module marquerait aussi la moitie EN MEMOIRE, que
+    # `-m "not integration"` cesserait alors de jouer -- l'inverse exact de
+    # ce que la doublure existe pour permettre. La deduction automatique ne
+    # peut pas trancher ici : les deux moities demandent une fixture du meme
+    # nom, seul MinIO distingue celle-ci.
+    pytestmark = pytest.mark.integration
+
     @pytest_asyncio.fixture
-    async def storage(self) -> AsyncIterator[FileStorage]:
+    async def storage(self, pytestconfig: pytest.Config) -> AsyncIterator[FileStorage]:
         """Stockage S3 reel, ou test ignore si le bucket ne repond pas."""
         opened = build_file_storage(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            pytest.skip("MinIO n'est pas joignable : `make up` a la racine (INFRA-03).")
+            require_service(pytestconfig, name=MINIO, remedy=MINIO_REMEDY)
         yield opened
         await opened.aclose()
 

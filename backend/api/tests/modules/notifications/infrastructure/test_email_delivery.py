@@ -40,6 +40,7 @@ from app.modules.notifications.infrastructure.clients.sms_sender import LoggingS
 from app.modules.notifications.infrastructure.memory.unit_of_work import (
     InMemoryNotificationsUnitOfWork,
 )
+from tests.support.services import MAILPIT, MAILPIT_REMEDY, require_service
 
 pytestmark = pytest.mark.notifications
 
@@ -58,13 +59,13 @@ _PAYLOAD = {
 
 
 @pytest.fixture
-async def mailpit() -> AsyncIterator[httpx.AsyncClient]:
+async def mailpit(pytestconfig: pytest.Config) -> AsyncIterator[httpx.AsyncClient]:
     """Client de l'API de Mailpit, ou test ignore si la boite ne repond pas."""
     async with httpx.AsyncClient(base_url=_MAILPIT_URL, timeout=5.0) as client:
         try:
             await client.get("/api/v1/messages", params={"limit": 1})
         except httpx.HTTPError:
-            pytest.skip(f"Mailpit ne repond pas sur {_MAILPIT_URL} : `make dev` a la racine.")
+            require_service(pytestconfig, name=MAILPIT, remedy=MAILPIT_REMEDY)
         yield client
 
 

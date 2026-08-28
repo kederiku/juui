@@ -165,6 +165,16 @@ class DatabaseSettings(_SettingsSection):
     host: str = "localhost"
     port: int = Field(default=5432, ge=1, le=65535)
 
+    # Base sur laquelle tourne la SUITE DE TESTS, jamais l'application (BACK-12).
+    #
+    # Un champ ici plutot qu'un `os.environ` dans le conftest, comme
+    # `.env.example` le promettait : la valeur passe alors par la validation, la
+    # ligne du gabarit se decommente enfin -- `extra="forbid"` refusait une cle
+    # qu'aucun champ ne reclamait -- et il n'y a plus qu'une source de verite sur
+    # « quelle base les tests detruisent ». Elle nait au premier demarrage du
+    # volume postgres (INFRA-01).
+    test_db: str = "app_test"
+
     # Reglages du POOL DE CONNEXIONS, cote client. Rien a voir avec un reglage
     # du serveur PostgreSQL, malgre le prefixe : c'est le nombre de connexions
     # que CE processus garde ouvertes.
@@ -191,6 +201,29 @@ class DatabaseSettings(_SettingsSection):
     # deverser dans la chaine de journalisation par effet de bord.
     echo: bool = False
 
+    @model_validator(mode="after")
+    def _reject_a_test_database_that_is_the_real_one(self) -> Self:  # noqa: N804
+        """Refuse que la suite de tests vise la base applicative (BACK-12).
+
+        ICI ET PAS DANS UNE FIXTURE, et la difference n'est pas cosmetique. La
+        suite applique desormais les migrations a `test_db`, et sait les DEFAIRE
+        sous `--db-reset` : ce qu'elle peut faire a la base qu'on lui designe est
+        passe de « creer et detruire deux tables stubs » a « la ramener a
+        `base` ». Le refus doit donc preceder toute collecte et toute fixture.
+
+        Raises:
+            ValueError: si les deux noms sont le meme.
+        """
+        if self.test_db == self.db:
+            message = (
+                f"POSTGRES_TEST_DB vaut « {self.test_db} », qui est la base "
+                "applicative : la suite y appliquerait les migrations et pourrait "
+                "les defaire. Nommer une base dediee -- `app_test` nait au premier "
+                "demarrage du volume postgres (INFRA-01)."
+            )
+            raise ValueError(message)
+        return self
+
     @property
     def sqlalchemy_url(self) -> str:
         """URL asynchrone attendue par `create_async_engine` (BACK-05).
@@ -203,6 +236,22 @@ class DatabaseSettings(_SettingsSection):
         `computed_field` pour cette raison precise : elle n'entre ni dans le
         `repr` ni dans `model_dump()`. Ne jamais la journaliser telle quelle.
         """
+        return self._url(self.db)
+
+    @property
+    def sqlalchemy_test_url(self) -> str:
+        """URL de la base de test, meme serveur et memes identifiants (BACK-12).
+
+        DERIVEE de la configuration reelle, et non saisie a part : un poste dont
+        PostgreSQL ecoute ailleurs n'a rien a redeclarer pour lancer la suite, et
+        il n'existe aucun cas ou la base de test vit sur un autre serveur que la
+        base applicative. Seul le NOM change -- que le validateur ci-dessus
+        garantit different.
+        """
+        return self._url(self.test_db)
+
+    def _url(self, database: str) -> str:
+        """Compose l'URL d'une base. Contient le mot de passe : ne pas journaliser."""
         # `quote` est indispensable : pydantic ne reencode pas ce qu'on lui donne
         # (verifie), et un `@` ou un `/` dans un mot de passe de production
         # couperait l'URL en deux sans lever la moindre erreur.
@@ -215,7 +264,7 @@ class DatabaseSettings(_SettingsSection):
                 port=self.port,
                 # Sans barre initiale : pydantic l'ajoute, et la doubler
                 # produirait une base nommee « /juui ».
-                path=self.db,
+                path=database,
             )
         )
 

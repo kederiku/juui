@@ -17,7 +17,7 @@ from app.shared.infrastructure.api.middlewares import (
     RequestIdMiddleware,
     register_middlewares,
 )
-from tests.shared.api_probes import FRONTEND_ORIGINS, build_app, client
+from tests.support.api import FRONTEND_ORIGINS, asgi_client, build_app
 
 pytestmark = pytest.mark.observability
 
@@ -31,7 +31,7 @@ _PREFLIGHT = {"Access-Control-Request-Method": "POST"}
 @pytest.mark.parametrize("origin", FRONTEND_ORIGINS)
 async def test_the_three_frontend_origins_are_accepted(origin: str) -> None:
     """Le critere 6 en assertion : les trois frontends de `.env.example`."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything", headers={"Origin": origin, **_PREFLIGHT}
         )
@@ -41,7 +41,7 @@ async def test_the_three_frontend_origins_are_accepted(origin: str) -> None:
 
 async def test_a_preflight_advertises_the_headers_the_frontends_send() -> None:
     """`X-Clinic-Id` vient de l'ADR-0012, `Authorization` de BACK-10."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything",
             headers={
@@ -59,7 +59,7 @@ async def test_a_preflight_advertises_the_headers_the_frontends_send() -> None:
 @pytest.mark.parametrize("method", ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
 async def test_a_preflight_advertises_the_methods_the_api_serves(method: str) -> None:
     """HEAD y figure parce que Starlette l'ajoute d'office a toute route GET."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything",
             headers={"Origin": FRONTEND_ORIGINS[0], "Access-Control-Request-Method": method},
@@ -70,7 +70,7 @@ async def test_a_preflight_advertises_the_methods_the_api_serves(method: str) ->
 
 async def test_a_preflight_never_reaches_the_router() -> None:
     """Un chemin inconnu rend 200 et non 404 : le CORS repond avant le routage."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/chemin/qui/n/existe/pas", headers={"Origin": FRONTEND_ORIGINS[0], **_PREFLIGHT}
         )
@@ -79,7 +79,7 @@ async def test_a_preflight_never_reaches_the_router() -> None:
 
 async def test_a_preflight_from_an_unlisted_origin_omits_the_allow_origin_header() -> None:
     """Et NON « aucun en-tete CORS » : Starlette en rend une partie malgre le refus."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything", headers={"Origin": _FOREIGN_ORIGIN, **_PREFLIGHT}
         )
@@ -94,7 +94,7 @@ async def test_a_refused_preflight_answers_in_plain_text() -> None:
     lui-meme, et sa reponse ne passe donc par aucun handler d'erreur. Rien a
     corriger, tout a savoir -- d'ou ce test.
     """
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything", headers={"Origin": _FOREIGN_ORIGIN, **_PREFLIGHT}
         )
@@ -108,7 +108,7 @@ async def test_a_refused_preflight_still_carries_a_request_id() -> None:
     serait invisible cote serveur -- le navigateur, lui, jette la reponse en
     silence.
     """
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.options(
             "/api/v1/anything", headers={"Origin": _FOREIGN_ORIGIN, **_PREFLIGHT}
         )
@@ -119,33 +119,33 @@ async def test_a_refused_preflight_still_carries_a_request_id() -> None:
 
 
 async def test_a_simple_request_echoes_the_exact_origin_never_a_star() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"Origin": FRONTEND_ORIGINS[0]})
     assert response.headers["access-control-allow-origin"] == FRONTEND_ORIGINS[0]
 
 
 async def test_credentials_are_allowed_on_a_listed_origin() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"Origin": FRONTEND_ORIGINS[0]})
     assert response.headers["access-control-allow-credentials"] == "true"
 
 
 async def test_the_request_id_header_is_exposed_to_the_browser() -> None:
     """Sans cette liste, `response.headers.get('X-Request-ID')` rend `null` cote client."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"Origin": FRONTEND_ORIGINS[0]})
     assert "X-Request-ID" in response.headers["access-control-expose-headers"]
 
 
 async def test_a_simple_request_from_an_unlisted_origin_carries_no_allow_origin() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"Origin": _FOREIGN_ORIGIN})
     assert response.status_code == 200
     assert "access-control-allow-origin" not in response.headers
 
 
 async def test_a_request_without_an_origin_header_gets_no_cors_headers() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live")
     assert "access-control-allow-origin" not in response.headers
 
@@ -153,7 +153,7 @@ async def test_a_request_without_an_origin_header_gets_no_cors_headers() -> None
 async def test_an_empty_whitelist_grants_no_origin_at_all() -> None:
     """Le CORS reste monte : un `400` qui nomme la cause vaut mieux qu'un `405` de routage."""
     application = build_app(AppSettings(environment="development", cors_origins=[]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.options(
             "/api/v1/anything", headers={"Origin": FRONTEND_ORIGINS[0], **_PREFLIGHT}
         )

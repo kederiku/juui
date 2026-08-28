@@ -103,7 +103,7 @@ référencer une plage horaire.
 ADR, et le pendant exact de l'[ADR-0022](./0022-transport-email-partage.md) : un besoin
 **technique** partagé par deux modules **descend** dans `shared` ; un **vocabulaire métier** partagé,
 lui, se **recopie**. `scheduling` déclare donc son propre catalogue d'espèces, valeur pour valeur, et
-`tests/modules/scheduling/test_species_vocabulary.py` — hors du graphe d'import-linter, donc autorisé
+`tests/modules/scheduling/domain/test_species_vocabulary.py` — hors du graphe d'import-linter, donc autorisé
 à importer les deux côtés — échoue si les deux dérivent. Le précédent était déjà posé par BACK-10a,
 qui a recopié les trois types de compte d'`identity` plutôt que d'en faire descendre l'énumération.
 Les deux catalogues ne disent d'ailleurs pas la même chose : chez `medical_records` l'espèce est une
@@ -237,5 +237,5 @@ de rendez-vous, et la phrase est corrigée dans le code autant qu'au registre.
   « disponible » ne veut pas dire.
 - `backend/api/src/app/modules/scheduling/infrastructure/db/models.py` — les trois tables, la
   contrainte unique aux quatre rôles et la convention de jour.
-- `backend/api/tests/modules/scheduling/test_species_vocabulary.py` — la garde de non-dérive du
+- `backend/api/tests/modules/scheduling/domain/test_species_vocabulary.py` — la garde de non-dérive du
   vocabulaire dupliqué.

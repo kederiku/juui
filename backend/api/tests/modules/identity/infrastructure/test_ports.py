@@ -20,7 +20,6 @@ from app.modules.identity.infrastructure.db.repositories import SqlAlchemyAccoun
 
 # La table du module nait avec la fixture de session du conftest local --
 # demandee ici, et seulement ici : les tests purs n'exigent pas Docker.
-pytestmark = pytest.mark.usefixtures("_identity_tables")
 
 
 async def _seed_account(session: AsyncSession, email: str) -> AccountModel:

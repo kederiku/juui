@@ -17,7 +17,7 @@ from fastapi import FastAPI
 
 from app.core.correlation import REQUEST_ID_SCOPE_KEY, current_request_id
 from app.shared.infrastructure.api.middlewares import RequestIdMiddleware
-from tests.shared.api_probes import build_app, client
+from tests.support.api import asgi_client, build_app
 
 pytestmark = pytest.mark.observability
 
@@ -45,13 +45,13 @@ def _app_with_probes() -> FastAPI:
 
 
 async def test_a_request_without_the_header_receives_a_generated_identifier() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live")
     assert UUID(hex=response.headers["x-request-id"])
 
 
 async def test_two_requests_receive_two_distinct_identifiers() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         first = await opened.get("/health/live")
         second = await opened.get("/health/live")
     assert first.headers["x-request-id"] != second.headers["x-request-id"]
@@ -59,7 +59,7 @@ async def test_two_requests_receive_two_distinct_identifiers() -> None:
 
 async def test_a_client_supplied_identifier_is_reused() -> None:
     """Un identifiant de tracage venu d'une passerelle ou d'un frontend survit."""
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"X-Request-ID": "trace-amont-42"})
     assert response.headers["x-request-id"] == "trace-amont-42"
 
@@ -83,7 +83,7 @@ async def test_a_hostile_client_identifier_is_replaced_and_never_rectified(hosti
     Les trois dangers sont reels -- une scission de reponse HTTP, une ligne de
     journal fabriquee, et dix kilo-octets recopies sur chaque ligne de la requete.
     """
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"X-Request-ID": hostile})
     rendered = response.headers["x-request-id"]
     assert rendered != hostile
@@ -115,7 +115,7 @@ async def test_a_non_ascii_client_identifier_is_replaced() -> None:
 
 
 async def test_a_sanitised_identifier_never_reaches_the_response_header() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live", headers={"X-Request-ID": "a\r\nX-Injecte: 1"})
     assert "\r" not in response.headers["x-request-id"]
     assert "\n" not in response.headers["x-request-id"]
@@ -127,14 +127,14 @@ async def test_a_sanitised_identifier_never_reaches_the_response_header() -> Non
 
 async def test_the_identifier_reaches_the_endpoint_through_the_contextvar() -> None:
     """LA preuve que l'intergiciel est ASGI PUR -- voir la docstring du module."""
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_SEEN, headers={"X-Request-ID": "trace-endpoint"})
     assert response.json()["seen"] == "trace-endpoint"
     assert response.headers["x-request-id"] == "trace-endpoint"
 
 
 async def test_the_contextvar_is_reset_once_the_response_is_sent() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         await opened.get("/health/live")
     assert current_request_id.get() is None
 
@@ -160,27 +160,27 @@ async def test_a_non_http_scope_passes_through_untouched() -> None:
 
 
 async def test_a_successful_response_carries_the_identifier() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/health/live")
     assert response.headers["x-request-id"]
 
 
 async def test_a_404_carries_the_identifier_in_its_header_and_in_its_body() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/chemin/inconnu")
     assert response.status_code == 404
     assert response.json()["request_id"] == response.headers["x-request-id"]
 
 
 async def test_the_identifier_header_is_never_duplicated() -> None:
-    async with client(build_app()) as opened:
+    async with asgi_client(build_app()) as opened:
         response = await opened.get("/chemin/inconnu", headers={"X-Request-ID": "trace-unique"})
     assert response.headers.get_list("x-request-id") == ["trace-unique"]
 
 
 async def test_a_500_carries_the_identifier_in_its_body() -> None:
     """LE piege du `reset(token)` : sans la cle de `scope`, ce corps dirait `null`."""
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_BOOM)
     assert response.status_code == 500
     assert response.json()["request_id"] is not None
@@ -188,19 +188,19 @@ async def test_a_500_carries_the_identifier_in_its_body() -> None:
 
 async def test_a_500_carries_the_identifier_in_its_header() -> None:
     """LE piege du `send` court-circuite : aucune enveloppe de sortie ne voit cette reponse."""
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_BOOM)
     assert response.headers["x-request-id"]
 
 
 async def test_the_header_and_the_body_of_a_500_agree() -> None:
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_BOOM)
     assert response.json()["request_id"] == response.headers["x-request-id"]
 
 
 async def test_a_500_reuses_the_identifier_the_client_supplied() -> None:
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_BOOM, headers={"X-Request-ID": "trace-de-l-incident"})
     assert response.json()["request_id"] == "trace-de-l-incident"
     assert response.headers["x-request-id"] == "trace-de-l-incident"
@@ -208,7 +208,7 @@ async def test_a_500_reuses_the_identifier_the_client_supplied() -> None:
 
 async def test_a_500_body_still_says_nothing_of_the_failure() -> None:
     """L'identifiant s'ajoute au corps fige de BACK-09, il ne l'ouvre pas."""
-    async with client(_app_with_probes()) as opened:
+    async with asgi_client(_app_with_probes()) as opened:
         response = await opened.get(_BOOM)
     body = response.json()
     assert body["code"] == "http.server.internal_error"

@@ -21,13 +21,11 @@ plutot que protegees par le rollback de la fixture `session`. Elles n'existent
 que dans la base de test et ne portent aucune donnee applicative.
 """
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from uuid import UUID, uuid4
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.shared.domain.pagination import (
     PageRequest,
@@ -35,21 +33,18 @@ from app.shared.domain.pagination import (
     SortDirection,
     UnknownSortFieldError,
 )
-from app.shared.infrastructure.db.session import build_sessionmaker
 from app.shared.infrastructure.tenancy import (
     MissingTenantContextError,
     use_all_groups,
     use_group,
 )
-from tests.shared.tenancy_stubs import (
+from tests.support.tenancy_stubs import (
     InMemoryNoteUnitOfWork,
     NoteUnitOfWork,
     PlainNote,
-    PlainNoteModel,
     PlainNoteNotFoundError,
     SqlAlchemyNoteUnitOfWork,
     TenantNote,
-    TenantNoteModel,
     TenantNoteNotFoundError,
 )
 
@@ -410,26 +405,27 @@ class NoteUnitOfWorkConformance:
 class TestSqlAlchemyNoteConformance(NoteUnitOfWorkConformance):
     """La suite, jouee contre PostgreSQL par la base de test."""
 
-    @pytest_asyncio.fixture
-    async def uow(self, engine: AsyncEngine) -> AsyncIterator[NoteUnitOfWork]:
-        """Unite de travail reelle, sur deux tables stubs purgees a chaque bout.
+    @pytest.fixture
+    def uow(self, bound_sessionmaker: async_sessionmaker[AsyncSession]) -> NoteUnitOfWork:
+        """Unite de travail reelle, inscrite dans la transaction du test.
 
-        PURGE PLUTOT QUE ROLLBACK : cette moitie-ci commite pour de bon, sans quoi
-        elle ne prouverait pas ce que le ticket lui demande de prouver. La purge
-        encadre le test des DEUX cotes -- avant, pour ne pas heriter d'un test
-        precedent interrompu ; apres, pour ne rien laisser au suivant.
+        PLUS DE PURGE, ET CE N'EST PAS UN RELACHEMENT (BACK-12). Elle existait
+        parce que cette moitie-ci COMMITE pour de bon -- il le faut, sans quoi
+        elle ne prouverait pas ce qu'on lui demande -- et qu'aucun rollback ne la
+        rattrapait. La transaction externe de `connection` le fait desormais, et
+        mieux : elle rattrape aussi un test interrompu en plein milieu, ce que la
+        purge « avant » ne faisait que reparer apres coup.
+
+        CE QUE LA SUITE PROUVE NE CHANGE PAS, sauf sur un point, et il est
+        couvert ailleurs. Sous `create_savepoint`, `commit()` reste un vrai commit
+        du point de vue de la session : une seconde session relit bien ce que la
+        premiere a valide, et un `rollback` l'efface toujours. Ce qui n'est plus
+        prouve ICI, c'est la durabilite INTER-CONNEXIONS -- un commit reste dans
+        la transaction du test. C'est l'objet de
+        `test_a_commit_is_visible_from_another_connection`, qui sort du patron
+        pour cette raison precise.
         """
-        session_factory = build_sessionmaker(engine)
-        await self._purge(engine)
-        yield SqlAlchemyNoteUnitOfWork(session_factory)
-        await self._purge(engine)
-
-    @staticmethod
-    async def _purge(engine: AsyncEngine) -> None:
-        """Vide les deux tables stubs. Elles n'existent que dans la base de test."""
-        async with engine.begin() as connection:
-            await connection.execute(delete(TenantNoteModel))
-            await connection.execute(delete(PlainNoteModel))
+        return SqlAlchemyNoteUnitOfWork(bound_sessionmaker)
 
 
 class TestInMemoryNoteConformance(NoteUnitOfWorkConformance):

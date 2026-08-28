@@ -9,7 +9,7 @@ desactive.
 LES ASSERTIONS PORTENT SUR LA LIGNE RENDUE, pas seulement sur l'enregistrement.
 `caplog.records` montre ce que l'appel a pose ; le passer ensuite dans le
 `JsonFormatter` de BACK-11 montre ce qui SORT en production -- masquage compris.
-C'est la lecon des sondes de `tests/core/logging_probes.py`.
+C'est la lecon des sondes de `tests/support/logs.py`.
 """
 
 import json

@@ -119,10 +119,17 @@ Les moitiés **Redis et MinIO** sont ignorées quand leur service ne répond pas
 dit quoi lancer. Une suite verte n'est donc pas la preuve que la conformité a été vérifiée : lire
 les `skip`.
 
-PostgreSQL, lui, ne se saute pas : la fixture `engine` du harnais (BACK-06b) appelle `pytest.exit()`
-pour que la preuve d'isolation ne puisse pas disparaître en silence. Sans base de test, la session
-s'arrête — y compris pour les moitiés en mémoire, qui n'ont pourtant besoin d'aucun conteneur.
-L'arbitrage appartient à BACK-12, qui reprend le harnais.
+PostgreSQL se saute désormais comme les autres, et c'est BACK-12 qui a rendu cet arbitrage. La
+fixture `engine` appelait `pytest.exit()`, ce qui arrêtait la session entière — y compris les
+moitiés **en mémoire**, qui n'ont pourtant besoin d'aucun conteneur. Ce qui manquait n'était pas le
+saut, c'était de ne pas pouvoir le taire : les sauts sont maintenant **recensés**, le bloc
+`services absents` les nomme en fin d'exécution, et `--require-services` les transforme en échec.
+
+**La moitié réelle de cette suite tourne aussi dans une transaction annulée** depuis BACK-12 : ses
+purges manuelles ont disparu. Son `commit()` reste un vrai commit du point de vue de la session,
+mais il ne franchit plus la frontière de la connexion — la durabilité inter-connexions est prouvée
+par un test qui sort exprès du patron
+([ADR-0031](../adr/0031-strategie-de-test-a-trois-niveaux.md)).
 
 ### Ce qu'elle a trouvé le jour de son écriture
 

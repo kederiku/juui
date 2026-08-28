@@ -23,17 +23,13 @@ commode, la premiere est la seule qui prouve l'accesseur et sa garde.
 Ce module ne commence pas par `test_` : pytest ne le collecte pas.
 """
 
-from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Final
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, FastAPI
-from httpx import ASGITransport, AsyncClient
 
-from app.core.config import JWTSettings
 from app.core.correlation import current_account_id, current_clinic_id
 from app.shared.domain.exceptions import NotFoundError
 from app.shared.infrastructure.api.dependencies.auth import (
@@ -55,26 +51,17 @@ from app.shared.infrastructure.security.jwt_service import (
     JwtTokenService,
 )
 from app.shared.infrastructure.tenancy import current_group_id
-
-SIGNING_KEY: Final = "cle-de-test-assez-longue-pour-hs256-0123456"
-OTHER_SIGNING_KEY: Final = "autre-cle-de-test-assez-longue-pour-hs256-9"
-
-AUDIENCE_PRO: Final = "test-pro"
-AUDIENCE_INDIVIDUAL: Final = "test-particulier"
-AUDIENCE_ADMIN: Final = "test-admin"
-
-# Role de groupe rendu par defaut a l'emission. L'emission REFUSE un jeton dont
-# le groupe actif ne correspond a aucune appartenance active (BACK-10a) : sans
-# ce defaut, chaque test devrait semer une appartenance pour un sujet qui n'est
-# pas le sien. Les tests qui portent sur le role, eux, passent leur propre table.
-DEFAULT_GROUP_ROLE: Final = "manager"
-
-ACCOUNT_ID: Final = UUID("0198c0de-0000-7000-8000-00000000a001")
-OTHER_ACCOUNT_ID: Final = UUID("0198c0de-0000-7000-8000-00000000a002")
-GROUP_ID: Final = UUID("0198c0de-0000-7000-8000-00000000b001")
-OTHER_GROUP_ID: Final = UUID("0198c0de-0000-7000-8000-00000000b002")
-CLINIC_ID: Final = UUID("0198c0de-0000-7000-8000-00000000c001")
-OTHER_CLINIC_ID: Final = UUID("0198c0de-0000-7000-8000-00000000c002")
+from tests.support.tokens import (
+    ACCOUNT_ID,
+    AUDIENCE_PRO,
+    CLINIC_ID,
+    GROUP_ID,
+    OTHER_CLINIC_ID,
+    OTHER_GROUP_ID,
+    SIGNING_KEY,
+    TokenFactory,
+    bearer_header,
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -111,43 +98,23 @@ class Calls:
     clinic_groups: int = 0
 
 
-def jwt_settings(*, key: str = SIGNING_KEY, access_minutes: int = 15) -> JWTSettings:
-    """Compose une configuration de jetons complete, sans lire l'environnement."""
-    return JWTSettings(
-        secret_key=key,
-        access_token_expire_minutes=access_minutes,
-        refresh_token_expire_days=7,
-        audience_professional=AUDIENCE_PRO,
-        audience_individual=AUDIENCE_INDIVIDUAL,
-        audience_admin=AUDIENCE_ADMIN,
-    )
-
-
 def token_service(
     *,
     roles: dict[tuple[UUID, UUID], str] | None = None,
     at: datetime | None = None,
     key: str = SIGNING_KEY,
 ) -> JwtTokenService:
-    """Construit le service de jetons, horloge figee sur `at`."""
-    known = None if roles is None else dict(roles)
-    frozen = datetime.now(UTC).replace(microsecond=0) if at is None else at
+    """Le service de jetons seul, pour les tests dont le SUJET est l'emission.
 
-    async def resolve_group_role(account_id: UUID, group_id: UUID, when: datetime) -> str | None:
-        """Repond comme le depot de BACK-16 : le role, ou `None`.
-
-        Sans table explicite, toute appartenance est reputee active : voir
-        `DEFAULT_GROUP_ROLE`.
-        """
-        if known is None:
-            return DEFAULT_GROUP_ROLE
-        return known.get((account_id, group_id))
-
-    return JwtTokenService(
-        settings=jwt_settings(key=key),
-        resolve_group_role=resolve_group_role,
-        now=lambda: frozen,
-    )
+    UNE VUE DE `TokenFactory`, ET NON UNE SECONDE IMPLEMENTATION (BACK-12). Les
+    tests d'`auth_dependencies` et de `require_role` degradent deliberement
+    l'emission -- autre cle, horloge reculee, table de roles explicite -- et
+    n'ont que faire d'une table vivante : le service nu leur suffit, et le leur
+    retirer aurait coute cent sites d'appel pour rien. `TokenFactory` est l'autre
+    vue, celle des tests de ROUTE, qui doivent declarer un role apres que le
+    service est deja pose sur `app.state`.
+    """
+    return TokenFactory(key=key, at=at, roles=roles).service
 
 
 def an_authentication(
@@ -333,18 +300,6 @@ def build_probe_app(
     return application
 
 
-@asynccontextmanager
-async def client(application: FastAPI) -> AsyncIterator[AsyncClient]:
-    """Ouvre un client HTTP sur l'application, sans reseau ni `lifespan`.
-
-    `raise_app_exceptions=False` : sans lui, un defaut de cablage remonterait
-    dans le test au lieu de produire la reponse 500 qu'on veut observer.
-    """
-    transport = ASGITransport(app=application, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as opened:
-        yield opened
-
-
 async def bearer(
     service: JwtTokenService,
     *,
@@ -353,11 +308,16 @@ async def bearer(
     audience: str = AUDIENCE_PRO,
     active_group_id: UUID | None = GROUP_ID,
 ) -> dict[str, str]:
-    """Emet un jeton d'acces et rend l'en-tete `Authorization` correspondant."""
+    """Emet un jeton d'acces sur un service DONNE et rend l'en-tete `Authorization`.
+
+    Le pendant de `token_service` : la forme qui prend son service en argument,
+    pour les tests qui en manipulent plusieurs dans un meme cas. `TokenFactory.bearer`
+    est l'autre forme, celle qui n'en a qu'un.
+    """
     token = await service.create_access_token(
         account_id=account_id,
         account_type=account_type,
         audience=audience,
         active_group_id=active_group_id,
     )
-    return {"Authorization": f"Bearer {token}"}
+    return bearer_header(token)

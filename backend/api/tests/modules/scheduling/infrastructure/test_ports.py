@@ -44,7 +44,7 @@ from app.shared.infrastructure.tenancy import MissingTenantContextError, use_gro
 
 # Les trois tables du module naissent avec la fixture de session du conftest
 # local -- demandee ici, et seulement ici : les tests purs n'exigent pas Docker.
-pytestmark = [pytest.mark.scheduling, pytest.mark.usefixtures("_scheduling_tables")]
+pytestmark = pytest.mark.scheduling
 
 _EIGHT = 8 * 60
 _NINE = 9 * 60
@@ -389,6 +389,7 @@ async def test_a_second_profile_for_the_same_account_and_clinic_is_refused(
 # --- Tenance ------------------------------------------------------------------
 
 
+@pytest.mark.tenant_isolation
 async def test_a_profile_added_through_the_repository_is_stamped_with_the_active_group(
     session: AsyncSession, group_a: UUID
 ) -> None:
@@ -438,6 +439,7 @@ async def test_locum_profiles_stay_in_the_active_group(
         )
 
 
+@pytest.mark.tenant_isolation
 async def test_reading_without_tenant_context_raises(session: AsyncSession, group_a: UUID) -> None:
     """Jamais de repli silencieux sur « tous groupes » : le depot LEVE."""
     account_id, clinic_id = uuid4(), uuid4()
@@ -450,6 +452,7 @@ async def test_reading_without_tenant_context_raises(session: AsyncSession, grou
         await repository.list_available(clinic_id, _MONDAY_TEN_TO_ELEVEN, Species.DOG)
 
 
+@pytest.mark.tenant_isolation
 async def test_a_profile_of_another_group_is_absent_not_forbidden(
     session: AsyncSession, group_a: UUID, group_b: UUID
 ) -> None:

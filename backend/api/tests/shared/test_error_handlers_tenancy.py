@@ -15,12 +15,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.tenancy import use_group
-from tests.shared.tenancy_stubs import TenantNoteRepository, make_tenant_row
+from tests.support.api import asgi_client
+from tests.support.tenancy_stubs import TenantNoteRepository, make_tenant_row
 
 pytestmark = pytest.mark.tenant_isolation
 
@@ -39,21 +39,13 @@ def _build_app(session: AsyncSession, viewer_group: UUID) -> FastAPI:
     return application
 
 
-def _client(application: FastAPI) -> AsyncClient:
-    """Client httpx sur transport ASGI, sans lifespan."""
-    return AsyncClient(
-        transport=ASGITransport(app=application, raise_app_exceptions=False),
-        base_url="http://test",
-    )
-
-
 async def test_cross_group_read_answers_404_never_403(
     session: AsyncSession, group_a: UUID, group_b: UUID
 ) -> None:
     note_id = uuid4()
     session.add(make_tenant_row(note_id, group_a, "note du groupe A"))
     await session.flush()
-    async with _client(_build_app(session, group_b)) as client:
+    async with asgi_client(_build_app(session, group_b)) as client:
         response = await client.get(f"/tenant-notes/{note_id}")
     assert response.status_code == 404
     assert response.status_code != 403
@@ -67,7 +59,7 @@ async def test_cross_group_response_is_indistinguishable_from_absence(
 ) -> None:
     """Meme identifiant, deux realites, un seul corps de reponse possible."""
     note_id = uuid4()
-    async with _client(_build_app(session, group_b)) as client:
+    async with asgi_client(_build_app(session, group_b)) as client:
         absent = await client.get(f"/tenant-notes/{note_id}")
         session.add(make_tenant_row(note_id, group_a, "note du groupe A"))
         await session.flush()

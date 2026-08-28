@@ -15,7 +15,7 @@ from typing import Final
 import pytest
 
 from app.core.logging import REDACTED, JsonFormatter, redact_mapping, redact_query, redact_text
-from tests.core.logging_probes import log_sink, make_record
+from tests.support.logs import log_sink, make_record
 
 pytestmark = pytest.mark.observability
 

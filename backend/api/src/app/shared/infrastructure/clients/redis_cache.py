@@ -8,7 +8,7 @@ UNE FONCTION DE `Settings`, ET NON UN LECTEUR DE CONFIGURATION
 dans `db/engine.py` : `get_settings()` est mise en cache par `lru_cache`, et un
 constructeur qui l'appellerait de l'interieur ne saurait pas fabriquer un client
 different de celui du processus. Le worker TaskIQ (BACK-15) et les fixtures de
-BACK-12 auront besoin du leur.
+BACK-12 ont besoin du leur.
 
 L'ASYMETRIE AVEC POSTGRESQL EST LE SUJET, PAS UN OUBLI
 BACK-05 livre `verify_connectivity`, qui LEVE et arrete le processus. Il n'existe
@@ -70,7 +70,8 @@ _UNLINK_BATCH: Final = 500
 # qui en heritent tous. `OSError` n'est pas redondant : verifie, la
 # `ConnectionError` de redis-py n'herite PAS de l'`OSError` integre, et une
 # resolution DNS en echec (`socket.gaierror`) peut remonter telle quelle. Meme
-# raisonnement que le `_UNREACHABLE` de `db/engine.py`.
+# raisonnement que le `UNREACHABLE_ERRORS` de `db/engine.py` -- lui seul est
+# public, parce que le harnais de test doit le lire (BACK-12).
 _UNREACHABLE: Final = (OSError, RedisError)
 
 

@@ -26,7 +26,7 @@ Les contraintes du STOCKAGE : unicite d'une adresse, cle etrangere, NOT NULL,
 verrou, ordre des NULL dans un tri. Les inventer ici serait mentir dans l'autre
 sens -- une fake qui refuse ce que PostgreSQL accepterait fait echouer un test
 pour rien. Ces proprietes-la sont l'objet des tests d'INFRASTRUCTURE sur vraie
-base, troisieme niveau de la strategie de BACK-12, et d'eux seuls.
+base -- le niveau `integration` de BACK-12 --, et d'eux seuls.
 
 POURQUOI CE PAQUET VIT DANS `src/` ET NON DANS `tests/`
 C'est la portee litterale du ticket, la place que `shared/infrastructure/`

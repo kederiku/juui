@@ -13,7 +13,14 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help lint lint-fix imports format format-check typecheck check test \
+	test-unit test-integration test-tenancy test-cov \
 	migration migrate downgrade history migrate-check openapi
+
+# Les deux couches que le seuil de couverture garde. Une seule declaration, lue
+# par `test-cov`. Le double `**` traverse les separateurs, ce qui est necessaire :
+# la couche `domain` vit a deux profondeurs -- `app/shared/domain/ports/cache.py`
+# et `app/modules/identity/domain/entities.py`.
+COVERED_LAYERS := */app/**/domain/*,*/app/**/application/*
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -45,12 +52,50 @@ format-check: ## Verifie le formatage sans rien reecrire
 typecheck: ## Verifie le typage en mode strict
 	uv run mypy src alembic scripts
 
-# Une seule cible pour l'instant (BACK-06b) : le decoupage par niveaux
-# (unit/integration/slow) arrive avec BACK-12. PostgreSQL docker doit tourner
-# (`make dev` a la racine) : les tests d'isolation travaillent sur la base
-# `app_test` d'INFRA-01.
-test: ## Lance la suite de tests (PostgreSQL docker demarre)
+# QUATRE CIBLES, ET L'AXE QUI LES SEPARE EST LE SERVICE, PAS LA COUCHE. Le
+# marqueur `integration` est pose automatiquement sur tout test dont la cloture
+# de fixtures atteint un service reel (voir tests/conftest.py) : rien ne se tient
+# a la main, rien ne peut mentir.
+test: ## Lance toute la suite (pile docker demarree)
 	uv run pytest
+
+# LA CIBLE SANS DOCKER, et c'est le critere 7 du ticket. Domaine, cas d'usage sur
+# doublures, moities en memoire des suites de conformite : rien de tout cela ne
+# demande la fixture `engine`, donc rien ne cherche a joindre PostgreSQL.
+#
+# `-m unit` ET NON `-m "unit and not slow"`. La seconde forme paraissait juste --
+# cette cible se lance en boucle, elle doit rendre la main -- mais elle produisait
+# exactement l'accident que `slow` existe pour eviter : le seul test a la fois
+# unitaire et lent n'etait joue par AUCUNE des deux cibles de niveau, et rien ne
+# le disait. Il coute une seconde. Ecarter les lents reste possible a la main.
+test-unit: ## Les tests qui ne touchent aucun service -- sans docker
+	uv run pytest -m unit
+
+# `--require-services` : UN NIVEAU QU'ON DEMANDE DOIT TOURNER EN ENTIER. Sans lui,
+# `make test-integration` sur un poste sans Redis rendait 0 en n'ayant rien joue
+# -- un vert qui ne prouve rien, ce que ce ticket ferme partout ailleurs. La
+# cible `test` reste indulgente : c'est la boucle du developpeur.
+test-integration: ## Les seuls tests adosses a un service reel
+	uv run pytest -m integration --require-services
+
+# LA CATEGORIE OBLIGATOIRE (BACK-12) : la seule preuve que l'isolation entre
+# groupes tient. Elle exige donc `--require-services` a plus forte raison -- une
+# categorie obligatoire verte sans avoir tourne serait la pire des deux.
+# `--strict-markers` etant actif, une faute de frappe sur le marqueur casse la
+# collecte au lieu de vider silencieusement la selection.
+test-tenancy: ## Les tests d'isolation multi-tenant
+	uv run pytest -m tenant_isolation --require-services
+
+# DEUX RAPPORTS, ET UN SEUL SEUIL. Le premier montre le service entier sans le
+# juger ; le second garde `domain/` et `application/`, les deux couches dont le
+# comportement est le sujet des tests. Le seuil est celui du ticket. Exige la
+# pile complete : un taux mesure sur une pile partielle n'est pas comparable.
+test-cov: ## Suite complete + couverture, seuil bloquant sur domain/ et application/
+	uv run pytest --cov=app --cov-report= --require-services
+	@echo '--- Couverture du service (informatif) ---'
+	uv run coverage report
+	@echo '--- Couverture gardee : domain/ et application/ ---'
+	uv run coverage report --include='$(COVERED_LAYERS)' --fail-under=80
 
 # Migrations Alembic (BACK-07). Le message devient le slug du fichier ET la
 # premiere ligne de sa docstring : francais sans accents, sans point final,

@@ -14,14 +14,14 @@ import pytest
 from fastapi import FastAPI
 
 from app.core.config import AppSettings
-from tests.core.logging_probes import isolated_logging
-from tests.shared.api_probes import (
+from tests.support.api import (
     API_SETTINGS,
     FRONTEND_ORIGINS,
     access_lines,
+    asgi_client,
     build_app,
-    client,
 )
+from tests.support.logs import isolated_logging
 
 pytestmark = pytest.mark.observability
 
@@ -59,7 +59,7 @@ async def _served(
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Sert une requete et rend la reponse avec les lignes d'acces qu'elle a produites."""
     with isolated_logging(settings) as stream:
-        async with client(application or build_app()) as opened:
+        async with asgi_client(application or build_app()) as opened:
             response = await opened.get(path, headers=headers)
         return response, access_lines(stream.getvalue())
 
@@ -119,7 +119,7 @@ async def test_a_refused_preflight_produces_one_access_line_naming_the_origin() 
     pourquoi.
     """
     with isolated_logging(API_SETTINGS) as stream:
-        async with client(build_app()) as opened:
+        async with asgi_client(build_app()) as opened:
             await opened.options(
                 "/api/v1/anything",
                 headers={
@@ -135,7 +135,7 @@ async def test_a_refused_preflight_produces_one_access_line_naming_the_origin() 
 
 async def test_an_accepted_preflight_names_no_origin() -> None:
     with isolated_logging(API_SETTINGS) as stream:
-        async with client(build_app()) as opened:
+        async with asgi_client(build_app()) as opened:
             await opened.options(
                 "/api/v1/anything",
                 headers={

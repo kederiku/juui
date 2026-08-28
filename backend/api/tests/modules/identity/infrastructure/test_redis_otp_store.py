@@ -28,8 +28,13 @@ from app.modules.identity.infrastructure.clients.redis_otp_store import (
 )
 from app.shared.infrastructure.clients.cache_keys import environment_slug
 from tests.modules.identity.helpers import a_client_ip, otp_rules
+from tests.support.services import REDIS, REDIS_REMEDY, require_service
 
-pytestmark = pytest.mark.otp
+# AU NIVEAU DU MODULE, contrairement aux suites de conformite : il n'y a pas
+# de moitie en memoire ici, les douze tests attaquent le Redis du poste. La
+# deduction automatique ne le voit pas -- la fixture s'appelle `store` des
+# deux cotes du depot, et c'est la doublure qui porte le meme nom ailleurs.
+pytestmark = [pytest.mark.otp, pytest.mark.integration]
 
 
 def _code_key(account_id: UUID) -> str:
@@ -48,12 +53,12 @@ def _account_quota_key(account_id: UUID) -> str:
 
 
 @pytest.fixture
-async def store() -> RedisOtpStore:
+async def store(pytestconfig: pytest.Config) -> RedisOtpStore:
     """Magasin adosse au Redis du poste, ou test ignore s'il ne repond pas."""
     opened = build_otp_store(get_settings())
     if not await opened.ping():
         await opened.aclose()
-        pytest.skip("Redis n'est pas joignable : `make up` a la racine (INFRA-02).")
+        require_service(pytestconfig, name=REDIS, remedy=REDIS_REMEDY)
     yield opened
     await opened.aclose()
 
@@ -114,6 +119,9 @@ async def test_the_ttl_is_really_posed(store: RedisOtpStore, raw_client: Redis) 
     assert 0 < ttl <= 600
 
 
+# Attend qu'un TTL d'une seconde s'ecoule cote Redis : le test le plus lent de
+# la suite (mesure a l'ouverture de BACK-12).
+@pytest.mark.slow
 async def test_an_expired_code_is_refused(store: RedisOtpStore) -> None:
     """Passe le TTL, le code n'existe plus -- et le refus est celui d'un code faux."""
     account_id = uuid4()

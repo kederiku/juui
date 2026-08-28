@@ -7,10 +7,19 @@ clinique disent bien la meme chose sur les memes lignes, et que la contrainte de
 schema sur laquelle la premiere s'appuie existe REELLEMENT.
 
 Le test tient lieu de POINT DE COMPOSITION, comme `test_jwt_service_integration`
-avant lui : les resolveurs se branchent sur LA SESSION DU TEST et non sur une
-unite de travail ouverte sur le `sessionmaker`. La fixture `session` ne commite
-jamais -- une autre connexion ne verrait rien du semis, et le refus observe
-serait une invisibilite transactionnelle deguisee en propriete de securite.
+avant lui : les resolveurs se branchent sur LA SESSION DU TEST plutot que sur le
+montage de production.
+
+CE N'EST PLUS FAUTE DE POUVOIR, ET LA RAISON A CHANGE AVEC BACK-12. Le motif
+d'origine -- « la fixture `session` ne commite jamais, une autre connexion ne
+verrait rien du semis » -- ne tient plus : la fabrique de sessions du harnais est
+liee a la connexion du test, si bien qu'une unite de travail ouverte dessus voit
+le semis (`tests/test_harness.py` le prouve, et la fixture `authentication` sert
+exactement a cela). Ce qui reste, ce sont deux choix propres a CE fichier : le
+compte est une DOUBLURE a dessein -- `identity` a ses propres tests de depot, et
+lui creer une ligne ici n'ajouterait rien -- et l'horloge d'emission est FIGEE,
+pour eprouver des fenetres d'appartenance datees. Le montage de production
+n'offre ni l'un ni l'autre, puisque c'est celui de la production.
 
 Les tests ne committent jamais ; le rollback du teardown annule le semis.
 """
@@ -45,16 +54,18 @@ from app.shared.infrastructure.api.dependencies.auth import (
 )
 from app.shared.infrastructure.api.dependencies.tenant import CLINIC_HEADER
 from app.shared.infrastructure.security.jwt_service import JwtTokenService
-from tests.shared.auth_probes import (
-    AUDIENCE_PRO,
+from tests.support.api import asgi_client
+from tests.support.auth import (
     FakeAccount,
     bearer,
     build_probe_app,
-    client,
+)
+from tests.support.tokens import (
+    AUDIENCE_PRO,
     jwt_settings,
 )
 
-pytestmark = [pytest.mark.authorization, pytest.mark.usefixtures("_organization_tables")]
+pytestmark = pytest.mark.authorization
 
 # Instant REEL et non date en dur : PyJWT verifie le `iat` contre son horloge
 # murale, qu'aucun argument ne remplace.
@@ -165,7 +176,7 @@ async def test_a_real_token_opens_a_protected_route_end_to_end(session: AsyncSes
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -182,7 +193,7 @@ async def test_a_clinic_role_comes_from_the_assignment_row(session: AsyncSession
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         allowed = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -213,7 +224,7 @@ async def test_a_clinic_of_another_group_is_refused_even_when_the_account_is_ass
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_a)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         own = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_a)})
         other = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_b)})
         unknown = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(uuid4())})
@@ -235,7 +246,7 @@ async def test_an_expired_assignment_no_longer_grants_a_clinic_role(
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -253,7 +264,7 @@ async def test_a_clinic_without_any_assignment_is_refused_like_an_unknown_one(
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -291,7 +302,7 @@ async def test_a_closed_membership_still_grants_its_group_role_until_the_token_e
     membership.end_at = _AT - timedelta(minutes=1)
     await session.flush()
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get("/pro/managers", headers=headers)
 
     assert response.status_code == 200

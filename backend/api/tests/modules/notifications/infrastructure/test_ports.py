@@ -26,7 +26,7 @@ from app.modules.notifications.infrastructure.db.repositories import (
     SqlAlchemyNotificationPreferencesRepository,
 )
 
-pytestmark = [pytest.mark.notifications, pytest.mark.usefixtures("_notifications_tables")]
+pytestmark = pytest.mark.notifications
 
 
 async def test_the_choices_survive_a_round_trip_through_the_document(
