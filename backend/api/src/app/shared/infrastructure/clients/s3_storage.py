@@ -138,8 +138,8 @@ _HTTP_NOT_FOUND: Final = 404
 # `BotoCoreError` couvre `EndpointConnectionError`, `ConnectTimeoutError` et
 # `ReadTimeoutError`, qui en heritent tous -- verifie. `OSError` n'est pas
 # redondant : une resolution DNS en echec peut remonter telle quelle avant que
-# botocore ne l'enveloppe. Meme raisonnement que les `_UNREACHABLE` de
-# `db/engine.py` et de `redis_cache.py`.
+# botocore ne l'enveloppe. Meme raisonnement que le `UNREACHABLE_ERRORS` de
+# `db/engine.py` et le `_UNREACHABLE` de `redis_cache.py`.
 #
 # `ClientError` n'y figure PAS : elle porte une reponse du serveur, donc une
 # information a lire -- c'est `_translate` qui la trie.

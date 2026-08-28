@@ -70,7 +70,8 @@ _UNLINK_BATCH: Final = 500
 # qui en heritent tous. `OSError` n'est pas redondant : verifie, la
 # `ConnectionError` de redis-py n'herite PAS de l'`OSError` integre, et une
 # resolution DNS en echec (`socket.gaierror`) peut remonter telle quelle. Meme
-# raisonnement que le `_UNREACHABLE` de `db/engine.py`.
+# raisonnement que le `UNREACHABLE_ERRORS` de `db/engine.py` -- lui seul est
+# public, parce que le harnais de test doit le lire (BACK-12).
 _UNREACHABLE: Final = (OSError, RedisError)
 
 

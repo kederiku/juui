@@ -43,13 +43,18 @@ _CONNECT_TIMEOUT_SECONDS: Final = 10
 
 # Ce qu'il faut attraper pour dire « PostgreSQL est injoignable ».
 #
+# PUBLIQUE, parce que ce n'est pas une connaissance de ce module seul : le
+# harnais de test (BACK-12) doit distinguer « la base ne repond pas », qui fait
+# SAUTER ses tests d'integration, de toute autre panne, qui doit les faire
+# ECHOUER. Recopier la liste la ferait diverger le jour ou un pilote change.
+#
 # SQLAlchemy n'enveloppe que les erreurs levees A TRAVERS le pilote : celles qui
 # surviennent DANS `asyncpg.connect()` remontent telles quelles. Un serveur
 # arrete donne `ConnectionRefusedError`, un hote inconnu `socket.gaierror` --
 # deux `OSError` --, un mot de passe faux `InvalidPasswordError` et une base
 # absente `InvalidCatalogNameError`. Un `except SQLAlchemyError` seul n'en
 # attraperait aucune. Meme jeu que la boucle d'attente de docker/api/entrypoint.sh.
-_UNREACHABLE: Final = (OSError, asyncpg.PostgresError, SQLAlchemyError)
+UNREACHABLE_ERRORS: Final = (OSError, asyncpg.PostgresError, SQLAlchemyError)
 
 
 class DatabaseUnavailableError(RuntimeError):
@@ -160,7 +165,7 @@ async def verify_connectivity(engine: AsyncEngine, settings: Settings) -> None:
     try:
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
-    except _UNREACHABLE as error:
+    except UNREACHABLE_ERRORS as error:
         # Le message nomme les composants, JAMAIS `sqlalchemy_url` : cette
         # propriete porte le mot de passe en clair, et un message d'erreur finit
         # toujours par etre recopie quelque part.

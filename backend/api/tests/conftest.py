@@ -45,11 +45,9 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
-from alembic.util import CommandError
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
@@ -63,7 +61,7 @@ from app.core.correlation import current_account_id, current_clinic_id, current_
 from app.main import build_authentication, create_app
 from app.shared.infrastructure.api.dependencies.auth import AUTH_STATE_KEY, Authentication
 from app.shared.infrastructure.db.base import Base
-from app.shared.infrastructure.db.engine import build_engine
+from app.shared.infrastructure.db.engine import UNREACHABLE_ERRORS, build_engine
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
 from app.shared.infrastructure.tenancy import current_group_id
 from tests.support.api import asgi_client
@@ -294,12 +292,48 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
         poolclass=NullPool,
         application_name="juui-tests",
     )
+
+    # LA CONNEXION SEULE EST DANS CE `try`, ET C'EST TOUT L'ENJEU. Une premiere
+    # version enveloppait aussi les migrations : une revision manquante, un
+    # `downgrade` interrompu ou un DDL fautif etaient alors classes « postgres ne
+    # repond pas », donc SAUTES -- et la suite rendait un vert qui accusait
+    # Docker. C'est exactement le piege que ce ticket devait refermer, reintroduit
+    # au seul endroit ou personne ne l'aurait cherche.
+    #
+    # `UNREACHABLE_ERRORS` vient d'`engine.py`, qui dit pourquoi ces trois familles et
+    # pas `SQLAlchemyError` seule : les erreurs levees DANS `asyncpg.connect()`
+    # ne passent pas par le pilote et remontent telles quelles -- base absente,
+    # mot de passe faux, hote inconnu.
     try:
-        async with test_engine.connect() as connection:
+        opened = await test_engine.connect()
+    except UNREACHABLE_ERRORS as error:
+        await test_engine.dispose()
+        require_service(
+            request.config,
+            name="postgres",
+            remedy=(
+                f"({error}) `make dev` a la racine demarre la pile, et la base de "
+                "test nait au premier demarrage du volume postgres (INFRA-01) ; "
+                "un volume anterieur se recree par `docker compose down -v` puis "
+                "`make dev`."
+            ),
+        )
+
+    # A PARTIR D'ICI, POSTGRESQL REPOND : toute panne est une VRAIE panne, et
+    # elle doit remonter en echec plutot qu'en saut.
+    # `try/finally` ET NON `async with` : `test_engine.connect()` a DEJA demarre
+    # la connexion, et `__aenter__` la redemarrerait -- « connection is already
+    # started ». C'est le prix de sortir la connexion de son bloc pour lui donner
+    # son propre `except`.
+    try:
+        try:
+            connection = opened
             # Verrou consultatif de SESSION, relache a la deconnexion. Il ne
-            # couvre QUE les migrations : le tenir toute la suite empecherait
-            # deux executions de cohabiter, ce qui n'a aucune raison d'etre une
-            # fois le schema pose.
+            # couvre QUE la mise en place du schema : le tenir toute la suite
+            # empecherait deux executions de cohabiter, ce qui n'a aucune raison
+            # d'etre une fois le schema pose. Il serialise donc deux executions
+            # de la SUITE -- et non un `make migrate` parallele, qui vise une
+            # autre base : un verrou consultatif est propre a sa base.
             await connection.execute(
                 text("SELECT pg_advisory_lock(CAST(:lock_key AS bigint))"),
                 {"lock_key": _MIGRATION_LOCK_KEY},
@@ -321,18 +355,17 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             # deux sessions concurrentes le verraient toutes deux absent.
             await connection.run_sync(Base.metadata.create_all, tables=_STUB_TABLES)
             await connection.commit()
-    except (OSError, SQLAlchemyError, CommandError) as error:
+        finally:
+            # La fermeture relache le verrou consultatif, qui est de niveau
+            # SESSION : deux executions de la suite peuvent cohabiter des que le
+            # schema est pose.
+            await opened.close()
+    except BaseException:
+        # Le moteur se referme meme quand la mise en place echoue, sans quoi la
+        # sortie de pytest trainerait un avertissement de moteur non dispose
+        # par-dessus l'erreur qui compte.
         await test_engine.dispose()
-        require_service(
-            request.config,
-            name="postgres",
-            remedy=(
-                f"({error}) `make dev` a la racine demarre la pile, et la base de "
-                "test nait au premier demarrage du volume postgres (INFRA-01) ; "
-                "un volume anterieur se recree par `docker compose down -v` puis "
-                "`make dev`."
-            ),
-        )
+        raise
     yield test_engine
     # RIEN N'EST DETRUIT EN SORTIE, ET C'EST UNE CORRECTION. Cette fixture
     # detruisait les deux tables stubs au demontage. Le verrou consultatif ne
