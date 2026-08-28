@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import APIRouter, Depends
+from httpx import AsyncClient
 
 from app.core.correlation import current_account_id
 from app.modules.identity.domain.entities import Account, AccountStatus, AccountType
@@ -45,6 +46,7 @@ from tests.support.tokens import (
     AUDIENCE_PRO,
     GROUP_ID,
     OTHER_SIGNING_KEY,
+    TokenFactory,
 )
 
 pytestmark = pytest.mark.authorization
@@ -55,12 +57,11 @@ pytestmark = pytest.mark.authorization
 # ---------------------------------------------------------------------------
 
 
-async def test_a_valid_bearer_token_identifies_the_account() -> None:
+async def test_a_valid_bearer_token_identifies_the_account(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Le chemin nominal : un jeton emis par le service ouvre la route."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    async with asgi_client(application) as opened:
-        response = await opened.get("/pro/me", headers=await bearer(service))
+    response = await probe_client.get("/pro/me", headers=await tokens.bearer())
     assert response.status_code == 200
     assert response.json() == {"account_id": str(ACCOUNT_ID)}
 
@@ -107,12 +108,11 @@ async def _refused_headers(case: str) -> dict[str, str]:
         "refresh_token",
     ],
 )
-async def test_every_token_failure_produces_the_same_response(case: str) -> None:
+async def test_every_token_failure_produces_the_same_response(
+    case: str, probe_client: AsyncClient
+) -> None:
     """Sept causes distinctes, une seule reponse : aucune ne se distingue."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    async with asgi_client(application) as opened:
-        response = await opened.get("/pro/me", headers=await _refused_headers(case))
+    response = await probe_client.get("/pro/me", headers=await _refused_headers(case))
     assert response.status_code == 401
     body = response.json()
     assert body["code"] == "http.request.unauthorized"
@@ -146,36 +146,33 @@ async def test_a_token_whose_subject_has_no_account_is_refused_as_unauthenticate
     assert response.json()["code"] == "http.request.unauthorized"
 
 
-async def test_two_authorization_headers_are_refused_rather_than_resolved() -> None:
+async def test_two_authorization_headers_are_refused_rather_than_resolved(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Une valeur cliente ne se rectifie jamais -- on ne choisit pas la premiere."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    valid = (await bearer(service))["Authorization"]
-    async with asgi_client(application) as opened:
-        response = await opened.get(
-            "/pro/me",
-            headers=[("authorization", valid), ("authorization", "Bearer autre")],
-        )
+    valid = (await tokens.bearer())["Authorization"]
+    response = await probe_client.get(
+        "/pro/me",
+        headers=[("authorization", valid), ("authorization", "Bearer autre")],
+    )
     assert response.status_code == 401
 
 
-async def test_a_token_placed_in_a_cookie_does_not_authenticate() -> None:
+async def test_a_token_placed_in_a_cookie_does_not_authenticate(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Aucun repli cookie : ce serait rendre toutes les routes vulnerables au CSRF."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    token = (await bearer(service))["Authorization"].removeprefix("Bearer ")
-    async with asgi_client(application) as opened:
-        response = await opened.get("/pro/me", headers={"Cookie": f"access_token={token}"})
+    token = (await tokens.bearer())["Authorization"].removeprefix("Bearer ")
+    response = await probe_client.get("/pro/me", headers={"Cookie": f"access_token={token}"})
     assert response.status_code == 401
 
 
-async def test_a_token_placed_in_the_query_string_does_not_authenticate() -> None:
+async def test_a_token_placed_in_the_query_string_does_not_authenticate(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
     """Aucun repli sur l'URL : elle se journalise chez les mandataires."""
-    service = token_service()
-    application = build_probe_app(an_authentication(tokens=service))
-    token = (await bearer(service))["Authorization"].removeprefix("Bearer ")
-    async with asgi_client(application) as opened:
-        response = await opened.get(f"/pro/me?access_token={token}")
+    token = (await tokens.bearer())["Authorization"].removeprefix("Bearer ")
+    response = await probe_client.get(f"/pro/me?access_token={token}")
     assert response.status_code == 401
 
 
