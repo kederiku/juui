@@ -356,6 +356,44 @@ markers = [
 ]
 
 # ---------------------------------------------------------------------------
+# Couverture (BACK-12)
+# ---------------------------------------------------------------------------
+# `--cov` N'EST PAS DANS LES `addopts` DE PYTEST, A DESSEIN. Il y rendrait
+# `pytest tests/modules/identity/domain` mesurable a quelques pour cent du
+# service entier, donc EN ECHEC au seuil -- et un seuil qui mord sur chaque
+# execution ciblee, celle qu'on lance quarante fois par heure, finit desactive.
+# La barriere vit dans `make test-cov`, et c'est la seule qui doive exister.
+#
+# LE SEUIL NE PORTE QUE SUR `domain/` ET `application/`, ce que le ticket
+# demande et qui n'est pas un detail : ce sont les couches dont le COMPORTEMENT
+# est le sujet des tests. L'infrastructure est couverte par les tests
+# d'integration, dont le taux depend des services joignables sur le poste -- un
+# seuil qui bougerait selon que Redis tourne ou non ne serait pas un seuil.
+# `make test-cov` produit donc DEUX rapports : le service entier, informatif, et
+# les deux couches gardees, bloquant.
+[tool.coverage.run]
+# Le paquet installe et non un chemin : `uv sync` installe le projet lui-meme,
+# et c'est sous ce nom que les modules sont importes.
+source = ["app"]
+# La couverture de BRANCHES, pas seulement de lignes : un `if` dont un seul cote
+# est joue est un `if` a moitie teste, et c'est precisement la moitie qui casse.
+# Mesure a l'activation : elle ne coute rien ici, le taux est le meme.
+branch = true
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+# Un fichier VIDE -- les `__init__.py` de paquet -- n'a rien a couvrir et ne dit
+# rien au lecteur du rapport.
+skip_empty = true
+exclude_also = [
+    # Le corps d'une methode de Protocol ou d'une methode abstraite. Les ports du
+    # depot ont pour la plupart un corps fait d'une docstring seule, que coverage
+    # ne compte deja pas ; ceux qui portent `...` sont ici.
+    "^\\s*\\.\\.\\.$",
+]
+
+# ---------------------------------------------------------------------------
 # Garde-fous d'architecture (BACK-04b)
 # ---------------------------------------------------------------------------
 # BACK-04 a pose les regles ; les docstrings et la page « Architecture du

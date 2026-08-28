@@ -45,7 +45,7 @@ COMPOSE_DEV := $(COMPOSE) -f docker/docker-compose.override.yml
 .PHONY: help up dev down restart logs shell-api mail \
 	db-migrate db-upgrade db-downgrade db-reset seed \
 	generate-api generate-api-check verify-api-client \
-	lint format typecheck test test-back test-front
+	lint format typecheck test test-back test-back-unit test-back-cov test-front
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -221,12 +221,25 @@ typecheck: ## Verifie le typage Python (mypy strict) puis TypeScript
 	$(MAKE) --no-print-directory -C backend/api typecheck
 	pnpm typecheck
 
-# Delegue a backend/api/Makefile, qui porte une vraie cible `test` depuis
-# BACK-06b. Meme prerequis qu'elle : PostgreSQL docker demarre (`make dev`),
-# les tests d'isolation travaillent sur la base `app_test` d'INFRA-01. Le
-# decoupage par niveaux (unit/integration/slow) arrive avec BACK-12.
-test-back: ## Suite de tests du backend (PostgreSQL docker demarre)
+# Delegue a backend/api/Makefile, qui porte le harnais depuis BACK-12. Meme
+# prerequis : la pile docker demarree (`make dev`). La suite APPLIQUE les
+# migrations a la base `app_test` d'INFRA-01 -- elle ne cree plus ses tables a la
+# main -- et annule la transaction de chaque test.
+#
+# Un service absent ne fait plus echouer la session : les tests concernes sautent
+# et le rapport les recense. `make -C backend/api test-integration` et
+# `test-tenancy` decoupent plus finement ; c'est aussi la voie pour passer des
+# arguments a pytest (`-k`, `-m`, un chemin).
+test-back: ## Suite de tests du backend (pile docker demarree)
 	$(MAKE) --no-print-directory -C backend/api test
+
+# LA VOIE SANS DOCKER : domaine et cas d'usage sur doublures. Rien ici ne demande
+# la fixture `engine`, donc rien ne cherche a joindre PostgreSQL.
+test-back-unit: ## Tests backend ne touchant aucun service -- sans docker
+	$(MAKE) --no-print-directory -C backend/api test-unit
+
+test-back-cov: ## Tests backend + couverture, seuil bloquant sur domain/ et application/
+	$(MAKE) --no-print-directory -C backend/api test-cov
 
 # Celle-ci est un VRAI appel : `pnpm -r --if-present run test` ignore en
 # silence les workspaces sans script `test`. FRONT-04 a ete le premier a en
