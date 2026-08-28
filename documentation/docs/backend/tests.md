@@ -347,6 +347,12 @@ emporte l'ensemble, y compris après un test interrompu.
 exprès du patron, et les tests de concurrence prennent `engine_sessionmaker` — deux sessions
 entrelacées sur une même connexion cassent le relâchement des savepoints, qui se fait en pile.
 
+Ce test-là **écrit dans sa propre table**, et c'est structurel : sa ligne est réellement visible de
+tout le cluster pendant les microsecondes de sa vie, et les tests de pagination de la conformité
+affirment des totaux **absolus**. Tant que les deux partageaient une table, deux exécutions de la
+suite sur le même PostgreSQL se marchaient dessus — mesuré : un échec sur seize. Une table à lui
+seul ferme la fenêtre par construction, là où une purge ne peut que la réduire.
+
 Ce que le patron achète surtout : **une route atteinte par le client HTTP voit le semis non
 commité du test**. Avant, les résolveurs d'authentification devaient être câblés à la main sur la
 session du test, parce qu'« une autre connexion ne verrait rien du semis ». Le contournement a

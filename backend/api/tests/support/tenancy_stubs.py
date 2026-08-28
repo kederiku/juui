@@ -102,6 +102,28 @@ class PlainNoteModel(UUIDPrimaryKey, Base):
     label: Mapped[str] = mapped_column(String(100))
 
 
+class DurableNoteModel(UUIDPrimaryKey, Base):
+    """Table du SEUL test qui commite pour de bon, et d'aucun autre.
+
+    POURQUOI UNE TROISIEME TABLE (BACK-12). Toute la suite ecrit dans la
+    transaction annulee de son test -- sauf
+    `test_a_commit_is_visible_from_another_connection`, qui doit commiter
+    REELLEMENT pour prouver qu'un commit franchit la connexion. Tant qu'il
+    ecrivait dans `plain_notes_test`, sa ligne etait VISIBLE, pendant les
+    quelques microsecondes de sa vie, d'une seconde execution de la suite tournant
+    sur le meme cluster -- et les tests de pagination de la conformite affirment
+    des totaux ABSOLUS sur cette table. Mesure : un echec sur seize executions
+    paralleles, `assert 2 == 1` sur un `PageResult.total`.
+
+    Une table a lui seul ferme la fenetre par construction, la ou une purge ne
+    peut que la reduire. Personne d'autre ne compte ses lignes.
+    """
+
+    __tablename__ = "durable_notes_test"
+
+    label: Mapped[str] = mapped_column(String(100))
+
+
 class TenantNoteRepository(TenantSqlAlchemyRepository[TenantNote, TenantNoteModel]):
     """Depot tenant factice : herite du filtre, ne declare que son mapping."""
 

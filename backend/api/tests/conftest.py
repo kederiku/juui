@@ -75,12 +75,16 @@ from tests.support.services import (
     report_missing_services,
     require_service,
 )
-from tests.support.tenancy_stubs import PlainNoteModel, TenantNoteModel
+from tests.support.tenancy_stubs import DurableNoteModel, PlainNoteModel, TenantNoteModel
 from tests.support.tokens import TokenFactory
 
 # Les deux seules tables que ces tests creent et detruisent : jamais un
 # create_all/drop_all sans cible, qui toucherait aux tables sous migrations.
-_STUB_TABLES = [TenantNoteModel.__table__, PlainNoteModel.__table__]
+_STUB_TABLES = [
+    TenantNoteModel.__table__,
+    PlainNoteModel.__table__,
+    DurableNoteModel.__table__,
+]
 
 
 # Fixtures qui ouvrent un SERVICE REEL, et qui suffisent donc a classer un test.
@@ -536,6 +540,21 @@ def application(database: Database, authentication: Authentication) -> FastAPI:
     `create_app()` et non l'instance de module `app` : chaque test recoit une
     application NEUVE, avec ses propres surcharges, sans heriter du precedent --
     ce que la docstring de `create_app` promettait nommement a ce ticket.
+
+    DEUX CLES D'ETAT SUR CINQ, ET IL FAUT SAVOIR LESQUELLES. Le `lifespan` en pose
+    cinq : la persistance, l'authentification, le cache, le stockage objet et le
+    magasin d'OTP. Cette fixture pose les DEUX premieres, que toute route
+    protegee reclame. Les trois autres se demandent a la piece -- `mounted_cache`
+    pour le cache, et rien encore pour les deux dernieres, faute de route qui les
+    lise.
+
+    LE SYMPTOME QUAND IL EN MANQUE UNE, parce qu'il n'est pas parlant : la
+    dependance leve un `RuntimeError` qui NOMME la cause (« l'application a-t-elle
+    ete construite sans son lifespan ? »), mais `asgi_client` monte le transport
+    avec `raise_app_exceptions=False` -- il faut bien pouvoir observer un 500 --
+    et la reponse arrive donc en `500 http.server.internal_error`, message perdu.
+    Une route de sonde qui rend un 500 opaque a presque toujours une ressource
+    non montee ; le journal du test porte la vraie cause.
     """
     built = create_app()
     setattr(built.state, STATE_KEY, database)

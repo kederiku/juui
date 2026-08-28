@@ -15,12 +15,12 @@ l'autre bout et nomme ce que le patron coute.
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from tests.support.tenancy_stubs import (
+    DurableNoteModel,
     PlainNote,
-    PlainNoteModel,
     PlainNoteNotFoundError,
     SqlAlchemyNoteUnitOfWork,
 )
@@ -31,6 +31,14 @@ pytestmark = pytest.mark.conformance
 # le second doit chercher exactement ce que le premier a ecrit, et un uuid4()
 # tire deux fois ne prouverait rien.
 _LEAKED_NOTE_ID: UUID = UUID("0198e3a0-0000-7000-8000-00000000ba5e")
+
+# Temoin de l'ordre. La paire ci-dessous ne prouve quelque chose que si le premier
+# test a REELLEMENT tourne avant le second : joue seul ou en premier, le second
+# passerait trivialement, et la garde du harnais cesserait de garder sans que rien
+# ne le dise. pytest joue les tests d'un fichier dans l'ordre du source et rien
+# n'est melange ici, mais une garde qui depend d'une convention doit verifier la
+# convention.
+_COMMITTED: list[UUID] = []
 
 
 async def test_a_commit_inside_a_test_is_undone_by_the_harness(
@@ -54,6 +62,8 @@ async def test_a_commit_inside_a_test_is_undone_by_the_harness(
     async with SqlAlchemyNoteUnitOfWork(bound_sessionmaker) as reader:
         assert (await reader.plain_notes.get(_LEAKED_NOTE_ID)).label == "fuite"
 
+    _COMMITTED.append(_LEAKED_NOTE_ID)
+
 
 async def test_nothing_survives_the_previous_test(
     bound_sessionmaker: async_sessionmaker[AsyncSession],
@@ -70,6 +80,11 @@ async def test_nothing_survives_the_previous_test(
     d'un fichier dans l'ordre du source, et les deux ne sont separables ni de
     fait ni de sens.
     """
+    assert _COMMITTED == [_LEAKED_NOTE_ID], (
+        "Le test precedent n'a pas tourne : sans lui, cette assertion passerait "
+        "quelle que soit la strategie d'isolation, et ne garderait plus rien."
+    )
+
     async with SqlAlchemyNoteUnitOfWork(bound_sessionmaker) as uow:
         with pytest.raises(PlainNoteNotFoundError):
             await uow.plain_notes.get(_LEAKED_NOTE_ID)
@@ -87,20 +102,25 @@ async def test_a_commit_is_visible_from_another_connection(
     reelle existait pour prouver.
 
     Ce test-la, et lui seul, sort du patron : il commite sur le MOTEUR, relit
-    depuis une CONNEXION DISTINCTE, et purge lui-meme -- des deux cotes, comme
-    la conformite le faisait avant BACK-12.
+    depuis une CONNEXION DISTINCTE, et purge lui-meme.
+
+    IL ECRIT DANS SA PROPRE TABLE, et ce n'est pas du confort. Sa ligne est
+    reellement visible de tout le cluster pendant les microsecondes de sa vie ;
+    tant qu'elle atterrissait dans `plain_notes_test`, une seconde execution de la
+    suite pouvait la compter dans un total de pagination -- mesure : un echec sur
+    seize executions paralleles. Une table a lui seul ferme la fenetre par
+    construction.
     """
-    note = PlainNote(id=uuid4(), label="durable")
-    uow = SqlAlchemyNoteUnitOfWork(engine_sessionmaker)
+    note_id = uuid4()
     try:
-        async with uow:
-            await uow.plain_notes.add(note)
-            await uow.commit()
+        async with engine_sessionmaker() as writer:
+            await writer.execute(insert(DurableNoteModel).values(id=note_id, label="durable"))
+            await writer.commit()
         async with engine.connect() as other:
             found = await other.execute(
-                select(PlainNoteModel.label).where(PlainNoteModel.id == note.id)
+                select(DurableNoteModel.label).where(DurableNoteModel.id == note_id)
             )
             assert found.scalar_one() == "durable"
     finally:
         async with engine.begin() as cleanup:
-            await cleanup.execute(delete(PlainNoteModel).where(PlainNoteModel.id == note.id))
+            await cleanup.execute(delete(DurableNoteModel).where(DurableNoteModel.id == note_id))
