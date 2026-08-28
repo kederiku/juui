@@ -201,6 +201,7 @@ async def test_active_assignments_are_scoped_to_account_and_activity(
     assert assignments[0].role is ClinicRole.ASV
 
 
+@pytest.mark.tenant_isolation
 async def test_assignments_without_context_raise_instead_of_returning_everything(
     session: AsyncSession, group_a: UUID
 ) -> None:
@@ -261,6 +262,7 @@ async def test_naive_reference_instant_is_refused_before_any_query(
         await SqlAlchemyAssignmentRepository(session).list_active_for_account(uuid4(), naive_at)
 
 
+@pytest.mark.tenant_isolation
 async def test_assignment_with_clinic_outside_its_group_is_refused_by_the_database(
     session: AsyncSession, group_a: UUID, group_b: UUID
 ) -> None:
