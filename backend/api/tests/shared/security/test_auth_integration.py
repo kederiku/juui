@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import inspect as sqlalchemy_inspect
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.identity.domain.entities import AccountType
@@ -36,6 +37,7 @@ from app.modules.organization.infrastructure.db.repositories import (
     SqlAlchemyClinicRepository,
     SqlAlchemyMembershipRepository,
 )
+from app.shared.domain.ports.token_service import InactiveMembershipError
 from app.shared.infrastructure.api.dependencies.auth import (
     AccountRecord,
     ActiveAssignment,
@@ -258,6 +260,68 @@ async def test_a_clinic_without_any_assignment_is_refused_like_an_unknown_one(
 
     assert response.status_code == 404
     assert response.json()["code"] == "shared.clinic.not_active"
+
+
+async def test_a_closed_membership_still_grants_its_group_role_until_the_token_expires(
+    session: AsyncSession,
+) -> None:
+    """LIMITE EPINGLEE, et non defaut : la bordure ne rejoue pas l'appartenance.
+
+    Le role de groupe est fige a l'emission et vaut jusqu'a l'expiration du
+    jeton -- le budget de quinze minutes assume par l'ADR-0024, dont BACK-10d
+    couvrira l'urgence par la revocation. Ce test existe pour que la journee ou
+    quelqu'un voudra changer ce comportement, il trouve la decision ecrite ici
+    plutot qu'un silence.
+    """
+    account_id, group_id = uuid4(), uuid4()
+    await _seed_group(session, account_id, group_id)
+    authentication = _authentication(session, FakeAccount(id=account_id))
+    headers = await _authorization(authentication, account_id, group_id)
+
+    # L'appartenance se ferme APRES l'emission du jeton.
+    membership = (
+        (
+            await session.execute(
+                select(MembershipModel).where(MembershipModel.account_id == account_id)
+            )
+        )
+        .scalars()
+        .one()
+    )
+    membership.end_at = _AT - timedelta(minutes=1)
+    await session.flush()
+
+    async with client(build_probe_app(authentication)) as opened:
+        response = await opened.get("/pro/managers", headers=headers)
+
+    assert response.status_code == 200
+
+
+async def test_a_closed_membership_forbids_issuing_a_new_token_for_that_group(
+    session: AsyncSession,
+) -> None:
+    """Le pendant du test precedent : la porte se ferme a la PROCHAINE emission.
+
+    C'est ce qui borne la latence a la duree de vie du jeton d'acces, et c'est
+    pourquoi le test ci-dessus decrit une limite et non une fuite.
+    """
+    account_id, group_id = uuid4(), uuid4()
+    await _seed_group(session, account_id, group_id)
+    authentication = _authentication(session, FakeAccount(id=account_id))
+    membership = (
+        (
+            await session.execute(
+                select(MembershipModel).where(MembershipModel.account_id == account_id)
+            )
+        )
+        .scalars()
+        .one()
+    )
+    membership.end_at = _AT - timedelta(minutes=1)
+    await session.flush()
+
+    with pytest.raises(InactiveMembershipError):
+        await _authorization(authentication, account_id, group_id)
 
 
 def test_the_assignments_table_keeps_the_composite_foreign_key() -> None:
