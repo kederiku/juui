@@ -44,7 +44,16 @@ from app.shared.infrastructure.db.base import Base, check_schema
 
 # Journalisation d'Alembic, configuree par les sections [loggers] et compagnie
 # d'alembic.ini. C'est le SEUL usage que ce module fait de ce fichier.
-if context.config.config_file_name is not None:
+# LA JOURNALISATION NE SE POSE QUE DEPUIS LA LIGNE DE COMMANDE. `fileConfig`
+# vaut `disable_existing_loggers=True` par defaut : appele EN PROCESSUS depuis le
+# harnais de test (BACK-12), il eteindrait tous les loggers `app.*` deja crees et
+# poserait un handler stderr sur la racine. Le piege est vicieux -- la garde
+# `_ensure_pristine_logging` photographie la racine PAR TEST, un etat modifie une
+# fois pour toutes lui parait donc stable et elle ne dit rien : ce sont les tests
+# de journalisation qui echoueraient, plus loin, sur des lignes manquantes.
+if context.config.config_file_name is not None and context.config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(context.config.config_file_name)
 
 # Modules de modeles a importer pour peupler `Base.metadata`. MEME GESTE que le
@@ -148,7 +157,30 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Point d'entree du mode en ligne, le seul que ce projet accepte."""
+    """Point d'entree du mode en ligne, le seul que ce projet accepte.
+
+    DEUX APPELANTS, UNE SEULE VOIE DE PRODUCTION. La commande `alembic` n'injecte
+    rien : le moteur se construit depuis `Settings`, sous verrou consultatif,
+    exactement comme avant -- l'ADR-0010 est intact et l'entrypoint d'INFRA-04 ne
+    voit aucune difference. Le harnais de test (BACK-12), lui, a DEJA une
+    connexion ouverte sur la base de test : il la depose dans `config.attributes`
+    et l'on migre dessus.
+
+    CE N'EST PAS UNE PREFERENCE, C'EST UN MUR. Ce module se termine par
+    `asyncio.run`, qui LEVE si une boucle d'evenements tourne deja. Une fixture
+    pytest asynchrone ne peut donc pas emprunter la voie ordinaire, quelle que
+    soit la base qu'on lui designe. Passer la connexion est la recette que
+    documente Alembic pour ce cas precis.
+
+    LA TRANSACTION APPARTIENT ALORS A L'APPELANT : Alembic detecte une connexion
+    deja en transaction et cesse de gerer la sienne. C'est au harnais de
+    committer -- meme geste, et meme raison, que le `commit()` qui suit la prise
+    du verrou dans `run_async_migrations`.
+    """
+    injected = context.config.attributes.get("connection")
+    if injected is not None:
+        do_run_migrations(injected)
+        return
     asyncio.run(run_async_migrations())
 
 

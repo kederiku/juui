@@ -17,7 +17,13 @@ from dataclasses import dataclass
 from typing import Final
 
 from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+)
+from sqlalchemy.orm.session import JoinTransactionMode
 
 # Cle unique sous laquelle le `lifespan` range les ressources de persistance
 # dans `app.state`. Une constante plutot qu'un litteral : celui qui ecrit et
@@ -25,7 +31,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 STATE_KEY: Final = "database"
 
 
-def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+def build_sessionmaker(
+    bind: AsyncEngine | AsyncConnection,
+    *,
+    join_transaction_mode: JoinTransactionMode = "conditional_savepoint",
+) -> async_sessionmaker[AsyncSession]:
     """Construit la fabrique de sessions du service.
 
     `expire_on_commit=False` N'EST PAS FACULTATIF EN ASYNCHRONE
@@ -55,13 +65,34 @@ def build_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
     pour qu'elle soit visible de son propre bloc -- et au commit, jamais au
     detour d'une lecture.
 
+    UNE CONNEXION EST UN LIEN ACCEPTABLE, ET C'EST POUR LE HARNAIS (BACK-12)
+    `bind` accepte une `AsyncConnection` en plus d'un moteur, et
+    `join_transaction_mode` est reglable. Les deux defauts sont ceux de
+    SQLAlchemy et de la production : le `lifespan` passe son moteur et n'y pense
+    jamais. Le harnais de test, lui, lie sa fabrique a une connexion DEJA sous
+    transaction et passe `create_savepoint`, si bien qu'un `commit()` applicatif
+    relache un savepoint au lieu de valider pour de bon -- et que le rollback de
+    la connexion emporte tout, y compris ce que le code sous test a valide.
+
+    Le faire ICI plutot que de recopier `async_sessionmaker(...)` dans les
+    fixtures est la seule facon que `expire_on_commit=False` et
+    `autoflush=False` -- les deux reglages ci-dessus, longuement justifies --
+    ne divergent jamais entre la production et les tests.
+
     Args:
-        engine: le moteur ouvert par le `lifespan`.
+        bind: le moteur ouvert par le `lifespan`, ou une connexion deja ouverte.
+        join_transaction_mode: ce que fait une session qui trouve une
+            transaction deja commencee sur son lien.
 
     Returns:
         La fabrique de sessions, a partager pour toute la duree du processus.
     """
-    return async_sessionmaker(engine, expire_on_commit=False, autoflush=False)
+    return async_sessionmaker(
+        bind,
+        expire_on_commit=False,
+        autoflush=False,
+        join_transaction_mode=join_transaction_mode,
+    )
 
 
 @dataclass(frozen=True, slots=True)
