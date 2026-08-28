@@ -17,7 +17,7 @@ from app.shared.infrastructure.api.dependencies.tenant import (
     CLINIC_ROLE_NAMES,
     GROUP_ROLE_NAMES,
 )
-from tests.shared.auth_probes import (
+from tests.support.auth import (
     ACCOUNT_ID,
     CLINIC_ID,
     GROUP_ID,

@@ -40,7 +40,7 @@ from app.shared.domain.pagination import (
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.pagination import Page, PageParams, sort_param
 from app.shared.infrastructure.tenancy import use_all_groups, use_group
-from tests.shared.tenancy_stubs import (
+from tests.support.tenancy_stubs import (
     PlainNoteModel,
     PlainNoteRepository,
     TenantNoteRepository,

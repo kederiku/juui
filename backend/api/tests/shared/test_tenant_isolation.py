@@ -23,7 +23,7 @@ from app.shared.infrastructure.tenancy import (
     use_all_groups,
     use_group,
 )
-from tests.shared.tenancy_stubs import (
+from tests.support.tenancy_stubs import (
     PlainNote,
     PlainNoteRepository,
     TenantNote,

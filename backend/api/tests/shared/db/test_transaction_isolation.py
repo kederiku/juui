@@ -18,7 +18,7 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from tests.shared.tenancy_stubs import (
+from tests.support.tenancy_stubs import (
     PlainNote,
     PlainNoteModel,
     PlainNoteNotFoundError,

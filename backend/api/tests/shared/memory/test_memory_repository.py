@@ -13,7 +13,7 @@ import pytest
 from app.shared.domain.pagination import PageRequest
 from app.shared.infrastructure.memory.repository import InMemoryRepository, InMemoryStore
 from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
-from tests.shared.tenancy_stubs import (
+from tests.support.tenancy_stubs import (
     InMemoryNoteUnitOfWork,
     InMemoryPlainNoteRepository,
     PlainNote,

@@ -62,7 +62,7 @@ from app.shared.infrastructure.db.base import Base
 from app.shared.infrastructure.db.engine import build_engine
 from app.shared.infrastructure.db.session import Database, build_sessionmaker
 from app.shared.infrastructure.tenancy import current_group_id
-from tests.shared.tenancy_stubs import PlainNoteModel, TenantNoteModel
+from tests.support.tenancy_stubs import PlainNoteModel, TenantNoteModel
 
 # Les deux seules tables que ces tests creent et detruisent : jamais un
 # create_all/drop_all sans cible, qui toucherait aux tables sous migrations.
@@ -576,7 +576,7 @@ def _ensure_pristine_logging() -> Iterator[None]:
     `configure_logging()` sans le refermer arrache le handler de `caplog` et
     detourne la sortie de TOUS les tests suivants -- une panne qui se manifeste
     a distance, dans un fichier innocent, et seulement selon l'ordre de
-    collecte. Le remede est `isolated_logging()`, dans `tests/core/logging_probes.py`.
+    collecte. Le remede est `isolated_logging()`, dans `tests/support/logs.py`.
     """
     root = logging.getLogger()
     before = list(root.handlers)

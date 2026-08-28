@@ -30,7 +30,7 @@ from app.shared.infrastructure.security.jwt_service import (
     ACCOUNT_TYPE_PROFESSIONAL,
 )
 from app.shared.infrastructure.tenancy import current_group_id
-from tests.shared.auth_probes import (
+from tests.support.auth import (
     ACCOUNT_ID,
     AUDIENCE_INDIVIDUAL,
     AUDIENCE_PRO,

@@ -45,7 +45,7 @@ from app.shared.infrastructure.clients.hibp import (
     HibpBreachChecker,
     build_breach_checker,
 )
-from tests.core.logging_probes import isolated_logging
+from tests.support.logs import isolated_logging
 
 pytestmark = pytest.mark.passwords
 

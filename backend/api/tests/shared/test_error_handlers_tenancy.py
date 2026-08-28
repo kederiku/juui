@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.tenancy import use_group
-from tests.shared.tenancy_stubs import TenantNoteRepository, make_tenant_row
+from tests.support.tenancy_stubs import TenantNoteRepository, make_tenant_row
 
 pytestmark = pytest.mark.tenant_isolation
 

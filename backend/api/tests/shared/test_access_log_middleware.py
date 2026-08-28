@@ -14,14 +14,14 @@ import pytest
 from fastapi import FastAPI
 
 from app.core.config import AppSettings
-from tests.core.logging_probes import isolated_logging
-from tests.shared.api_probes import (
+from tests.support.api import (
     API_SETTINGS,
     FRONTEND_ORIGINS,
     access_lines,
     build_app,
     client,
 )
+from tests.support.logs import isolated_logging
 
 pytestmark = pytest.mark.observability
 

@@ -17,7 +17,7 @@ from app.shared.infrastructure.api.middlewares import (
     RequestIdMiddleware,
     register_middlewares,
 )
-from tests.shared.api_probes import FRONTEND_ORIGINS, build_app, client
+from tests.support.api import FRONTEND_ORIGINS, build_app, client
 
 pytestmark = pytest.mark.observability
 

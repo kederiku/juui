@@ -1,7 +1,7 @@
 """Format des journaux, seuil et idempotence de la configuration (BACK-11, critere 2).
 
 Le format se prouve sur le FORMATEUR, jamais sur `caplog` -- voir la docstring de
-`logging_probes.py` pour le detail du raisonnement.
+`tests/support/logs.py` pour le detail du raisonnement.
 """
 
 import json
@@ -14,7 +14,7 @@ import pytest
 from app.core.config import AppSettings
 from app.core.logging import ConsoleFormatter, JsonFormatter, configure_logging
 from app.main import create_app
-from tests.core.logging_probes import isolated_logging, log_sink, make_record
+from tests.support.logs import isolated_logging, log_sink, make_record
 
 pytestmark = pytest.mark.observability
 

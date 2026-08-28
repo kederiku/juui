@@ -45,7 +45,7 @@ from app.shared.infrastructure.api.dependencies.auth import (
 )
 from app.shared.infrastructure.api.dependencies.tenant import CLINIC_HEADER
 from app.shared.infrastructure.security.jwt_service import JwtTokenService
-from tests.shared.auth_probes import (
+from tests.support.auth import (
     AUDIENCE_PRO,
     FakeAccount,
     bearer,

@@ -17,7 +17,7 @@ from fastapi import FastAPI
 
 from app.core.correlation import REQUEST_ID_SCOPE_KEY, current_request_id
 from app.shared.infrastructure.api.middlewares import RequestIdMiddleware
-from tests.shared.api_probes import build_app, client
+from tests.support.api import build_app, client
 
 pytestmark = pytest.mark.observability
 
