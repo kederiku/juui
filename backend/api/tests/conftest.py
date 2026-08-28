@@ -142,8 +142,10 @@ def _ensure_clean_tenant_context() -> Iterator[None]:
 
 
 # Contextvars de PORTEE REQUETE (BACK-11). Une table plutot que six assertions :
-# le message nomme la coupable, et BACK-10c n'aura qu'une ligne a ajouter le jour
-# ou sa dependance d'authentification les posera pour de bon.
+# le message nomme la coupable. Elles sont desormais posees pour de bon par la
+# dependance d'authentification de BACK-10c -- ce qui n'a rien change ici, les
+# trois y figurant deja : c'est le hook asynchrone plus bas qui les surveille
+# dans la tache ou une requete les pose.
 #
 # `current_group_id` n'y figure pas : elle a sa fixture, celle de BACK-06b
 # ci-dessus, dont le message parle de tenance et non de requete.

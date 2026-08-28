@@ -125,7 +125,7 @@ la pile complète démarrée**, et vérifier que ce bloc est vide.
 
 ## Les marqueurs
 
-Neuf marqueurs sont déclarés dans `[tool.pytest.ini_options]` de
+Dix marqueurs sont déclarés dans `[tool.pytest.ini_options]` de
 `backend/api/pyproject.toml`. Ils nomment un **sujet**, jamais un niveau de test :
 
 | Marqueur           | Ce qu'il rassemble                                              | Ticket   |
@@ -136,6 +136,7 @@ Neuf marqueurs sont déclarés dans `[tool.pytest.ini_options]` de
 | `conformance`      | Les suites jouées contre le réel **et** contre la doublure      | BACK-06c |
 | `tokens`           | L'émission et la vérification des jetons, et leur configuration | BACK-10a |
 | `passwords`        | La politique de mot de passe, argon2id et le contrôle de fuite  | BACK-10b |
+| `authorization`    | Les dépendances d'authentification et d'autorisation scopée     | BACK-10c |
 | `otp`              | La vérification d'adresse par code, **côté services réels**     | BACK-17  |
 | `notifications`    | Les préférences, la résolution des canaux et la remise          | BACK-22  |
 | `scheduling`       | Le socle de la fiche technique du praticien                     | BACK-21  |
@@ -146,7 +147,7 @@ Pour lire la liste depuis le dépôt plutôt que depuis cette page :
 uv run pytest --markers
 ```
 
-Attendu : les neuf marqueurs ci-dessus, chacun avec sa description et le ticket qui l'a introduit,
+Attendu : les dix marqueurs ci-dessus, chacun avec sa description et le ticket qui l'a introduit,
 parmi les marqueurs internes de pytest.
 
 La sélection se fait par `-m`, qui accepte les expressions booléennes :

@@ -121,5 +121,5 @@ Ce qui reste ouvert : les canaux SMS et push sont **structurés mais muets** —
 n'est engagé, la portée du ticket l'écarte. Le jour où l'un remettra vraiment, une notification ne
 s'adresse plus à une personne mais à une coordonnée de canal : `NotificationRequest` gagnera de quoi
 la porter, et le push demandera en plus un registre de jetons d'appareil. Et l'écriture des
-préférences depuis l'espace personnel attend `get_current_active_account` (BACK-10c) et la surface
+préférences depuis l'espace personnel dispose de `get_current_active_account` (BACK-10c) et attend la surface
 de composition de BACK-23.

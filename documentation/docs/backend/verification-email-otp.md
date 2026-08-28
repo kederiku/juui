@@ -167,14 +167,18 @@ des appels sans objet.
 
 Aucune route HTTP n'expose ces cas d'usage : la portée du ticket s'arrête aux cas d'usage et à leurs
 adaptateurs. `POST /auth/register` (BACK-28) appellera le premier juste après avoir créé le compte,
-et l'écran de vérification appellera le second — une fois que les dépendances d'authentification
-(BACK-10c) sauront poser l'identifiant de compte à partir du jeton. D'ici là, un endpoint qui
+et l'écran de vérification appellera le second — en prenant l'identifiant de compte dans le jeton,
+ce que les [dépendances d'authentification](./authentification.md) (BACK-10c) savent désormais
+faire. Sans elles, un endpoint qui
 prendrait cet identifiant dans son corps serait un oracle d'existence de compte, et une cible de
 force brute distribuée.
 
-Le blocage sur l'écran de vérification appartient lui aussi à BACK-10c :
-`get_current_active_account` refusera un compte suspendu et retiendra un compte non vérifié. Ce que
-ce ticket garantit, c'est l'état qu'elle lira — `status = ACTIVE`, `email_verified = False`.
+Le blocage sur l'écran de vérification est livré par
+[BACK-10c](./authentification.md), et il se répartit sur deux étages : `get_current_account` refuse
+le compte **suspendu**, `get_current_active_account` retient le compte **non vérifié**. Les routes de
+ce parcours dépendront donc de la première — c'est elle qui admet délibérément un compte non
+vérifié — et hériteront quand même du refus de suspension. Ce que ce ticket garantit, c'est l'état
+qu'elles liront : `status = ACTIVE`, `email_verified = False`.
 
 ## Vérifier que le parcours tient
 

@@ -26,15 +26,24 @@ Le filtre SQLAlchemy de BACK-06b vit, lui, dans `db/repositories/tenant.py` :
 la mecanique aupres du depot qu'elle complete, le contexte au-dessus des deux
 lecteurs.
 
-PIEGE A CONNAITRE AVANT D'ECRIRE L'INTERGICIEL DE BACK-10c
-C'est la dependance d'authentification (BACK-10c) qui posera le groupe actif a
-partir du claim `active_group_id`. Si elle devait passer par un intergiciel :
-`BaseHTTPMiddleware` de Starlette execute l'aval de la chaine dans une TACHE
-distincte. Un `current_group_id.set()` fait dans son `dispatch()` n'atteindrait
-donc pas l'endpoint : la copie de contexte part avant. L'intergiciel de tenance
-devra etre un intergiciel ASGI pur -- une fonction `(scope, receive, send)` --,
-ou poser le groupe depuis une DEPENDANCE FastAPI, qui s'execute elle dans le
-contexte de l'endpoint.
+QUI POSE LE GROUPE ACTIF, ET POURQUOI CE N'EST PAS UN INTERGICIEL
+C'est `get_current_account` (BACK-10c) qui pose le groupe actif a partir du
+claim `active_group_id`, et c'est une DEPENDANCE FastAPI. Le piege que ce
+paragraphe annoncait s'est verifie : `BaseHTTPMiddleware` de Starlette execute
+l'aval de la chaine dans une TACHE distincte, et un `current_group_id.set()`
+fait dans son `dispatch()` n'atteindrait pas l'endpoint -- la copie de contexte
+part avant. Restaient un intergiciel ASGI pur, ecarte parce qu'il s'appliquerait
+aussi aux routes publiques sans savoir quelle audience chacune attend, et la
+dependance, qui s'execute elle dans le contexte de l'endpoint et se declare
+route par route.
+
+DEUX CONSEQUENCES MESUREES, A CONNAITRE AVANT DE LIRE UN JOURNAL
+Une dependance a `yield` est demontee APRES l'envoi de la reponse, mais a
+l'INTERIEUR de la pile d'intergiciels : la ligne du journal d'acces, ecrite par
+l'intergiciel, ne porte donc pas le groupe. Toutes les lignes emises PENDANT la
+requete, elles, le portent. Et la dependance doit etre une coroutine : une
+dependance a `yield` synchrone passerait par `contextmanager_in_threadpool`,
+qui poserait le contexte dans un autre `Context` que celui de l'endpoint.
 """
 
 from collections.abc import Iterator

@@ -320,6 +320,7 @@ markers = [
     "notifications: tests des preferences et de la remise de notifications (BACK-22)",
     "conformance: suites jouees contre l'implementation reelle ET sa doublure (BACK-06c)",
     "tokens: tests de l'emission et de la verification des jetons (BACK-10a)",
+    "authorization: tests des dependances d'authentification et d'autorisation (BACK-10c)",
     "passwords: tests de la politique de mot de passe et du controle de fuite (BACK-10b)",
     "scheduling: tests du socle de la fiche technique praticien (BACK-21)",
 ]

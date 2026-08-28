@@ -5,9 +5,9 @@ description: Le claim active_group_id porte la frontière d'isolation, signée e
 
 # ADR-0012 — Le groupe actif vit dans le jeton, la clinique active dans l'en-tête
 
-| Statut      | Date       | Tickets                                                             |
-| ----------- | ---------- | ------------------------------------------------------------------- |
-| **Accepté** | 2026-08-25 | BACK-08, BACK-10c (à venir), BACK-10e (à venir), FRONT-08 (à venir) |
+| Statut      | Date       | Tickets                                                   |
+| ----------- | ---------- | --------------------------------------------------------- |
+| **Accepté** | 2026-08-25 | BACK-08, BACK-10c, BACK-10e (à venir), FRONT-08 (à venir) |
 
 ## Contexte
 
@@ -37,8 +37,9 @@ Concrètement :
 - la clinique active se transmet **par requête**, dans l'en-tête `X-Clinic-Id` ; le serveur
   vérifie qu'elle appartient au groupe du jeton (la dépendance de BACK-10c) — l'en-tête
   sélectionne un périmètre de travail parmi ceux déjà autorisés, il n'ouvre aucun droit ;
-- jusqu'à BACK-10c, ni le claim ni l'en-tête n'existent dans le code : le présent ADR est la
-  convention que ces tickets appliqueront, et c'est la revue qui la tient d'ici là.
+- le claim et l'en-tête sont l'un et l'autre appliqués depuis
+  [BACK-10c](../backend/authentification.md), qui a fait de cette convention du code exécuté à
+  chaque requête ; l'[ADR-0030](./0030-perimetre-obligatoire-a-la-bordure.md) en détaille la forme.
 
 ## Alternatives écartées
 
@@ -79,16 +80,17 @@ dit **où tu travailles en ce moment**.
 
 **Ce que cela coûte.** Chaque route à périmètre clinique devra lire l'en-tête et vérifier son
 appartenance au groupe du jeton — un oubli de vérification ferait de `X-Clinic-Id` une
-autorisation de fait, c'est LE point de vigilance de BACK-10c. L'intercepteur HTTP des frontends
+autorisation de fait, c'est LE point de vigilance de BACK-10c — qui y répond par **deux
+vérifications aux points de défaillance distincts**. L'intercepteur HTTP des frontends
 devra propager l'en-tête (SHARED-03, FRONT-08) ; le CORS l'autorise et les journaux portent
-`clinic_id` depuis BACK-11. Enfin, tant que BACK-10c n'est pas livré, la convention n'est
-tenue que par ce document.
+`clinic_id` depuis BACK-11. La convention, elle, n'est plus tenue par ce seul document
+depuis BACK-10c.
 
 ## Références
 
 - `backend/api/src/app/shared/infrastructure/tenancy.py` — la contextvar du groupe actif, que le
-  claim alimentera.
-- `backend/api/src/app/shared/infrastructure/api/__init__.py` — le socle HTTP, qui renvoie déjà
-  le contexte de tenance à BACK-10c.
+  claim alimente.
+- `backend/api/src/app/shared/infrastructure/api/dependencies/` — les dépendances qui appliquent
+  cette convention, livrées par BACK-10c.
 - [ADR-0004](./0004-tenance-par-groupe.md) — la frontière que le claim transporte.
 - [ADR-0005](./0005-appartenance-datee.md) — la bascule de groupe comme réémission de jeton.

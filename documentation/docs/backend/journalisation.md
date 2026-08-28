@@ -132,7 +132,7 @@ un groupe, dépendance d'authentification comme `use_group` d'une tâche de fond
 journaux gratuitement. Le mode « tous groupes » se rend `"*"` : la raison de l'échappatoire n'a pas
 sa place sur chaque ligne.
 
-Ces valeurs sont posées par la dépendance d'authentification (BACK-10c), **jamais renseignées à la
+Ces valeurs sont posées par la [dépendance d'authentification](./authentification.md) (BACK-10c), **jamais renseignées à la
 main** par un cas d'usage — qui ferait mentir les journaux.
 
 ## Le masquage
@@ -310,8 +310,8 @@ _LOGGER.info("Compte cree.", extra={"account_id": str(account.id), "role": role.
 
 ## Ce qui n'est pas encore là
 
-| Sujet                                                      | Ticket   |
-| ---------------------------------------------------------- | -------- |
-| Les contextvars posées par une vraie authentification      | BACK-10c |
-| Le journal d'accès administrateur aux données personnelles | BACK-27  |
-| L'export des journaux vers un agrégateur                   | à venir  |
+| Sujet                                                      | Ticket                                                                                                 |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Les contextvars posées par une vraie authentification      | livré par BACK-10c — mais **pas sur la ligne d'accès**, qui s'écrit après le démontage des dépendances |
+| Le journal d'accès administrateur aux données personnelles | BACK-27                                                                                                |
+| L'export des journaux vers un agrégateur                   | à venir                                                                                                |

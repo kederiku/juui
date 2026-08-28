@@ -23,11 +23,13 @@ from fastapi import Depends, Request
 
 from app.modules.organization.domain.ports import (
     AssignmentRepository,
+    ClinicRepository,
     MembershipRepository,
     OrganizationUnitOfWork,
 )
 from app.modules.organization.infrastructure.db.repositories import (
     SqlAlchemyAssignmentRepository,
+    SqlAlchemyClinicRepository,
     SqlAlchemyMembershipRepository,
 )
 from app.shared.infrastructure.db.session import get_database
@@ -69,6 +71,18 @@ class SqlAlchemyOrganizationUnitOfWork(SqlAlchemyUnitOfWork, OrganizationUnitOfW
             RuntimeError: si aucun bloc n'est ouvert sur cette unite.
         """
         return SqlAlchemyAssignmentRepository(self._active_session)
+
+    @property
+    def clinics(self) -> ClinicRepository:
+        """Le depot de cliniques, servi par le bloc `async with` en cours.
+
+        Returns:
+            Le depot de cliniques du bloc en cours.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur cette unite.
+        """
+        return SqlAlchemyClinicRepository(self._active_session)
 
 
 async def get_organization_uow(request: Request) -> OrganizationUnitOfWork:

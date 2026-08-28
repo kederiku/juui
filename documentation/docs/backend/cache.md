@@ -73,10 +73,11 @@ sous `use_all_groups` : une clé `TENANT` n'a pas de sens « tous groupes », et
 comme estampiller une insertion exigent **un** groupe — un bloc `use_group` imbriqué le désigne.
 
 Le filtre SQLAlchemy que ce contexte promettait est livré (BACK-06b), dans
-`db/repositories/tenant.py` — voir [Persistance](./persistance.md). L'intergiciel qui alimentera
-la contextvar depuis l'authentification appartient à BACK-10c ; un piège l'attend, écrit dans la
-docstring de `tenancy.py` : `BaseHTTPMiddleware` exécute l'aval de la chaîne dans une **tâche
-distincte**, donc un `set()` fait dans son `dispatch()` n'atteindrait pas l'endpoint.
+`db/repositories/tenant.py` — voir [Persistance](./persistance.md). Ce qui alimente la contextvar depuis l'authentification
+est livré (BACK-10c) — et ce n'est pas un intergiciel, mais une **dépendance FastAPI** : c'est le
+piège que la docstring de `tenancy.py` annonçait, `BaseHTTPMiddleware` exécutant l'aval de la chaîne
+dans une **tâche distincte**, où un `set()` fait dans son `dispatch()` n'atteindrait pas l'endpoint.
+Voir [Authentification des routes](./authentification.md).
 
 ## Ce que la dégradation gracieuse promet — et ce qu'elle ne promet pas
 

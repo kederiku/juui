@@ -87,6 +87,11 @@ const sidebars: SidebarsConfig = {
         },
         { type: 'doc', id: 'backend/notifications', label: 'Notifications' },
         { type: 'doc', id: 'backend/jetons', label: 'Jetons' },
+        {
+          type: 'doc',
+          id: 'backend/authentification',
+          label: 'Authentification des routes',
+        },
         { type: 'doc', id: 'backend/mots-de-passe', label: 'Mots de passe' },
         { type: 'doc', id: 'backend/surface-http', label: 'Surface HTTP' },
         { type: 'doc', id: 'backend/erreurs', label: 'Erreurs' },
@@ -233,6 +238,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'adr/0029-message-choisi-par-le-client',
           label: 'Message choisi par le client',
+        },
+        {
+          type: 'doc',
+          id: 'adr/0030-perimetre-obligatoire-a-la-bordure',
+          label: 'Périmètre obligatoire à la bordure',
         },
       ],
     },

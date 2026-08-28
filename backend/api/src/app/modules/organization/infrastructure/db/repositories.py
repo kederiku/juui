@@ -4,7 +4,7 @@ Le mapping est ECRIT A LA MAIN, comme chez identity : `str` en base,
 `GroupRole` / `ClinicRole` dans le domaine, et l'ecart echoue chez Mypy plutot
 qu'en production.
 
-DEUX CLASSES DE BASE, ET LE CHOIX EST LE COEUR DU TICKET
+TROIS CLASSES, DEUX SOCLES, ET LE CHOIX EST LE COEUR DU TICKET
 `SqlAlchemyMembershipRepository` herite du depot generique NU : ses requetes
 tournent a l'emission du jeton, hors de tout contexte de tenance, et son
 mapping renseigne `group_id` -- colonne propre du module, pas celle du mixin.
@@ -12,15 +12,24 @@ mapping renseigne `group_id` -- colonne propre du module, pas celle du mixin.
 s'applique a toutes ses lectures, et son mapping ne touche JAMAIS `group_id`,
 que le socle estampille a l'insertion (la garde de `_to_model` y veille).
 
+`SqlAlchemyClinicRepository` n'herite d'AUCUN des deux, et c'est delibere. Il
+ne rend qu'un scalaire -- le groupe proprietaire d'une clinique -- pour la
+seconde verification de `get_active_clinic` (BACK-10c), qui doit rester
+independante du filtre tenant. L'adosser au depot generique lui donnerait
+`add` et `save` sur un modele TENANT via un socle qui n'estampille pas
+`group_id` : une insertion muette ou en echec, pour un besoin de lecture.
+
 Toute requete maison part de `self._select()` -- jamais d'un `select(...)`
-importe : c'est la couture que le filtre tenant sait atteindre.
+importe : c'est la couture que le filtre tenant sait atteindre. La seule
+exception est celle qui precede, dont l'objet meme est de ne pas etre filtree.
 """
 
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.organization.domain.entities import (
     Assignment,
@@ -33,8 +42,16 @@ from app.modules.organization.domain.exceptions import (
     AssignmentNotFoundError,
     MembershipNotFoundError,
 )
-from app.modules.organization.domain.ports import AssignmentRepository, MembershipRepository
-from app.modules.organization.infrastructure.db.models import AssignmentModel, MembershipModel
+from app.modules.organization.domain.ports import (
+    AssignmentRepository,
+    ClinicRepository,
+    MembershipRepository,
+)
+from app.modules.organization.infrastructure.db.models import (
+    AssignmentModel,
+    ClinicModel,
+    MembershipModel,
+)
 from app.shared.infrastructure.db.repositories.base import SqlAlchemyRepository
 from app.shared.infrastructure.db.repositories.tenant import TenantSqlAlchemyRepository
 
@@ -225,3 +242,37 @@ class SqlAlchemyAssignmentRepository(
         )
         models = (await self._session.execute(statement)).scalars().all()
         return [self._to_entity(model) for model in models]
+
+
+class SqlAlchemyClinicRepository(ClinicRepository):
+    """Depot de cliniques adosse a PostgreSQL -- volontairement NON tenant.
+
+    Une seule lecture, un seul scalaire, aucun socle generique : voir la
+    docstring de module pour ce que l'heritage couterait ici.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        """Rattache le depot a la session du bloc en cours.
+
+        Args:
+            session: la session du bloc `async with` en cours, servie par la
+                propriete `_active_session` de l'unite de travail.
+        """
+        self._session = session
+
+    async def find_group_id(self, clinic_id: UUID, /) -> UUID | None:
+        """Rend le groupe proprietaire d'une clinique, sans filtre de tenance.
+
+        `select(...)` importe et non `self._select()` : ce depot n'a pas de
+        filtre a heriter, et c'est precisement ce qui fait de cette lecture une
+        verification independante de celle des affectations.
+
+        Args:
+            clinic_id: la clinique dont on cherche le groupe proprietaire.
+
+        Returns:
+            L'identifiant du groupe proprietaire, ou `None` si aucune clinique
+            ne porte cet identifiant.
+        """
+        statement = select(ClinicModel.group_id).where(ClinicModel.id == clinic_id)
+        return (await self._session.execute(statement)).scalars().one_or_none()

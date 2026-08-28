@@ -43,12 +43,15 @@ from collections.abc import Mapping
 from typing import ClassVar
 
 __all__ = [
+    "ActiveClinicNotFoundError",
     "AlreadyExistsError",
     "ConflictError",
     "DomainError",
     "NotFoundError",
     "PermissionDeniedError",
+    "SuspendedAccountError",
     "TooManyRequestsError",
+    "UnverifiedEmailError",
     "ValidationError",
 ]
 
@@ -94,6 +97,25 @@ class NotFoundError(DomainError):
     code: ClassVar[str] = "shared.resource.not_found"
 
 
+class ActiveClinicNotFoundError(NotFoundError):
+    """Aucune clinique active ne correspond a l'en-tete `X-Clinic-Id`.
+
+    UN SEUL REFUS POUR CINQ SITUATIONS : la clinique n'existe pas, elle
+    appartient a un autre groupe, le compte n'y est pas affecte, son affectation
+    est close, ou le jeton ne porte aucun groupe actif. Les distinguer ferait de
+    l'API un oracle d'enumeration des cliniques concurrentes -- c'est la regle
+    de non-divulgation de sa classe mere, appliquee au perimetre de travail.
+
+    ELLE VIT DANS `shared` ET NON DANS `organization` parce que c'est la bordure
+    HTTP qui la leve (BACK-10c), et que le contrat `service-spaces` interdit a
+    `app.shared` d'importer un module. Son code est distinct de celui de sa mere
+    pour que le front sache vider la clinique qu'il avait memorisee, sans rien
+    apprendre sur laquelle des cinq causes s'applique.
+    """
+
+    code: ClassVar[str] = "shared.clinic.not_active"
+
+
 class AlreadyExistsError(DomainError):
     """Une ressource identique existe deja : l'unicite serait violee.
 
@@ -137,6 +159,34 @@ class PermissionDeniedError(DomainError):
     """
 
     code: ClassVar[str] = "shared.resource.forbidden"
+
+
+class SuspendedAccountError(PermissionDeniedError):
+    """Le porteur est authentifie, mais son compte est suspendu.
+
+    403 et non 401 : le jeton est bon, c'est le COMPTE qui est ferme. Un 401
+    ferait tenter un rafraichissement au client, qui reussirait, et la boucle
+    recommencerait a chaque requete.
+
+    Le code est distinct de celui de sa mere parce que le front doit conduire
+    l'utilisateur vers le support et non vers un formulaire. Ce n'est pas une
+    fuite : le porteur a deja prouve qu'il detient le compte dont on lui parle.
+    """
+
+    code: ClassVar[str] = "shared.account.suspended"
+
+
+class UnverifiedEmailError(PermissionDeniedError):
+    """Le porteur est authentifie, mais son adresse n'est pas verifiee.
+
+    Le compte reste ACTIF et le jeton reste valide -- c'est la regle de BACK-17,
+    et c'est ce qui permet a l'utilisateur de demander un nouveau code. 403 et
+    non 401 pour la meme raison que ci-dessus, avec une consequence de plus : un
+    401 declencherait le rafraichissement puis la deconnexion, c'est-a-dire
+    ejecterait l'utilisateur de l'ecran meme ou il doit saisir son code.
+    """
+
+    code: ClassVar[str] = "shared.account.email_not_verified"
 
 
 class TooManyRequestsError(DomainError):

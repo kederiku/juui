@@ -114,7 +114,8 @@ n'y a rien à nommer de plus qu'une fonction.
 Écartée parce que la question était **déjà tranchée** : BACK-09 a prévu que « les futurs 401
 d'authentification (BACK-10) » sortent par `HTTPException`, dont le handler dédié préserve les
 en-têtes — le `WWW-Authenticate` compris. BACK-10a définit donc le **vocabulaire** d'erreurs, et
-BACK-10c, qui tient la bordure HTTP, posera le statut. Une seule exception y échappe :
+BACK-10c, qui tient la bordure HTTP, a posé le statut — un **401 unique et opaque**
+([ADR-0030](./0030-perimetre-obligatoire-a-la-bordure.md)). Une seule exception y échappe :
 `InactiveMembershipError` hérite aussi de `NotFoundError`, par la règle de non-divulgation — un 403
 confirmerait au demandeur que le groupe existe.
 
@@ -142,7 +143,9 @@ elles.
 **Ce qui reste ouvert.** Le montage : la dépendance FastAPI qui assemble le service et l'unité de
 travail d'`organization` ne peut vivre ni dans `shared`, qui n'a pas le droit d'importer un module,
 ni dans un module, qui n'a pas le droit d'en connaître un autre. Seul `main.py` le peut, et c'est
-BACK-10c qui tranchera la forme. Restent aussi la révocation par `jti` (BACK-10d), le jeton de
+BACK-10c qui a tranché la forme : l'audience attendue est déclarée par le **routeur**, et la
+confrontation entre l'audience et le type de compte est faite à la vérification, faute d'être faite à
+l'émission ([ADR-0030](./0030-perimetre-obligatoire-a-la-bordure.md)). Restent aussi la révocation par `jti` (BACK-10d), le jeton de
 portée réduite `group_selection` (BACK-10e) et la confrontation audience ↔ type de compte au
 parcours de connexion (BACK-29).
 
