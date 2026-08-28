@@ -62,28 +62,36 @@ test: ## Lance toute la suite (pile docker demarree)
 # LA CIBLE SANS DOCKER, et c'est le critere 7 du ticket. Domaine, cas d'usage sur
 # doublures, moities en memoire des suites de conformite : rien de tout cela ne
 # demande la fixture `engine`, donc rien ne cherche a joindre PostgreSQL.
-# `not slow` en plus : cette cible se lance en boucle, elle doit rendre la main.
+#
+# `-m unit` ET NON `-m "unit and not slow"`. La seconde forme paraissait juste --
+# cette cible se lance en boucle, elle doit rendre la main -- mais elle produisait
+# exactement l'accident que `slow` existe pour eviter : le seul test a la fois
+# unitaire et lent n'etait joue par AUCUNE des deux cibles de niveau, et rien ne
+# le disait. Il coute une seconde. Ecarter les lents reste possible a la main.
 test-unit: ## Les tests qui ne touchent aucun service -- sans docker
-	uv run pytest -m "unit and not slow"
+	uv run pytest -m unit
 
-# Un service absent fait SAUTER ses tests et le dit en fin d'execution.
-# `--require-services` transforme le saut en echec : c'est le drapeau de la CI,
-# celui qui fait d'une execution verte une preuve (QA-01).
+# `--require-services` : UN NIVEAU QU'ON DEMANDE DOIT TOURNER EN ENTIER. Sans lui,
+# `make test-integration` sur un poste sans Redis rendait 0 en n'ayant rien joue
+# -- un vert qui ne prouve rien, ce que ce ticket ferme partout ailleurs. La
+# cible `test` reste indulgente : c'est la boucle du developpeur.
 test-integration: ## Les seuls tests adosses a un service reel
-	uv run pytest -m integration
+	uv run pytest -m integration --require-services
 
 # LA CATEGORIE OBLIGATOIRE (BACK-12) : la seule preuve que l'isolation entre
-# groupes tient. `--strict-markers` etant actif, une faute de frappe sur le
-# marqueur casse la collecte au lieu de vider silencieusement la selection.
+# groupes tient. Elle exige donc `--require-services` a plus forte raison -- une
+# categorie obligatoire verte sans avoir tourne serait la pire des deux.
+# `--strict-markers` etant actif, une faute de frappe sur le marqueur casse la
+# collecte au lieu de vider silencieusement la selection.
 test-tenancy: ## Les tests d'isolation multi-tenant
-	uv run pytest -m tenant_isolation
+	uv run pytest -m tenant_isolation --require-services
 
 # DEUX RAPPORTS, ET UN SEUL SEUIL. Le premier montre le service entier sans le
 # juger ; le second garde `domain/` et `application/`, les deux couches dont le
 # comportement est le sujet des tests. Le seuil est celui du ticket. Exige la
 # pile complete : un taux mesure sur une pile partielle n'est pas comparable.
 test-cov: ## Suite complete + couverture, seuil bloquant sur domain/ et application/
-	uv run pytest --cov=app --cov-report=
+	uv run pytest --cov=app --cov-report= --require-services
 	@echo '--- Couverture du service (informatif) ---'
 	uv run coverage report
 	@echo '--- Couverture gardee : domain/ et application/ ---'

@@ -27,8 +27,8 @@ from app.modules.identity.infrastructure.clients.redis_otp_store import (
     derive_otp_pepper,
 )
 from app.shared.infrastructure.clients.cache_keys import environment_slug
-from tests.conftest import require_service
 from tests.modules.identity.helpers import a_client_ip, otp_rules
+from tests.support.services import REDIS, REDIS_REMEDY, require_service
 
 # AU NIVEAU DU MODULE, contrairement aux suites de conformite : il n'y a pas
 # de moitie en memoire ici, les douze tests attaquent le Redis du poste. La
@@ -58,9 +58,7 @@ async def store(pytestconfig: pytest.Config) -> RedisOtpStore:
     opened = build_otp_store(get_settings())
     if not await opened.ping():
         await opened.aclose()
-        require_service(
-            pytestconfig, name="redis", remedy="`make up` a la racine demarre la pile (INFRA-02)."
-        )
+        require_service(pytestconfig, name=REDIS, remedy=REDIS_REMEDY)
     yield opened
     await opened.aclose()
 

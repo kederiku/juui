@@ -37,7 +37,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
-from typing import Final, NoReturn, cast
+from typing import Final, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -45,6 +45,7 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
@@ -60,12 +61,20 @@ from app.core import get_settings
 from app.core.correlation import current_account_id, current_clinic_id, current_request_id
 from app.main import build_authentication, create_app
 from app.shared.infrastructure.api.dependencies.auth import AUTH_STATE_KEY, Authentication
+from app.shared.infrastructure.clients.redis_cache import CACHE_STATE_KEY
 from app.shared.infrastructure.db.base import Base
 from app.shared.infrastructure.db.engine import UNREACHABLE_ERRORS, build_engine
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
+from app.shared.infrastructure.memory.cache import InMemoryCache, build_in_memory_cache
 from app.shared.infrastructure.tenancy import current_group_id
 from tests.support.api import asgi_client
 from tests.support.auth import an_authentication, build_probe_app
+from tests.support.services import (
+    MISSING_SERVICES,
+    POSTGRES,
+    report_missing_services,
+    require_service,
+)
 from tests.support.tenancy_stubs import PlainNoteModel, TenantNoteModel
 from tests.support.tokens import TokenFactory
 
@@ -129,14 +138,11 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Services absents : sauter en le disant, ou echouer si on l'a demande
+# Les hooks de session
 # ---------------------------------------------------------------------------
-
-# Services de la pile locale qui n'ont pas repondu, et leur remede. Un ENSEMBLE
-# et non un compteur : ce qui interesse le lecteur du rapport n'est pas combien
-# de tests ont saute -- le resume `-rs` le dit deja -- mais LESQUELS des quatre
-# services manquaient, donc quelle part de la suite n'a rien prouve.
-_MISSING_SERVICES: Final = pytest.StashKey[dict[str, str]]()
+# `require_service` et le recensement vivent dans `tests/support/services.py` :
+# sept fichiers de test les appellent, et un conftest n'est pas un module d'API.
+# Seuls les HOOKS restent ici -- c'est le seul endroit ou pytest les collecte.
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -164,58 +170,18 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     """Ouvre le recensement des services absents."""
-    config.stash[_MISSING_SERVICES] = {}
+    config.stash[MISSING_SERVICES] = {}
 
 
-def require_service(config: pytest.Config, *, name: str, remedy: str) -> NoReturn:
-    """Saute le test faute de service -- ou echoue, si on a demande le contraire.
-
-    UN SEUL ENDROIT POUR LES QUATRE SERVICES. Avant BACK-12 ils avaient trois
-    comportements pour une meme situation : Redis, MinIO et Mailpit sautaient
-    chacun avec son `pytest.skip` muet, et PostgreSQL tuait la SESSION ENTIERE
-    par `pytest.exit()` -- y compris les moities en memoire, qui n'ont besoin de
-    rien. C'est cet arret-la que le ticket avait a reprendre.
-
-    Le saut est RECENSE, et c'est la piece qui manquait : un `skip` se lit dans
-    `-rs`, mais il s'y noie. Le bloc de fin de session dit lesquels des quatre
-    services ont manque, juste avant le vert final.
-
-    Args:
-        config: la configuration de la session, qui porte le recensement.
-        name: le service qui n'a pas repondu.
-        remedy: le geste qui le rend joignable, en toutes lettres.
-
-    Raises:
-        Failed: sous `--require-services`, ou l'absence est une panne.
-        Skipped: sinon.
-    """
-    message = f"{name} ne repond pas. {remedy}"
-    if config.getoption("--require-services"):
-        pytest.fail(message, pytrace=False)
-    config.stash[_MISSING_SERVICES][name] = remedy
-    pytest.skip(message)
-
-
+# `trylast` : le resume `-rs` est lui aussi ecrit par un `pytest_terminal_summary`,
+# celui du greffon integre. Sans cela le recensement sortait AVANT lui, donc
+# enterre sous les lignes SKIPPED qu'il existe pour remplacer.
+@pytest.hookimpl(trylast=True)
 def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
 ) -> None:
-    """Nomme les services absents, donc la part de la suite qui n'a rien prouve.
-
-    Sans ce bloc, une execution verte sur un poste sans Redis ressemble trait
-    pour trait a une execution verte sur un poste complet. La page Tests appelait
-    cela « le piege de cette suite » ; c'est ici qu'il se referme.
-    """
-    missing = config.stash.get(_MISSING_SERVICES, {})
-    if not missing:
-        return
-    skipped = len(terminalreporter.stats.get("skipped", []))
-    terminalreporter.write_sep("=", "services absents", yellow=True, bold=True)
-    for name, remedy in sorted(missing.items()):
-        terminalreporter.write_line(f"  {name} -- {remedy}")
-    terminalreporter.write_line(
-        f"{skipped} test(s) sautes : cette execution NE PROUVE PAS ce qu'ils couvrent. "
-        "`--require-services` fait echouer la suite au lieu de sauter."
-    )
+    """Ferme le rapport en nommant les services qui ont manque."""
+    report_missing_services(terminalreporter, config)
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +276,7 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
         await test_engine.dispose()
         require_service(
             request.config,
-            name="postgres",
+            name=POSTGRES,
             remedy=(
                 f"({error}) `make dev` a la racine demarre la pile, et la base de "
                 "test nait au premier demarrage du volume postgres (INFRA-01) ; "
@@ -354,6 +320,23 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
             # et SOUS LE MEME VERROU -- `create_all` est `checkfirst=True`, mais
             # deux sessions concurrentes le verraient toutes deux absent.
             await connection.run_sync(Base.metadata.create_all, tables=_STUB_TABLES)
+            # PURGE DES LIGNES, ET SURTOUT PAS DES TABLES. Presque tout ce que la
+            # suite ecrit vit dans la transaction annulee de son test, mais un
+            # seul test commite pour de bon -- celui qui prouve qu'un commit
+            # traverse la connexion -- et il ne se nettoie que dans son `finally`.
+            # Une execution tuee a cet instant precis laissait une ligne
+            # orpheline QUE PLUS RIEN N'EFFACAIT, y compris `--db-reset` : les
+            # tables stubs ne sont dans aucune migration. Cinq tests de
+            # conformite, qui comptent des totaux de pagination, echouaient alors
+            # a chaque execution suivante, indefiniment.
+            #
+            # `DELETE` et non `drop_all` : detruire les tables les arracherait a
+            # une seconde execution en cours, ce qui est le defaut qu'on vient de
+            # fermer. Une ligne validee par une autre suite au meme instant est
+            # le seul dommage possible, et il se repare tout seul a l'execution
+            # suivante -- la ou une table manquante ne se reparait jamais.
+            for table in _STUB_TABLES:
+                await connection.execute(table.delete())
             await connection.commit()
         finally:
             # La fermeture relache le verrou consultatif, qui est de niveau
@@ -367,21 +350,20 @@ async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
         await test_engine.dispose()
         raise
     yield test_engine
-    # RIEN N'EST DETRUIT EN SORTIE, ET C'EST UNE CORRECTION. Cette fixture
-    # detruisait les deux tables stubs au demontage. Le verrou consultatif ne
-    # couvre QUE les migrations -- il tombe avec la connexion ci-dessus, a
-    # dessein, pour que deux executions puissent cohabiter une fois le schema
-    # pose. Mais alors, la premiere session a se terminer arrachait les tables
-    # sous les pieds de la seconde : `UndefinedTableError: relation
+    # RIEN N'EST DETRUIT EN SORTIE, ET LA PROPRETE SE FAIT A L'ENTREE. Cette
+    # fixture detruisait les deux tables stubs au demontage. Le verrou
+    # consultatif ne couvre QUE la mise en place -- il tombe avec la connexion
+    # ci-dessus, a dessein, pour que deux executions puissent cohabiter une fois
+    # le schema pose. Mais alors, la premiere session a se terminer arrachait les
+    # tables sous les pieds de la seconde : `UndefinedTableError: relation
     # "plain_notes_test" does not exist`, en plein milieu d'une suite verte
     # ailleurs. Constate en jouant quatre suites en parallele.
     #
-    # Les tables stubs ont donc EXACTEMENT le meme cycle de vie que les tables
-    # migrees : creees si absentes, jamais detruites. C'est la base de test qui
-    # les porte, pas la session -- et cela supprime au passage la ligne la plus
-    # dangereuse du harnais, un `drop_all` a une virgule de vaporiser le schema
-    # migre. La base se remet a neuf par `--db-reset`, ou par
-    # `docker compose down -v`.
+    # Les tables stubs ont donc le meme cycle de vie que les tables migrees :
+    # creees si absentes, jamais detruites, et VIDEES a l'entree. C'est la base
+    # de test qui les porte, pas la session -- et la ligne la plus dangereuse du
+    # harnais, un `drop_all` a une virgule de vaporiser le schema migre, n'existe
+    # plus.
     await test_engine.dispose()
 
 
@@ -523,11 +505,16 @@ def authentication(
 
     `build_authentication` est celle du `lifespan` -- extraite de sa closure par
     BACK-12 pour cette raison precise. Les quatre resolveurs sont donc ceux de la
-    production, branches sur la fabrique de sessions LIEE : ils voient le semis
-    NON COMMITE du test, ce qui supprime le contournement qu'ont du inventer
-    `test_auth_integration.py` et `test_jwt_service_integration.py`, dont les
-    resolveurs etaient cables a la main sur la session du test parce qu'« une
-    autre connexion ne verrait rien du semis ».
+    production, branches sur la fabrique de sessions LIEE : ils voient le semis du
+    test sans qu'il ait a etre visible d'une autre connexion, ce que
+    `test_harness.py` prouve.
+
+    CE QUE CELA NE FAIT PAS. `test_auth_integration.py` et
+    `test_jwt_service_integration.py` gardent leur montage local, et ce n'est plus
+    faute de pouvoir : ils doublent le compte A DESSEIN -- `identity` a ses propres
+    tests de depot -- et figent l'horloge d'emission pour eprouver des fenetres
+    d'appartenance datees, deux choses que ce montage-ci ne propose pas puisqu'il
+    est celui de la production.
 
     `replace` echange le SEUL champ que le harnais doit maitriser. Un test qui
     veut au contraire eprouver la chaine d'emission COMPLETE -- le role vient
@@ -536,10 +523,47 @@ def authentication(
     return replace(build_authentication(get_settings(), bound_sessionmaker), tokens=tokens.service)
 
 
+@pytest.fixture
+def application(database: Database, authentication: Authentication) -> FastAPI:
+    """L'application REELLE, `app.state` monte, prete a recevoir des surcharges.
+
+    RENDUE A PART DU CLIENT, ET C'EST CE QUI REND LES SURCHARGES POSSIBLES. Une
+    fixture qui ne rendrait que l'`AsyncClient` n'exposerait aucun objet portant
+    `dependency_overrides` : un test ne pourrait alors surcharger ni les
+    reglages, ni le compte courant, ni quoi que ce soit d'autre. Les deux
+    fixtures coutent trois lignes et se demandent ensemble quand il le faut.
+
+    `create_app()` et non l'instance de module `app` : chaque test recoit une
+    application NEUVE, avec ses propres surcharges, sans heriter du precedent --
+    ce que la docstring de `create_app` promettait nommement a ce ticket.
+    """
+    built = create_app()
+    setattr(built.state, STATE_KEY, database)
+    setattr(built.state, AUTH_STATE_KEY, authentication)
+    return built
+
+
+@pytest.fixture
+def mounted_cache(application: FastAPI) -> InMemoryCache:
+    """Pose un cache en memoire sur l'application servie, pour `/health/ready`.
+
+    A LA DEMANDE, ET PAS D'OFFICE. Seule la sonde de disponibilite lit
+    `app.state.cache`. La monter sur toutes les applications ferait payer a
+    chaque test de route une ressource qu'aucune n'utilise, et masquerait surtout
+    le refus que la sonde DOIT rendre quand le cache manque -- un echec ferme
+    qu'un test doit pouvoir observer.
+
+    La doublure et l'adaptateur reel se construisent par la MEME signature
+    (`build_in_memory_cache` / `build_cache`), ce qui est exactement ce
+    qu'ADR-0023 promettait de rendre possible.
+    """
+    cache = build_in_memory_cache(get_settings())
+    setattr(application.state, CACHE_STATE_KEY, cache)
+    return cache
+
+
 @pytest_asyncio.fixture
-async def api_client(
-    database: Database, authentication: Authentication
-) -> AsyncIterator[AsyncClient]:
+async def api_client(application: FastAPI) -> AsyncIterator[AsyncClient]:
     """Client sur l'APPLICATION REELLE, base branchee sur la transaction du test.
 
     `app.state` SE MONTE A LA MAIN, ET LE `lifespan` NE TOURNE PAS. Quatre
@@ -550,15 +574,15 @@ async def api_client(
     et il construit un moteur POOLE la ou tout le harnais tient par `NullPool`.
     Les cles d'etat sont publiques et exportees exactement pour ce montage.
 
-    AUCUNE SURCHARGE D'UNITE DE TRAVAIL, ET C'EST LE POINT. `get_identity_uow` et
-    `get_organization_uow` lisent `get_database(request).sessionmaker` : poser le
-    bon `Database` suffit a ce que les routes ouvrent leurs sessions DANS la
-    transaction du test. Elles voient le semis non commite, et le teardown annule
-    tout. C'est le signe que le vrai cablage est teste, et non une doublure.
+    AUCUNE SURCHARGE D'UNITE DE TRAVAIL N'EST NECESSAIRE, ET C'EST LE POINT.
+    `get_identity_uow` et `get_organization_uow` lisent
+    `get_database(request).sessionmaker` : poser le bon `Database` suffit a ce que
+    les routes ouvrent leurs sessions DANS la transaction du test. Elles voient le
+    semis non commite, et le teardown annule tout. C'est le signe que le vrai
+    cablage est teste, et non une doublure. Un test qui veut malgre tout
+    surcharger une dependance demande `application` et ecrit dans son
+    `dependency_overrides` -- la fixture ci-dessus existe pour cela.
     """
-    application = create_app()
-    setattr(application.state, STATE_KEY, database)
-    setattr(application.state, AUTH_STATE_KEY, authentication)
     async with asgi_client(application) as opened:
         yield opened
 

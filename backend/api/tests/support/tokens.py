@@ -109,7 +109,9 @@ class TokenFactory:
     - jeton EXPIRE : `expired=True`. Un service jetable a l'horloge d'EMISSION
       reculee, aux memes `JWTSettings` -- donc meme secret et memes audiences :
       c'est bien le service du test qui le refusera, sur son expiration et rien
-      d'autre.
+      d'autre. Une CLE etrangere, elle, se demande par
+      `token_service(key=OTHER_SIGNING_KEY)` : cette fabrique n'a qu'UN service,
+      et c'est ce qui garantit que le signataire est le verificateur.
     - AUDIENCE incorrecte : `audience=AUDIENCE_INDIVIDUAL` sur une route
       professionnelle. Un jeton authentique d'une AUTRE application, ce qui est
       le cas realiste que l'isolation du cahier des charges vise.
@@ -176,7 +178,6 @@ class TokenFactory:
         group_role: str | None = DEFAULT_GROUP_ROLE,
         token_type: TokenType = TokenType.ACCESS,
         expired: bool = False,
-        key: str | None = None,
     ) -> str:
         """Emet un jeton et rend sa chaine.
 
@@ -191,11 +192,7 @@ class TokenFactory:
             else:
                 self.grant(account_id=account_id, group_id=active_group_id, role=group_role)
 
-        signer = self.service
-        if expired or (key is not None and key != self.key):
-            signer = self._degraded(
-                token_type, key=self.key if key is None else key, expired=expired
-            )
+        signer = self._backdated(token_type) if expired else self.service
 
         target = signer.audience_for(account_type) if audience is None else audience
         issue = (
@@ -214,8 +211,8 @@ class TokenFactory:
         """Emet un jeton d'acces et rend l'en-tete `Authorization`. Forme courante."""
         return bearer_header(await self.token(**overrides))  # type: ignore[arg-type]
 
-    def _degraded(self, token_type: TokenType, *, key: str, expired: bool) -> JwtTokenService:
-        """Un service jetable pour les cas de refus : autre cle, horloge reculee.
+    def _backdated(self, token_type: TokenType) -> JwtTokenService:
+        """Un service jetable dont l'horloge d'EMISSION est reculee.
 
         L'HORLOGE NE PILOTE QUE L'EMISSION -- aucun argument ne remplace celle
         que PyJWT emploie pour verifier. Un jeton deja expire ne se fabrique donc
@@ -224,23 +221,25 @@ class TokenFactory:
         marge. Le recul est DERIVE de la configuration et du type de jeton, jamais
         ecrit en dur : un `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` releve rendrait une
         constante fausse en silence, et le test passerait au vert sans rien prouver.
+
+        Memes `JWTSettings` que le service du test -- donc meme secret et memes
+        audiences : c'est bien lui qui refusera le jeton, sur son expiration et
+        rien d'autre. Une CLE etrangere se demande autrement, par
+        `token_service(key=OTHER_SIGNING_KEY)` : cette fabrique-ci n'a qu'un
+        service, et lui en donner deux la ferait mentir sur sa propre promesse.
         """
-        settings = jwt_settings(key=key, access_minutes=self.access_minutes)
+        settings = jwt_settings(key=self.key, access_minutes=self.access_minutes)
         lifetime = (
             timedelta(minutes=settings.access_token_expire_minutes)
             if token_type is TokenType.ACCESS
             else timedelta(days=settings.refresh_token_expire_days)
         )
-        backdate = (
-            lifetime + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS) + _EXPIRY_MARGIN
-            if expired
-            else timedelta()
-        )
+        backdate = lifetime + timedelta(seconds=CLOCK_SKEW_LEEWAY_SECONDS) + _EXPIRY_MARGIN
 
         async def resolve_group_role(
             account_id: UUID, group_id: UUID, when: datetime
         ) -> str | None:
-            """Toute appartenance est reputee active : le sujet du test est ailleurs."""
+            """Lit la MEME table que le service du test : le sujet est ailleurs."""
             if self.roles is None:
                 return DEFAULT_GROUP_ROLE
             return self.roles.get((account_id, group_id))

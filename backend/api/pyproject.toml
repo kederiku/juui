@@ -87,7 +87,7 @@ dev = [
     # `uv sync`.
     "import-linter==2.13",
 
-    # Tests -- la strategie a trois niveaux est l'objet de BACK-12.
+    # Tests -- le harnais et ses deux niveaux sont l'objet de BACK-12.
     "pytest~=9.1",
     "pytest-asyncio~=1.4",
     "pytest-cov~=7.1",
@@ -232,15 +232,16 @@ extend-immutable-calls = ["taskiq.TaskiqDepends"]
 
 [tool.ruff.lint.per-file-ignores]
 # La regle a ete posee avant tests/ pour que la suite de tests naisse conforme ;
-# BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 apportera le
+# BACK-06b a ouvert le dossier avec les tests d'isolation, BACK-12 a hisse le
 # harnais complet.
 #
 # S101 : `assert` est la maniere normale d'ecrire un test, pas une faille.
 # D1   : un test se nomme, il ne se documente pas.
 #
-# ANN reste ACTIF ici : le ticket ne demandait d'assouplir que ces deux points,
-# et `-> None` sur une fonction de test coute huit caracteres. A rediscuter en
-# BACK-12 si la contrainte se revele penible.
+# ANN reste ACTIF ici, et BACK-12 a FERME cet arbitrage : la contrainte ne s'est
+# pas revelee penible -- la suite entiere la tient sans une seule derogation --,
+# et la relacher au moment ou `tests/` reste hors de Mypy retirerait la seule
+# barriere de typage qui y court encore.
 "tests/**/*.py" = ["S101", "D1"]
 
 # Le resume d'une migration est le message passe a `alembic revision -m` : un
@@ -276,8 +277,10 @@ mypy_path = "src"
 # premiers .py hors de src/ les seuls non verifies. scripts/ y entre avec
 # SHARED-03, et pour une raison plus forte encore : c'est le seul code Python du
 # depot dont la SORTIE est commitee, il ne pouvait pas etre le seul non verifie.
-# tests/ reste volontairement hors perimetre : c'est BACK-12 qui decidera de l'y
-# faire entrer.
+# tests/ reste hors perimetre, et BACK-12 a rendu cette decision : la mesure en
+# donne des dizaines d'erreurs, dont la majorite porte sur des tests qu'on ne
+# ferait taire qu'en annotant le mensonge qu'ils denoncent. Reproductible par
+# `uv run mypy --cache-dir=/dev/null tests` ; l'ecart est chiffre au registre.
 files = ["src", "alembic", "scripts"]
 
 # Une seule derogation, et elle est declaree PAR MODULE -- jamais globalement,
@@ -302,7 +305,7 @@ warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
 # ---------------------------------------------------------------------------
-# Harnais de test a trois niveaux (BACK-12)
+# Harnais de test : le niveau se deduit, le sujet se declare (BACK-12)
 # ---------------------------------------------------------------------------
 # DEUX AXES DE MARQUEURS, ET ILS NE REPONDENT PAS A LA MEME QUESTION. Le NIVEAU
 # dit ce qu'un test COUTE -- « puis-je le lancer sans Docker ? » ; il est pose
@@ -323,24 +326,29 @@ asyncio_default_fixture_loop_scope = "function"
 #   rend la categorie obligatoire `tenant_isolation` autre chose qu'un voeu.
 # `--strict-config` : une cle inconnue dans cette section echoue au lieu d'etre
 #   ignoree -- meme raison, appliquee a la configuration.
-# `-rs` : les motifs de chaque saut s'affichent A CHAQUE EXECUTION. La page
-#   Tests l'enseignait a la demande ; le rendre permanent est une des trois
-#   pieces qui empechent une suite verte de cacher une moitie non jouee -- les
-#   deux autres sont le recensement de `pytest_terminal_summary` et
-#   `--require-services`.
-# PAS DE `--cov` ICI, A DESSEIN : il rendrait `pytest -k foo` echouant au seuil,
-#   et un seuil qui mord sur chaque execution ciblee finit desactive. La
-#   barriere vit dans `make test-cov`.
-addopts = ["--strict-markers", "--strict-config", "-rs"]
+# PAS DE `-rs`, ET C'EST MESURE. Le rendre permanent semblait etre la piece qui
+#   empeche une suite verte de cacher une moitie non jouee. Il fait l'inverse :
+#   TOUS les sauts de cette suite viennent de `require_service`, donc `-rs`
+#   repete le meme motif -- 146 lignes identiques quand PostgreSQL manque --, et
+#   pytest ecrit ce bloc APRES tous les `pytest_terminal_summary`, `trylast`
+#   compris. Le recensement, qui dit la meme chose en trois lignes, se
+#   retrouvait pousse hors de l'ecran par ce qu'il existe pour remplacer.
+#   `-rs` reste disponible a la demande, et `--require-services` reste la piece
+#   qui transforme un saut en echec.
+# PAS DE `--cov` ICI NON PLUS, a dessein : il rendrait `pytest -k foo` echouant
+#   au seuil, et un seuil qui mord sur chaque execution ciblee finit desactive.
+#   La barriere vit dans `make test-cov`.
+addopts = ["--strict-markers", "--strict-config"]
 markers = [
     # --- NIVEAU : pose automatiquement, exactement un par test --------------
     "unit: test qui ne demande aucun service reel -- tourne sans Docker (BACK-12)",
     "integration: test adosse a un service reel -- PostgreSQL, Redis, MinIO, Mailpit (BACK-12)",
-    # `slow` est un QUALIFICATIF, pas un troisieme niveau. Traite comme
-    # exclusif, un test unitaire ET lent sortirait de `-m unit`, et
-    # `make test-unit` cesserait de le jouer sans que rien ne le dise --
-    # exactement l'accident que ce ticket ferme ailleurs.
-    "slow: test dont la duree justifie de pouvoir l'ecarter (BACK-12)",
+    # `slow` est un QUALIFICATIF, pas un troisieme niveau : un test peut etre
+    # `unit` ET `slow`. C'est pourquoi `make test-unit` joue `-m unit` tout court.
+    # La forme `-m "unit and not slow"` a ete essayee et retiree : elle laissait
+    # le seul test des deux categories hors des DEUX cibles de niveau, sans que
+    # rien ne le dise -- exactement l'accident que ce marqueur existe pour eviter.
+    "slow: test dont la duree justifie de pouvoir l'ecarter a la main (BACK-12)",
 
     # --- SUJET : pose a la main, cumulable avec le niveau -------------------
     "tenant_isolation: tests d'isolation multi-tenant (BACK-06b, obligatoires depuis BACK-12)",

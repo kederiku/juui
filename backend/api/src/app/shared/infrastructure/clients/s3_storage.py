@@ -14,7 +14,7 @@ UNE FONCTION DE `Settings`, ET NON UN LECTEUR DE CONFIGURATION
 ecrite dans `db/engine.py` et `redis_cache.py` : `get_settings()` est mise en
 cache par `lru_cache`, et un constructeur qui l'appellerait de l'interieur ne
 saurait pas fabriquer un client different de celui du processus. Le worker TaskIQ
-(BACK-15) et les fixtures de BACK-12 auront besoin du leur.
+(BACK-15) et les fixtures de BACK-12 ont besoin du leur.
 
 L'ASYMETRIE A TROIS TEMPS DU SERVICE, ET LA PLACE DE CE FICHIER DEDANS
 BACK-05 livre `verify_connectivity`, qui LEVE et arrete le processus : sans base,

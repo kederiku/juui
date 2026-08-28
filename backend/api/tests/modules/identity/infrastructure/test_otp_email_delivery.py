@@ -33,8 +33,8 @@ from app.modules.identity.infrastructure.clients.email_otp_sender import build_o
 from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
 from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
 from app.modules.identity.infrastructure.tasks.otp import send_email_verification_otp
-from tests.conftest import require_service
 from tests.modules.identity.helpers import an_account, stored_account
+from tests.support.services import MAILPIT, MAILPIT_REMEDY, require_service
 
 pytestmark = pytest.mark.otp
 
@@ -57,11 +57,7 @@ async def mailpit(pytestconfig: pytest.Config) -> httpx.AsyncClient:
         try:
             await client.get("/api/v1/messages", params={"limit": 1})
         except httpx.HTTPError:
-            require_service(
-                pytestconfig,
-                name="mailpit",
-                remedy="`make up` a la racine demarre la pile (INFRA-07).",
-            )
+            require_service(pytestconfig, name=MAILPIT, remedy=MAILPIT_REMEDY)
         yield client
 
 

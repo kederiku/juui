@@ -30,8 +30,8 @@ from app.core import get_settings
 from app.modules.identity.domain.ports import OtpConsumption, OtpStore
 from app.modules.identity.infrastructure.clients.redis_otp_store import build_otp_store
 from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
-from tests.conftest import require_service
 from tests.modules.identity.helpers import a_client_ip, otp_rules
+from tests.support.services import REDIS, REDIS_REMEDY, require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -206,11 +206,7 @@ class TestRedisOtpStoreConformance(OtpStoreConformance):
         opened = build_otp_store(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            require_service(
-                pytestconfig,
-                name="redis",
-                remedy="`make up` a la racine demarre la pile (INFRA-02).",
-            )
+            require_service(pytestconfig, name=REDIS, remedy=REDIS_REMEDY)
         yield opened
         await opened.aclose()
 

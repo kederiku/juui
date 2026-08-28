@@ -35,7 +35,7 @@ from app.shared.domain.ports.cache import MISSING, Cache, CacheScope
 from app.shared.infrastructure.clients.redis_cache import build_cache
 from app.shared.infrastructure.memory.cache import build_in_memory_cache
 from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
-from tests.conftest import require_service
+from tests.support.services import REDIS, REDIS_REMEDY, require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -267,11 +267,7 @@ class TestRedisCacheConformance(CacheConformance):
         opened = build_cache(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            require_service(
-                pytestconfig,
-                name="redis",
-                remedy="`make up` a la racine demarre la pile (INFRA-02).",
-            )
+            require_service(pytestconfig, name=REDIS, remedy=REDIS_REMEDY)
         yield opened
         await opened.aclose()
 

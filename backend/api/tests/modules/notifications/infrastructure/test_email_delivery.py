@@ -40,7 +40,7 @@ from app.modules.notifications.infrastructure.clients.sms_sender import LoggingS
 from app.modules.notifications.infrastructure.memory.unit_of_work import (
     InMemoryNotificationsUnitOfWork,
 )
-from tests.conftest import require_service
+from tests.support.services import MAILPIT, MAILPIT_REMEDY, require_service
 
 pytestmark = pytest.mark.notifications
 
@@ -65,11 +65,7 @@ async def mailpit(pytestconfig: pytest.Config) -> AsyncIterator[httpx.AsyncClien
         try:
             await client.get("/api/v1/messages", params={"limit": 1})
         except httpx.HTTPError:
-            require_service(
-                pytestconfig,
-                name="mailpit",
-                remedy="`make dev` a la racine demarre la pile (INFRA-07).",
-            )
+            require_service(pytestconfig, name=MAILPIT, remedy=MAILPIT_REMEDY)
         yield client
 
 

@@ -319,14 +319,14 @@ def create_app(*, app_settings: AppSettings | None = None) -> FastAPI:
     """Construit une instance neuve et independante de l'application.
 
     Passer par une factory plutot que de configurer un objet global est ce qui
-    rendra les tests de BACK-12 possibles : chaque test construit son
-    application, avec ses propres surcharges de dependances, sans heriter de
-    l'etat laisse par le test precedent.
+    rend le harnais de BACK-12 possible : la fixture `application` construit une
+    instance neuve par test, avec ses propres surcharges de dependances, sans
+    heriter de l'etat laisse par le precedent.
 
     Args:
         app_settings: reglages generaux employes A LA CONSTRUCTION -- fermeture
-            de /docs comprise. `None` les lit de l'environnement ; les tests de
-            BACK-12 passeront les leurs sans manipuler de variables.
+            de /docs comprise. `None` les lit de l'environnement ; les sondes
+            d'intergiciels passent les leurs sans manipuler de variables.
 
     Returns:
         L'application FastAPI, sondes et routeur v1 deja montes.

@@ -9,7 +9,7 @@ UNE FONCTION DE `Settings`, ET NON UN LECTEUR DE CONFIGURATION
 `get_settings()`. Cette fonction est mise en cache par `lru_cache` : un
 constructeur qui l'appellerait de l'interieur ne saurait pas fabriquer un moteur
 different de celui du processus. Or l'`env.py` d'Alembic (BACK-07) tourne HORS de
-l'application, et les fixtures de test (BACK-12) auront besoin d'un moteur a
+l'application, et les fixtures de test (BACK-12) ont besoin d'un moteur a
 elles -- avec un `poolclass=NullPool`, la file interne du pool par defaut etant
 liee a la boucle d'evenements de sa premiere utilisation. BACK-07 a finalement
 construit le sien directement : `NullPool` refuse les `pool_size`/`max_overflow`

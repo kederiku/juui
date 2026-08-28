@@ -21,11 +21,11 @@ la conformite a ete verifiee : lire les `skip` du rapport. C'est le parti de
 `test_redis_otp_store.py`, et la meme discipline -- aucun `FLUSHDB`, aucune cle
 fixe, des identifiants tires au hasard a chaque test.
 
-POSTGRESQL, LUI, NE SE SAUTE PAS : IL ARRETE LA SESSION ENTIERE
-La fixture `engine` du conftest racine appelle `pytest.exit()` quand la base de
-test ne repond pas -- choix de BACK-06b, pour que la preuve d'isolation ne puisse
-pas etre sautee en silence. La consequence traverse ce ticket : sans PostgreSQL,
-la suite s'arrete, et les moities EN MEMOIRE ne tournent pas davantage, alors
-qu'elles n'ont besoin de rien. C'est un ecart, il est consigne, et l'arbitrage
-appartient a BACK-12 qui reprend le harnais -- pas a un ticket de doublures.
+POSTGRESQL SE SAUTE COMME LES AUTRES DEPUIS BACK-12
+La fixture `engine` appelait `pytest.exit()` : sans base de test, la session
+s'arretait, et les moities EN MEMOIRE ne tournaient pas davantage alors qu'elles
+n'ont besoin de rien. L'arbitrage est rendu -- elles tournent, et le saut des
+moities reelles est RECENSE en fin d'execution. Le geste qui leve tout doute
+n'est plus `-rs` mais `--require-services`, qui transforme chaque saut en echec :
+`uv run pytest -m conformance --require-services` doit rendre zero `skipped`.
 """

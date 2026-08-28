@@ -11,15 +11,24 @@ meme raison : les ranger sous un module mentirait sur leur portee.
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core import Settings, get_settings
 from app.modules.identity.domain.entities import Account, AccountType
 from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
-from app.shared.domain.ports.token_service import InactiveMembershipError
+from app.shared.domain.ports.token_service import InactiveMembershipError, TokenType
 from app.shared.infrastructure.api.dependencies.auth import Authentication
+from app.shared.infrastructure.memory.cache import InMemoryCache
 from app.shared.infrastructure.security.jwt_service import ACCOUNT_TYPE_INDIVIDUAL
-from tests.support.tokens import ACCOUNT_ID, AUDIENCE_INDIVIDUAL, GROUP_ID, TokenFactory
+from tests.support.tokens import (
+    ACCOUNT_ID,
+    AUDIENCE_INDIVIDUAL,
+    GROUP_ID,
+    OTHER_GROUP_ID,
+    TokenFactory,
+)
 
 
 async def test_the_api_client_serves_the_real_application(api_client: AsyncClient) -> None:
@@ -45,12 +54,13 @@ async def test_a_route_reached_through_the_client_sees_the_uncommitted_seed(
     PRODUCTION -- celui que `build_authentication` monte, le meme qu'en
     production, qui ouvre sa PROPRE unite de travail -- et il le trouve.
 
-    Avant BACK-12 c'etait impossible : `test_auth_integration.py` cablait ses
-    resolveurs a la main sur la session du test, en expliquant qu'« une autre
-    connexion ne verrait rien du semis ». La fabrique de sessions LIEE supprime
-    le contournement -- les deux unites de travail partagent la connexion du test
-    --, et le point de composition teste redevient celui qui tourne. Rien n'en
-    sort : le teardown annule la transaction externe, savepoints compris.
+    Avant BACK-12 c'etait impossible : un resolveur ouvrant sa propre unite de
+    travail n'aurait rien vu du semis, faute de partager la connexion -- c'est
+    l'obstacle que `test_auth_integration.py` contourne en cablant les siens a la
+    main sur la session du test. La fabrique de sessions LIEE le leve : les deux
+    unites de travail partagent la connexion, et le point de composition teste est
+    celui qui tourne. Rien n'en sort : le teardown annule la transaction externe,
+    savepoints compris.
     """
     account = Account.create(
         email=f"harness-{uuid4().hex}@example.test",
@@ -71,7 +81,41 @@ async def test_a_route_reached_through_the_client_sees_the_uncommitted_seed(
     assert found.id == account.id
 
 
-async def test_the_token_factory_signs_what_the_montage_verifies(
+async def test_a_dependency_can_be_overridden_on_the_client_application(
+    application: FastAPI, api_client: AsyncClient, mounted_cache: InMemoryCache
+) -> None:
+    """Les dependances de l'application servie sont SURCHARGEABLES.
+
+    Le ticket demande la « surcharge des dependances (Settings, UoW, compte
+    courant) ». Elle passe par la fixture `application`, que `api_client`
+    consomme : une fixture qui ne rendrait que le client n'exposerait aucun objet
+    portant `dependency_overrides`, et le critere serait litteralement faux.
+
+    `get_settings` sert de temoin parce que c'est la seule des trois qu'une route
+    livree consomme aujourd'hui -- `/health/ready` la lit, d'ou le cache monte
+    a la demande. Le compte courant se
+    surcharge de la meme facon par `get_authentication` ; l'unite de travail n'a
+    pas de dependance a surcharger, et n'en a pas besoin : elle derive de
+    `get_database`, que `app.state` porte deja.
+    """
+    sentinel = get_settings()
+    seen: list[Settings] = []
+
+    def _serve_sentinel() -> Settings:
+        """Rend la configuration du test, et note qu'elle a ete demandee."""
+        seen.append(sentinel)
+        return sentinel
+
+    application.dependency_overrides[get_settings] = _serve_sentinel
+    try:
+        await api_client.get("/health/ready")
+    finally:
+        application.dependency_overrides.clear()
+
+    assert seen == [sentinel]
+
+
+async def test_the_token_factory_signs_what_the_authentication_verifies(
     probe_client: AsyncClient, tokens: TokenFactory
 ) -> None:
     """Un jeton emis par la fabrique ouvre une route protegee de son audience."""
@@ -120,6 +164,47 @@ async def test_an_expired_token_is_refused(probe_client: AsyncClient, tokens: To
     """
     response = await probe_client.get("/pro/me", headers=await tokens.bearer(expired=True))
     assert response.status_code == 401
+
+
+async def test_a_refresh_token_does_not_open_a_protected_route(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
+    """Un jeton de RAFRAICHISSEMENT, parfaitement valide, est refuse en 401.
+
+    `get_current_account` code `expected_type=ACCESS` en dur : c'est ce qui
+    empeche un jeton de longue duree de servir de laissez-passer. La fabrique le
+    produit avec le meme service et la meme signature -- seuls la duree et le
+    claim `type` changent --, donc le refus porte bien sur le TYPE et non sur un
+    defaut de fabrication. Ce jeton ne sera legitime que sur la route de
+    rafraichissement de BACK-29.
+    """
+    header = await tokens.bearer(token_type=TokenType.REFRESH)
+    response = await probe_client.get("/pro/me", headers=header)
+    assert response.status_code == 401
+
+
+async def test_the_role_table_holds_several_memberships_at_once(
+    probe_client: AsyncClient, tokens: TokenFactory
+) -> None:
+    """Un remplacant appartient a DEUX groupes, avec un role different dans chacun.
+
+    C'est le cas que la table VIVANTE existe pour servir, et celui qu'un service
+    construit sur une table figee ne permettait pas : le second jeton s'emet apres
+    que le premier a ete verifie, sans reconstruire quoi que ce soit. C'est aussi
+    le compte le plus risque du modele (INFRA-08), donc celui dont le harnais doit
+    savoir parler.
+    """
+    tokens.grant(group_id=GROUP_ID, role="manager")
+    tokens.grant(group_id=OTHER_GROUP_ID, role="admin")
+
+    granted = await probe_client.get("/pro/managers", headers=await tokens.bearer())
+    elsewhere = await probe_client.get(
+        "/pro/managers",
+        headers=await tokens.bearer(active_group_id=OTHER_GROUP_ID, group_role="admin"),
+    )
+
+    assert granted.status_code == 200
+    assert elsewhere.status_code == 403
 
 
 async def test_an_inactive_membership_is_refused_at_issuance(tokens: TokenFactory) -> None:

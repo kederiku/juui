@@ -31,13 +31,13 @@ Deux `make test` existent, et ils ne couvrent pas la même chose :
 Depuis `backend/api/`, quatre cibles découpent la suite. **L'axe qui les sépare est le service,
 pas la couche** — c'est ce qui rend la première utilisable sans rien démarrer :
 
-| Cible              | Ce qu'elle joue                                                               | Docker ?   |
-| ------------------ | ----------------------------------------------------------------------------- | ---------- |
-| `test`             | Tout                                                                          | Pile       |
-| `test-unit`        | `-m "unit and not slow"` — rien qui touche un service                         | **Aucun**  |
-| `test-integration` | `-m integration` — PostgreSQL, Redis, MinIO, Mailpit                          | Pile       |
-| `test-tenancy`     | `-m tenant_isolation` — la [catégorie obligatoire](#la-catégorie-obligatoire) | PostgreSQL |
-| `test-cov`         | Tout, plus la couverture et son seuil bloquant                                | Pile       |
+| Cible              | Ce qu'elle joue                                                                                     | Docker ?   |
+| ------------------ | --------------------------------------------------------------------------------------------------- | ---------- |
+| `test`             | Tout                                                                                                | Pile       |
+| `test-unit`        | `-m unit` — rien qui touche un service                                                              | **Aucun**  |
+| `test-integration` | `-m integration`, `--require-services`                                                              | Pile       |
+| `test-tenancy`     | `-m tenant_isolation`, `--require-services` — la [catégorie obligatoire](#la-catégorie-obligatoire) | PostgreSQL |
+| `test-cov`         | Tout, plus la couverture et son seuil bloquant                                                      | Pile       |
 
 À la racine, `make test-back-unit` et `make test-back-cov` délèguent aux deux qui servent le plus
 souvent. Les autres se lancent depuis `backend/api/`, qui est aussi la voie pour passer des
@@ -97,13 +97,19 @@ Les moitiés qui parlent à un vrai service se **sautent** quand ce service ne r
 n'échouent pas : une exécution verte sur un poste sans Redis ressemblerait donc, trait pour trait,
 à une exécution verte sur un poste complet.
 
-**Trois pièces referment ce piège**, et il faut les connaître dans cet ordre :
+**Deux pièces referment ce piège**, et la seconde est celle qui prouve :
 
-| Pièce                      | Ce qu'elle fait                                                            |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `-rs` dans `addopts`       | Le motif de chaque saut s'affiche à **chaque** exécution, sans le demander |
-| Le bloc `services absents` | Nomme les services qui ont manqué, juste avant le vert final               |
-| `--require-services`       | Transforme chaque saut en **échec**                                        |
+| Pièce                      | Ce qu'elle fait                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| Le bloc `services absents` | Nomme les services qui ont manqué, en dernier avant le décompte final                           |
+| `--require-services`       | Transforme chaque saut en **échec** — posé sur `test-integration`, `test-tenancy` et `test-cov` |
+
+Il y en avait trois : `-rs` était dans les `addopts`. Il en a été retiré, et le mesurer explique
+pourquoi — **tous** les sauts de cette suite viennent du même helper, donc `-rs` répétait le même
+motif 146 fois quand PostgreSQL manquait, et pytest écrit ce bloc **après** tous les
+`pytest_terminal_summary`, `trylast` compris. Le recensement, qui dit la même chose en trois lignes,
+se retrouvait poussé hors de l'écran par ce qu'il existe pour remplacer. `-rs` reste disponible à la
+demande.
 
 | Service manquant | Ce qui se passe                                          |
 | ---------------- | -------------------------------------------------------- |
@@ -152,7 +158,9 @@ de jouer.
 
 `slow` est un **qualificatif**, pas un troisième niveau : un test peut être `unit` et `slow`.
 Traités comme exclusifs, les tests unitaires lents sortiraient de `-m unit` sans que rien ne le
-dise. `make test-unit` joue `-m "unit and not slow"` ; `make test` joue tout.
+dise. `make test-unit` joue donc `-m unit` tout court : la forme `-m "unit and not slow"` a été
+essayée et retirée, parce qu'elle laissait le seul test des deux catégories hors des **deux**
+cibles de niveau — exactement l'accident que ce marqueur existe pour éviter.
 
 ### Le sujet : quel comportement un test garde
 
@@ -339,12 +347,19 @@ disparu, et le point de composition testé est redevenu celui qui tourne.
 
 #### Le client HTTP et la fabrique de jetons
 
-| Fixture          | Ce qu'elle donne                                                                 |
-| ---------------- | -------------------------------------------------------------------------------- |
-| `tokens`         | La `TokenFactory` du test — celui qui signe **est** celui qui vérifie            |
-| `probe_client`   | Un client sur l'application de sonde : les dépendances transverses, sans base    |
-| `api_client`     | Un client sur l'application **réelle**, base branchée sur la transaction du test |
-| `authentication` | Le montage réel, dont seul le service de jetons vient du harnais                 |
+| Fixture          | Ce qu'elle donne                                                               |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `tokens`         | La `TokenFactory` du test — celui qui signe **est** celui qui vérifie          |
+| `probe_client`   | Un client sur l'application de sonde : les dépendances transverses, sans base  |
+| `application`    | L'application **réelle**, `app.state` monté, prête à recevoir des surcharges   |
+| `api_client`     | Un client sur cette application                                                |
+| `authentication` | Le montage réel, dont seul le service de jetons vient du harnais               |
+| `mounted_cache`  | Un cache en mémoire sur l'application, **à la demande** — pour `/health/ready` |
+
+**L'application et le client sont deux fixtures, et c'est ce qui rend les surcharges possibles.**
+Une fixture qui ne rendrait que l'`AsyncClient` n'exposerait aucun objet portant
+`dependency_overrides` : ni les réglages, ni le compte courant ne seraient surchargeables. Les deux
+coûtent trois lignes et se demandent ensemble quand il le faut.
 
 `api_client` monte `app.state` **à la main** et n'exécute pas le `lifespan` : celui-ci appelle
 `get_settings()` en direct, reconfigure la journalisation — ce que la garde `_ensure_pristine_logging`

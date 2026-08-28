@@ -7,10 +7,19 @@ clinique disent bien la meme chose sur les memes lignes, et que la contrainte de
 schema sur laquelle la premiere s'appuie existe REELLEMENT.
 
 Le test tient lieu de POINT DE COMPOSITION, comme `test_jwt_service_integration`
-avant lui : les resolveurs se branchent sur LA SESSION DU TEST et non sur une
-unite de travail ouverte sur le `sessionmaker`. La fixture `session` ne commite
-jamais -- une autre connexion ne verrait rien du semis, et le refus observe
-serait une invisibilite transactionnelle deguisee en propriete de securite.
+avant lui : les resolveurs se branchent sur LA SESSION DU TEST plutot que sur le
+montage de production.
+
+CE N'EST PLUS FAUTE DE POUVOIR, ET LA RAISON A CHANGE AVEC BACK-12. Le motif
+d'origine -- « la fixture `session` ne commite jamais, une autre connexion ne
+verrait rien du semis » -- ne tient plus : la fabrique de sessions du harnais est
+liee a la connexion du test, si bien qu'une unite de travail ouverte dessus voit
+le semis (`tests/test_harness.py` le prouve, et la fixture `authentication` sert
+exactement a cela). Ce qui reste, ce sont deux choix propres a CE fichier : le
+compte est une DOUBLURE a dessein -- `identity` a ses propres tests de depot, et
+lui creer une ligne ici n'ajouterait rien -- et l'horloge d'emission est FIGEE,
+pour eprouver des fenetres d'appartenance datees. Le montage de production
+n'offre ni l'un ni l'autre, puisque c'est celui de la production.
 
 Les tests ne committent jamais ; le rollback du teardown annule le semis.
 """
