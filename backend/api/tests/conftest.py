@@ -35,6 +35,7 @@ import inspect
 import logging
 from collections.abc import AsyncIterator, Iterator
 from contextvars import ContextVar
+from dataclasses import replace
 from pathlib import Path
 from typing import Final, NoReturn, cast
 from uuid import UUID, uuid4
@@ -45,6 +46,7 @@ import pytest_asyncio
 from alembic import command
 from alembic.config import Config
 from alembic.util import CommandError
+from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
@@ -58,11 +60,16 @@ from sqlalchemy.pool import NullPool
 
 from app.core import get_settings
 from app.core.correlation import current_account_id, current_clinic_id, current_request_id
+from app.main import build_authentication, create_app
+from app.shared.infrastructure.api.dependencies.auth import AUTH_STATE_KEY, Authentication
 from app.shared.infrastructure.db.base import Base
 from app.shared.infrastructure.db.engine import build_engine
-from app.shared.infrastructure.db.session import Database, build_sessionmaker
+from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
 from app.shared.infrastructure.tenancy import current_group_id
+from tests.support.api import asgi_client
+from tests.support.auth import an_authentication, build_probe_app
 from tests.support.tenancy_stubs import PlainNoteModel, TenantNoteModel
+from tests.support.tokens import TokenFactory
 
 # Les deux seules tables que ces tests creent et detruisent : jamais un
 # create_all/drop_all sans cible, qui toucherait aux tables sous migrations.
@@ -422,6 +429,96 @@ def engine_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
     parallele. Les deux commitent pour de bon et PURGENT EUX-MEMES.
     """
     return build_sessionmaker(engine)
+
+
+# ---------------------------------------------------------------------------
+# Le client HTTP et la fabrique de jetons
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def tokens() -> TokenFactory:
+    """La fabrique de jetons du test : celui qui SIGNE est celui qui VERIFIE.
+
+    Sa table d'appartenances est VIVANTE : un test peut declarer un role apres
+    que le service est deja pose sur `app.state`, ce qu'un service construit sur
+    une table figee ne permettait pas. Son horloge d'emission est figee, mais pas
+    reculee -- `now` ne pilote que l'emission, PyJWT verifie sur l'horloge
+    murale, et un jeton deja expire se demande par `expired=True`.
+    """
+    return TokenFactory()
+
+
+@pytest.fixture
+def authentication_double(tokens: TokenFactory) -> Authentication:
+    """Montage d'authentification servi par des doublures : AUCUNE base.
+
+    C'est ce qui rend `probe_client` unitaire : les resolveurs sont des closures
+    sur des dictionnaires, et le seul objet reel est le service de jetons -- qui
+    est aussi celui de `tokens`, sans quoi le verificateur refuserait ce que le
+    signataire vient d'emettre.
+    """
+    return an_authentication(tokens=tokens.service)
+
+
+@pytest_asyncio.fixture
+async def probe_client(authentication_double: Authentication) -> AsyncIterator[AsyncClient]:
+    """Client sur l'application de SONDE : les dependances transverses, sans base.
+
+    `override=False` pose le montage sur `app.state` plutot que par surcharge de
+    dependance : c'est la seule voie qui prouve `get_authentication`, sa garde
+    `isinstance` et la cle d'etat -- la meme que celle qu'`api_client` emprunte.
+    """
+    async with asgi_client(build_probe_app(authentication_double, override=False)) as opened:
+        yield opened
+
+
+@pytest.fixture
+def authentication(
+    tokens: TokenFactory, bound_sessionmaker: async_sessionmaker[AsyncSession]
+) -> Authentication:
+    """Le montage REEL, dont seul le service de jetons vient du harnais.
+
+    `build_authentication` est celle du `lifespan` -- extraite de sa closure par
+    BACK-12 pour cette raison precise. Les quatre resolveurs sont donc ceux de la
+    production, branches sur la fabrique de sessions LIEE : ils voient le semis
+    NON COMMITE du test, ce qui supprime le contournement qu'ont du inventer
+    `test_auth_integration.py` et `test_jwt_service_integration.py`, dont les
+    resolveurs etaient cables a la main sur la session du test parce qu'« une
+    autre connexion ne verrait rien du semis ».
+
+    `replace` echange le SEUL champ que le harnais doit maitriser. Un test qui
+    veut au contraire eprouver la chaine d'emission COMPLETE -- le role vient
+    vraiment de `MembershipModel` -- ne remplace rien et seme son appartenance.
+    """
+    return replace(build_authentication(get_settings(), bound_sessionmaker), tokens=tokens.service)
+
+
+@pytest_asyncio.fixture
+async def api_client(
+    database: Database, authentication: Authentication
+) -> AsyncIterator[AsyncClient]:
+    """Client sur l'APPLICATION REELLE, base branchee sur la transaction du test.
+
+    `app.state` SE MONTE A LA MAIN, ET LE `lifespan` NE TOURNE PAS. Quatre
+    raisons, toutes dans `main.py` : il appelle `get_settings()` en direct, que
+    `dependency_overrides` n'atteint pas ; il appelle `configure_logging()`, ce
+    que la garde `_ensure_pristine_logging` mesure et refuse ; il ouvre Redis, S3,
+    le magasin d'OTP et demarre le broker, dont un test de route n'a que faire ;
+    et il construit un moteur POOLE la ou tout le harnais tient par `NullPool`.
+    Les cles d'etat sont publiques et exportees exactement pour ce montage.
+
+    AUCUNE SURCHARGE D'UNITE DE TRAVAIL, ET C'EST LE POINT. `get_identity_uow` et
+    `get_organization_uow` lisent `get_database(request).sessionmaker` : poser le
+    bon `Database` suffit a ce que les routes ouvrent leurs sessions DANS la
+    transaction du test. Elles voient le semis non commite, et le teardown annule
+    tout. C'est le signe que le vrai cablage est teste, et non une doublure.
+    """
+    application = create_app()
+    setattr(application.state, STATE_KEY, database)
+    setattr(application.state, AUTH_STATE_KEY, authentication)
+    async with asgi_client(application) as opened:
+        yield opened
 
 
 @pytest.fixture

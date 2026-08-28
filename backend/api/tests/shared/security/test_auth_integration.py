@@ -45,12 +45,14 @@ from app.shared.infrastructure.api.dependencies.auth import (
 )
 from app.shared.infrastructure.api.dependencies.tenant import CLINIC_HEADER
 from app.shared.infrastructure.security.jwt_service import JwtTokenService
+from tests.support.api import asgi_client
 from tests.support.auth import (
-    AUDIENCE_PRO,
     FakeAccount,
     bearer,
     build_probe_app,
-    client,
+)
+from tests.support.tokens import (
+    AUDIENCE_PRO,
     jwt_settings,
 )
 
@@ -165,7 +167,7 @@ async def test_a_real_token_opens_a_protected_route_end_to_end(session: AsyncSes
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -182,7 +184,7 @@ async def test_a_clinic_role_comes_from_the_assignment_row(session: AsyncSession
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         allowed = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -213,7 +215,7 @@ async def test_a_clinic_of_another_group_is_refused_even_when_the_account_is_ass
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_a)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         own = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_a)})
         other = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_b)})
         unknown = await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(uuid4())})
@@ -235,7 +237,7 @@ async def test_an_expired_assignment_no_longer_grants_a_clinic_role(
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -253,7 +255,7 @@ async def test_a_clinic_without_any_assignment_is_refused_like_an_unknown_one(
     authentication = _authentication(session, FakeAccount(id=account_id))
     headers = await _authorization(authentication, account_id, group_id)
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**headers, CLINIC_HEADER: str(clinic_id)}
         )
@@ -291,7 +293,7 @@ async def test_a_closed_membership_still_grants_its_group_role_until_the_token_e
     membership.end_at = _AT - timedelta(minutes=1)
     await session.flush()
 
-    async with client(build_probe_app(authentication)) as opened:
+    async with asgi_client(build_probe_app(authentication)) as opened:
         response = await opened.get("/pro/managers", headers=headers)
 
     assert response.status_code == 200

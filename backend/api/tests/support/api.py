@@ -1,11 +1,13 @@
-"""Sondes HTTP des tests d'intergiciels (BACK-11).
+"""Le client HTTP de la suite, et les sondes des tests d'intergiciels.
 
-HARNAIS TIRE EN AVANT SUR BACK-12, et consigne au registre des ecarts.
-`test_error_handlers.py` recopie ses deux fabriques localement, patron que
-`test_pagination.py` a repris. Trois fichiers de plus les recopieraient a leur
-tour : ils vivent donc ici, sans que les fichiers existants soient convertis --
-le harnais partage appartient a BACK-12, et le convertir a moitie serait pire
-que la duplication qu'on evite.
+UNE SEULE DEFINITION DU CLIENT, ET C'EST L'OBJET DE BACK-12
+`asgi_client` etait ecrit CINQ FOIS : ici, dans `auth.py`, et en local dans
+`test_error_handlers.py`, `test_error_handlers_tenancy.py` et
+`test_pagination.py`. Les quatre copies ont disparu. La forme est un
+gestionnaire de contexte et non une fixture, parce que plusieurs tests
+construisent DEUX applications dans un meme cas -- `test_error_handlers.py` est
+parametre sur quatre montages. La fixture `probe_client` du conftest est
+l'autre forme, celle du cas courant : une application, un client.
 
 CE QUI SE PROUVE SUR `create_app()` ET CE QUI NE S'Y PROUVE PAS
 Les intergiciels ne sont montes que par `create_app()` : ces tests l'appellent
@@ -63,11 +65,16 @@ def build_app(settings: AppSettings = API_SETTINGS) -> FastAPI:
 
 
 @asynccontextmanager
-async def client(application: FastAPI) -> AsyncIterator[AsyncClient]:
+async def asgi_client(application: FastAPI) -> AsyncIterator[AsyncClient]:
     """Ouvre un client HTTP sur l'application, sans reseau ni `lifespan`.
 
     `raise_app_exceptions=False` : sans lui, une exception imprevue remonterait
     dans le test au lieu de produire la reponse 500 qu'on veut observer.
+
+    LE GARDE-FOU RESEAU NE LE VOIT PAS, et c'est verifie : `httpx.ASGITransport`
+    derive d'`AsyncBaseTransport` et non d'`AsyncHTTPTransport`, or
+    `_forbid_outbound_http` ne mord que sur les deux transports qui ouvrent une
+    socket. L'hote `test` de `base_url` n'a donc jamais a etre autorise.
     """
     transport = ASGITransport(app=application, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as opened:

@@ -22,7 +22,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import Depends, FastAPI
-from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,6 +39,7 @@ from app.shared.domain.pagination import (
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.pagination import Page, PageParams, sort_param
 from app.shared.infrastructure.tenancy import use_all_groups, use_group
+from tests.support.api import asgi_client
 from tests.support.tenancy_stubs import (
     PlainNoteModel,
     PlainNoteRepository,
@@ -108,21 +108,13 @@ def _build_mangled_app() -> FastAPI:
     return application
 
 
-def _client(application: FastAPI) -> AsyncClient:
-    """Client httpx sur transport ASGI, sans lifespan."""
-    return AsyncClient(
-        transport=ASGITransport(app=application, raise_app_exceptions=False),
-        base_url="http://test",
-    )
-
-
 # ---------------------------------------------------------------------------
 # Bordure HTTP : parametres, refus, enveloppe
 # ---------------------------------------------------------------------------
 
 
 async def test_happy_path_returns_the_envelope() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params={"page": 2, "page_size": 2})
     assert response.status_code == 200
     body = response.json()
@@ -134,7 +126,7 @@ async def test_happy_path_returns_the_envelope() -> None:
 
 
 async def test_defaults_apply_without_query() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes")
     assert response.status_code == 200
     body = response.json()
@@ -145,7 +137,7 @@ async def test_defaults_apply_without_query() -> None:
 
 async def test_page_size_above_max_is_refused_not_truncated() -> None:
     """LE critere du ticket : au-dela du maximum, un refus -- jamais une coupe."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         refused = await client.get("/notes", params={"page_size": MAX_PAGE_SIZE + 1})
         witness = await client.get("/notes", params={"page_size": MAX_PAGE_SIZE})
     assert refused.status_code == 422
@@ -164,7 +156,7 @@ async def test_page_size_above_max_is_refused_not_truncated() -> None:
     [{"page": 0}, {"page": -1}, {"page_size": 0}, {"page_size": "abc"}],
 )
 async def test_out_of_range_params_are_refused(query: dict[str, object]) -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params=query)
     assert response.status_code == 422
     assert response.json()["code"] == "http.request.validation_error"
@@ -172,14 +164,14 @@ async def test_out_of_range_params_are_refused(query: dict[str, object]) -> None
 
 async def test_astronomical_page_is_refused_not_a_500() -> None:
     """Un decalage au-dela de l'int8 de PostgreSQL est un refus, pas une panne."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params={"page": str(10**18), "page_size": 100})
     assert response.status_code == 422
     assert response.json()["code"] == "shared.pagination.invalid"
 
 
 async def test_unknown_sort_field_is_refused() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params={"sort": "email"})
     assert response.status_code == 422
     body = response.json()
@@ -190,14 +182,14 @@ async def test_unknown_sort_field_is_refused() -> None:
 @pytest.mark.parametrize("sort", ["", "-", "--name", "NAME"])
 async def test_malformed_sort_is_refused(sort: str) -> None:
     """Correspondance exacte, rien d'autre : vide, double prefixe et casse refuses."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params={"sort": sort})
     assert response.status_code == 422
     assert response.json()["code"] == "shared.pagination.unknown_sort"
 
 
 async def test_sort_prefix_controls_direction() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         ascending = await client.get("/notes", params={"sort": "name", "page_size": 5})
         descending = await client.get("/notes", params={"sort": "-name", "page_size": 5})
     names = [item["name"] for item in ascending.json()["items"]]
@@ -207,7 +199,7 @@ async def test_sort_prefix_controls_direction() -> None:
 
 
 async def test_without_sort_the_default_order_holds() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/notes", params={"page_size": 5})
     assert [item["name"] for item in response.json()["items"]] == list(_NOTE_NAMES)
 

@@ -17,19 +17,21 @@ from app.shared.infrastructure.api.dependencies.tenant import (
     CLINIC_ROLE_NAMES,
     GROUP_ROLE_NAMES,
 )
+from tests.support.api import asgi_client
 from tests.support.auth import (
-    ACCOUNT_ID,
-    CLINIC_ID,
-    GROUP_ID,
-    OTHER_CLINIC_ID,
     Calls,
     FakeAccount,
     FakeAssignment,
     an_authentication,
     bearer,
     build_probe_app,
-    client,
     token_service,
+)
+from tests.support.tokens import (
+    ACCOUNT_ID,
+    CLINIC_ID,
+    GROUP_ID,
+    OTHER_CLINIC_ID,
 )
 
 pytestmark = pytest.mark.authorization
@@ -47,7 +49,7 @@ async def test_a_group_scoped_role_is_read_from_the_claim_without_any_query() ->
     calls = Calls()
     service = token_service(roles={(ACCOUNT_ID, GROUP_ID): "manager"})
     application = build_probe_app(an_authentication(tokens=service, calls=calls))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/managers", headers=await bearer(service))
     assert response.status_code == 200
     assert calls.assignments == 0
@@ -57,7 +59,7 @@ async def test_a_group_role_outside_the_allowed_set_is_refused() -> None:
     """Un administrateur n'est pas un gerant : le refus est un 403, pas un 404."""
     service = token_service(roles={(ACCOUNT_ID, GROUP_ID): "admin"})
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/managers", headers=await bearer(service))
     assert response.status_code == 403
     assert response.json()["code"] == "shared.resource.forbidden"
@@ -70,7 +72,7 @@ async def test_a_token_without_group_role_cannot_satisfy_a_group_scope() -> None
         an_authentication(tokens=service, accounts={ACCOUNT_ID: FakeAccount()})
     )
     headers = await bearer(service, active_group_id=None)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/managers", headers=headers)
     assert response.status_code == 403
 
@@ -81,7 +83,7 @@ async def test_a_group_role_guard_alone_still_refuses_a_suspended_account() -> N
     application = build_probe_app(
         an_authentication(tokens=service, accounts={ACCOUNT_ID: FakeAccount(status="suspended")})
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/managers", headers=await bearer(service))
     assert response.status_code == 403
     assert response.json()["code"] == "shared.account.suspended"
@@ -98,7 +100,7 @@ async def test_a_clinic_scoped_role_is_resolved_per_request() -> None:
     application = build_probe_app(
         an_authentication(tokens=service, assignments=[FakeAssignment(role="veterinarian")])
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/consultations", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -111,7 +113,7 @@ async def test_a_clinic_role_forged_in_the_token_grants_nothing() -> None:
     application = build_probe_app(
         an_authentication(tokens=service, assignments=[FakeAssignment(role="asv")])
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/consultations", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -130,7 +132,7 @@ async def test_a_role_held_in_another_clinic_grants_nothing_in_the_active_one() 
             ],
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/consultations", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -150,7 +152,7 @@ async def test_two_overlapping_assignments_to_one_clinic_grant_the_most_recent_r
             ],
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -161,7 +163,7 @@ async def test_a_group_role_alone_does_not_activate_a_clinic() -> None:
     """La gerante non affectee n'obtient pas de perimetre clinique : 404, pas 403."""
     service = token_service(roles={(ACCOUNT_ID, GROUP_ID): "manager"})
     application = build_probe_app(an_authentication(tokens=service, assignments=[]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -178,7 +180,7 @@ async def test_the_assignments_are_read_once_for_a_route_that_declares_both_guar
             tokens=service, assignments=[FakeAssignment(role="veterinarian")], calls=calls
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic-and-role", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -196,7 +198,7 @@ async def test_a_missing_clinic_header_is_a_validation_error_not_an_absence() ->
     """La route l'EXIGE : c'est la requete qui est mal formee, pas la clinique absente."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/clinic", headers=await bearer(service))
     assert response.status_code == 422
 
@@ -205,7 +207,7 @@ async def test_a_malformed_or_empty_clinic_header_is_a_validation_error() -> Non
     """Un identifiant illisible n'est pas une clinique inconnue."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         malformed = await opened.get(
             "/pro/clinic", headers={**await bearer(service), CLINIC_HEADER: "pas-un-uuid"}
         )
@@ -221,7 +223,7 @@ async def test_two_clinic_headers_are_refused_rather_than_resolved() -> None:
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
     authorization = (await bearer(service))["Authorization"]
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic",
             headers=[
@@ -238,7 +240,7 @@ async def test_a_clinic_header_is_ignored_by_a_route_that_does_not_ask_for_it() 
     """L'en-tete ne pose rien tout seul : il faut que la route le demande."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/context", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -251,7 +253,7 @@ async def test_a_token_without_an_active_group_cannot_activate_a_clinic() -> Non
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
     headers = await bearer(service, active_group_id=None)
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get("/pro/clinic", headers={**headers, **_CLINIC_HEADERS})
     assert response.status_code == 404
 
@@ -265,7 +267,7 @@ async def test_a_clinic_of_another_group_is_refused() -> None:
             assignments=[FakeAssignment(clinic_id=OTHER_CLINIC_ID)],
         )
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic",
             headers={**await bearer(service), CLINIC_HEADER: str(OTHER_CLINIC_ID)},
@@ -280,7 +282,7 @@ async def test_the_absent_clinic_causes_share_one_response() -> None:
     application = build_probe_app(
         an_authentication(tokens=service, assignments=[FakeAssignment(clinic_id=OTHER_CLINIC_ID)])
     )
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         headers = await bearer(service)
         answers = [
             await opened.get("/pro/clinic", headers={**headers, CLINIC_HEADER: str(unknown)}),
@@ -300,7 +302,7 @@ async def test_a_resolved_clinic_is_stamped_in_the_logging_context() -> None:
     """`current_clinic_id` est posee une fois la clinique verifiee, pas avant."""
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         response = await opened.get(
             "/pro/clinic-context", headers={**await bearer(service), **_CLINIC_HEADERS}
         )
@@ -316,7 +318,7 @@ async def test_a_refused_clinic_leaves_no_context_behind() -> None:
     """
     service = token_service()
     application = build_probe_app(an_authentication(tokens=service, assignments=[FakeAssignment()]))
-    async with client(application) as opened:
+    async with asgi_client(application) as opened:
         refused = await opened.get(
             "/pro/clinic-context",
             headers={**await bearer(service), CLINIC_HEADER: str(OTHER_CLINIC_ID)},

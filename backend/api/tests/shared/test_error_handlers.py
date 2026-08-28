@@ -25,7 +25,6 @@ import logging
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.correlation import use_request_id
@@ -43,6 +42,7 @@ from app.shared.domain.ports.file_storage import FileStorageUnavailableError
 from app.shared.domain.ports.token_service import InactiveMembershipError
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.tenancy import MissingTenantContextError
+from tests.support.api import asgi_client
 
 _INTERNAL_DETAIL = "detail-interne-10.0.0.5"
 
@@ -157,14 +157,6 @@ def _build_app() -> FastAPI:
     return application
 
 
-def _client(application: FastAPI) -> AsyncClient:
-    """Client httpx sur transport ASGI, sans lifespan, 500 non re-leves."""
-    return AsyncClient(
-        transport=ASGITransport(app=application, raise_app_exceptions=False),
-        base_url="http://test",
-    )
-
-
 @pytest.mark.parametrize(
     ("path", "expected_status", "expected_code"),
     [
@@ -180,7 +172,7 @@ def _client(application: FastAPI) -> AsyncClient:
 async def test_each_typed_error_maps_to_its_status(
     path: str, expected_status: int, expected_code: str
 ) -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get(path)
     assert response.status_code == expected_status
     assert response.headers["content-type"].startswith("application/json")
@@ -197,7 +189,7 @@ async def test_a_rate_limit_refusal_carries_retry_after() -> None:
     c'est la seule information qu'un 429 doit donner, et la seule qui aide
     l'appelant sans renseigner un attaquant sur le compteur restant.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/too-many")
 
     assert response.status_code == 429
@@ -210,7 +202,7 @@ async def test_a_rate_limit_refusal_without_a_known_delay_omits_the_header() -> 
     Mieux vaut pas d'en-tete qu'un `Retry-After: 0`, qui inviterait a reessayer
     immediatement -- et donc a se faire refuser de nouveau.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/too-many-without-delay")
 
     assert response.status_code == 429
@@ -219,7 +211,7 @@ async def test_a_rate_limit_refusal_without_a_known_delay_omits_the_header() -> 
 
 async def test_all_error_responses_share_the_same_shape() -> None:
     """Le critere « toutes les erreurs partagent le meme format », en un test."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         responses = [
             await client.get("/raise/not-found"),
             await client.get("/raise/untyped"),
@@ -241,7 +233,7 @@ async def test_request_id_field_is_null_outside_any_request_context() -> None:
     couvre l'autre moitie : une `DomainError` levee hors de toute requete --
     tache de fond, script, CLI -- doit se traduire sans que rien ne leve.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/not-found")
     assert response.json()["request_id"] is None
 
@@ -253,14 +245,14 @@ async def test_request_id_reflects_the_correlation_context_when_it_is_set_by_han
     l'intergiciel de BACK-11 ; ce test couvre la lecture de la contextvar, qui
     reste le chemin de tout ce qui traduit une erreur hors d'une requete servie.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         with use_request_id("req-test-0001"):
             response = await client.get("/raise/not-found")
     assert response.json()["request_id"] == "req-test-0001"
 
 
 async def test_pydantic_extra_field_is_reformatted() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.post("/probe/payload", json={"count": 1, "intrus": True})
     assert response.status_code == 422
     body = response.json()
@@ -273,7 +265,7 @@ async def test_pydantic_extra_field_is_reformatted() -> None:
 
 async def test_pydantic_constraint_error_is_reformatted() -> None:
     """Le `ctx` non serialisable des erreurs de contrainte ne fait pas exploser le handler."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.post("/probe/payload", json={"count": 0})
     assert response.status_code == 422
     errors = response.json()["details"]["errors"]
@@ -281,7 +273,7 @@ async def test_pydantic_constraint_error_is_reformatted() -> None:
 
 
 async def test_malformed_json_body_is_reformatted() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.post(
             "/probe/payload",
             content=b"pas du json",
@@ -292,7 +284,7 @@ async def test_malformed_json_body_is_reformatted() -> None:
 
 
 async def test_path_param_type_error_is_reformatted() -> None:
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/probe/int/abc")
     assert response.status_code == 422
     assert response.json()["code"] == "http.request.validation_error"
@@ -300,7 +292,7 @@ async def test_path_param_type_error_is_reformatted() -> None:
 
 async def test_unexpected_exception_returns_a_generic_500() -> None:
     """L'assertion centrale du 500 : aucune information interne ne sort."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/unexpected")
     assert response.status_code == 500
     body = response.json()
@@ -317,7 +309,7 @@ async def test_unexpected_exception_is_logged_with_stack(
     """La double face du 500 : le detail part au journal, jamais dans le corps."""
     logger_name = "app.shared.infrastructure.api.error_handlers"
     with caplog.at_level(logging.ERROR, logger=logger_name):
-        async with _client(_build_app()) as client:
+        async with asgi_client(_build_app()) as client:
             response = await client.get("/raise/unexpected")
     assert response.status_code == 500
     record = next(r for r in caplog.records if r.exc_info is not None)
@@ -327,7 +319,7 @@ async def test_unexpected_exception_is_logged_with_stack(
 
 async def test_storage_unavailability_follows_the_generic_500_path() -> None:
     """Une panne du stockage est technique : re-levee vers le 500, jamais un 4xx."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/storage-unavailable")
     assert response.status_code == 500
     body = response.json()
@@ -345,7 +337,7 @@ async def test_a_membership_refusal_does_not_confirm_the_group_exists() -> None:
     `(NotFoundError, 404)`, en tete, qui doit repondre. Un refus de DROIT
     confirmerait au demandeur que le groupe existe.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/raise/inactive-membership")
 
     assert response.status_code == 404
@@ -354,7 +346,7 @@ async def test_a_membership_refusal_does_not_confirm_the_group_exists() -> None:
 
 async def test_http_exceptions_share_the_format() -> None:
     """404 de routage et 405 sortent au format unique, plus jamais en `{"detail"}`."""
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         not_found = await client.get("/route/inconnue")
         method_not_allowed = await client.post("/raise/not-found")
     assert not_found.status_code == 404
@@ -370,7 +362,7 @@ async def test_deliberate_error_status_body_is_untouched() -> None:
     Les handlers s'enregistrent par CLASSE d'exception, jamais par code de
     statut : une reponse construite sans exception traverse intacte.
     """
-    async with _client(_build_app()) as client:
+    async with asgi_client(_build_app()) as client:
         response = await client.get("/deliberate-503")
     assert response.status_code == 503
     assert response.json() == _DELIBERATE_BODY
@@ -384,7 +376,7 @@ async def test_create_app_registers_the_handlers() -> None:
     async def raise_probe() -> None:
         raise _ProbeNotFoundError("Aucune note de sonde ne porte cet identifiant.")
 
-    async with _client(application) as client:
+    async with asgi_client(application) as client:
         response = await client.get("/probe/back-09")
     assert response.status_code == 404
     body = response.json()
@@ -397,7 +389,7 @@ async def test_create_app_registers_the_handlers() -> None:
 
 
 async def test_create_app_unknown_route_shares_the_format() -> None:
-    async with _client(create_app()) as client:
+    async with asgi_client(create_app()) as client:
         response = await client.get("/api/v1/inexistant")
     assert response.status_code == 404
     assert response.json()["code"] == "http.request.not_found"
@@ -406,7 +398,7 @@ async def test_create_app_unknown_route_shares_the_format() -> None:
 
 async def test_create_app_health_live_is_untouched() -> None:
     """Temoin du nominal : les handlers ne touchent pas aux reponses saines."""
-    async with _client(create_app()) as client:
+    async with asgi_client(create_app()) as client:
         response = await client.get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "alive"}
@@ -417,7 +409,7 @@ async def test_create_app_health_live_is_untouched() -> None:
 
 async def test_create_app_ready_without_lifespan_does_not_leak() -> None:
     """Une erreur levee en resolution de dependance passe aussi par le filet."""
-    async with _client(create_app()) as client:
+    async with asgi_client(create_app()) as client:
         response = await client.get("/health/ready")
     assert response.status_code == 500
     body = response.json()
@@ -432,7 +424,7 @@ async def test_create_app_ready_without_lifespan_does_not_leak() -> None:
 
 
 async def test_openapi_schema_still_serves() -> None:
-    async with _client(create_app()) as client:
+    async with asgi_client(create_app()) as client:
         response = await client.get("/openapi.json")
     assert response.status_code == 200
     assert response.json()["info"]["title"] == "Juui API"
@@ -452,7 +444,7 @@ async def test_openapi_publishes_the_error_format() -> None:
     cles toujours presentes ». C'est le contrat publie qui fait foi cote client,
     d'ou l'assertion sur `required` plutot qu'un commentaire.
     """
-    async with _client(create_app()) as client:
+    async with asgi_client(create_app()) as client:
         response = await client.get("/openapi.json")
     document = response.json()
 
