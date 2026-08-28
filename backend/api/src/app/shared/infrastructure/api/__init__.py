@@ -17,9 +17,12 @@ CE QUE CHAQUE TICKET APPORTE ICI
 | `schemas/error.py`         | format unique { code, message, details, ... }  | BACK-09 |
 | `pagination.py`            | parametres page/page_size/sort, enveloppe Page | BACK-24 |
 | `middlewares.py`           | CORS, journal d'acces, identifiant de requete  | BACK-11 |
+| `dependencies/auth.py`     | qui appelle, et pour quelle application        | BACK-10c |
+| `dependencies/tenant.py`   | ou il travaille, et a quel titre               | BACK-10c |
 | `dependencies/audit.py`    | tracage des acces aux donnees personnelles     | BACK-27 |
 
-Le contexte de tenance, lui, est pose par la dependance d'authentification
-(BACK-10c) dans la contextvar de `tenancy.py` : le filtre de BACK-06b le lit
-cote persistance, pas ici.
+Le contexte de tenance, lui, est pose par `dependencies/auth.py` dans la
+contextvar de `tenancy.py` : le filtre de BACK-06b le lit cote persistance, pas
+ici. C'est une DEPENDANCE et non un intergiciel -- voir la docstring de
+`tenancy.py` pour la raison, qui n'est pas de commodite.
 """

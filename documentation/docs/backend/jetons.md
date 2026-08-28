@@ -142,9 +142,9 @@ réponse est un **404**.
 
 **Les autres n'ont pas de statut HTTP ici.** Le 401 d'authentification est posé à la bordure, par
 `HTTPException` — c'est le chemin que BACK-09 a prévu, et son handler dédié préserve les en-têtes,
-`WWW-Authenticate` compris. BACK-10a définit le vocabulaire ; BACK-10c, qui tient la bordure,
-décidera de ce que le client en voit. Des erreurs distinctes ne signifient pas des réponses
-bavardes.
+`WWW-Authenticate` compris. BACK-10a définit le vocabulaire ; [BACK-10c](./authentification.md), qui tient la
+bordure, a tranché ce que le client en voit : **un seul 401, sans détail**, pour toutes les causes.
+Des erreurs distinctes ne signifient pas des réponses bavardes.
 
 Aucune erreur ne porte de `details` dérivé du jeton : le journal rédige les fragments sensibles, la
 **réponse HTTP** non.
@@ -162,13 +162,14 @@ audience vide ou bordée d'espaces. Chacune de ces trois valeurs laissait le ser
 
 ## Ce que ce ticket ne livre pas
 
-Le **montage**. Le service a besoin d'un résolveur d'appartenance, qui a besoin de l'unité de
-travail d'`organization`, laquelle est une dépendance de requête. Une dépendance FastAPI qui
-assemble les deux ne peut vivre ni dans `shared`, qui n'a pas le droit d'importer un module, ni dans
-un module, qui n'a pas le droit d'en connaître un autre : seul `main.py` le peut. C'est exactement
-la question que BACK-10c a pour mission de trancher.
+Le **montage**, livré depuis par [BACK-10c](./authentification.md). Le service a besoin d'un
+résolveur d'appartenance, qui a besoin de l'unité de travail d'`organization`, laquelle est une
+dépendance de requête. Une dépendance FastAPI qui assemble les deux ne peut vivre ni dans `shared`,
+qui n'a pas le droit d'importer un module, ni dans un module, qui n'a pas le droit d'en connaître un
+autre : seul `main.py` le peut. C'est la réponse qu'a retenue BACK-10c — les dépendances vivent dans
+`shared` et n'y connaissent que des **formes**, que le `lifespan` remplit.
 
-En attendant, un test d'intégration branche le service sur le vrai dépôt et prouve que les deux
+Un test d'intégration branche par ailleurs le service sur le vrai dépôt et prouve que les deux
 s'emboîtent.
 
 ## Vérifier que les règles tiennent

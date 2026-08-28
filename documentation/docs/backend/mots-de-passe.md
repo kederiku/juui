@@ -218,7 +218,7 @@ Chacun a son test de non-régression, écrit à partir du cas qui l'a révélé.
   `await hasher.hash(DECOY_PASSWORD)`, en jetant le résultat.
 - **La limitation de cadence** devant les routes qui hachent : BACK-29 et INFRA-04. C'est elle, et
   non un plafond de concurrence maison, qui répond à l'abus de volume.
-- **Le câblage FastAPI** des deux adaptateurs : BACK-10c et BACK-28. Les fabriques
+- **Le câblage FastAPI** des deux adaptateurs : BACK-28. (BACK-10c a monté celui des jetons, pas ceux-ci.) Les fabriques
   `build_password_hasher(settings)` et `build_breach_checker(settings)` sont autonomes et servent
   l'API, le worker et le semis à l'identique.
 

@@ -5,7 +5,7 @@ disent « je dois pouvoir repondre aux trois questions de l'authentification » 
 ils ne disent ni PostgreSQL, ni SQLAlchemy. L'adaptateur qui les remplit vit
 dans `infrastructure/db/repositories.py`.
 
-LES TROIS REQUETES DU TICKET, ET RIEN D'AUTRE
+LES REQUETES DE L'AUTHENTIFICATION, ET RIEN D'AUTRE
 Elles sont la SEULE surface publique du module -- aucun autre module n'accede
 a ses tables :
 
@@ -16,7 +16,13 @@ a ses tables :
    contexte requis ;
 3. les affectations d'un compte dans le groupe actif -- consommee par
    `require_role(scope="clinic")` (BACK-10c) : `AssignmentRepository` EST un
-   depot tenant, la requete exige un perimetre pose et herite du filtre.
+   depot tenant, la requete exige un perimetre pose et herite du filtre ;
+4. le groupe proprietaire d'une clinique -- consommee par `get_active_clinic`
+   (BACK-10c). QUATRIEME QUESTION, ajoutee par la bordure et non par un CRUD :
+   le ticket exige que l'appartenance de la clinique au groupe actif soit
+   verifiee, et une verification qui emprunterait le filtre tenant partagerait
+   son point de defaillance avec la premiere -- ce ne serait pas une seconde
+   verification. `ClinicRepository` est donc NON tenant, a dessein.
 
 Le ticket dit « trois ports » ; ils prennent ici la forme du pattern etabli --
 deux ports de depot et l'unite de travail du module (ADR-0009) -- trois
@@ -134,6 +140,42 @@ class AssignmentRepository(ABC):
         """
 
 
+class ClinicRepository(ABC):
+    """Acces aux cliniques, reduit a la seule question de la bordure HTTP.
+
+    DEPOT NON TENANT, ET C'EST TOUT L'INTERET. `get_active_clinic` (BACK-10c)
+    doit verifier deux choses : que le compte est affecte a la clinique, et que
+    la clinique appartient au groupe actif. La premiere se lit chez
+    `AssignmentRepository`, qui est tenant. Si la seconde passait elle aussi par
+    le filtre de groupe, les deux verifications partageraient leur point de
+    defaillance -- la contextvar et `_select()` -- et deux controles au meme
+    point de defaillance ne font pas deux controles. Celle-ci lit donc le groupe
+    proprietaire SANS filtre, et la bordure le compare elle-meme.
+
+    Le port n'expose QUE cette question. BACK-25 l'elargira -- creation,
+    renommage, liste -- quand ses cas d'usage existeront ; l'implementation sait
+    deja faire plus, le port ne s'elargit pas pour autant.
+    """
+
+    @abstractmethod
+    async def find_group_id(self, clinic_id: UUID, /) -> UUID | None:
+        """Rend le groupe proprietaire d'une clinique, sans filtre de tenance.
+
+        Ne leve PAS sur une clinique inconnue : `None` et « clinique d'un autre
+        groupe » doivent produire le meme refus a la bordure, faute de quoi
+        l'API devient un oracle d'enumeration des cliniques concurrentes
+        (ADR-0013). Distinguer les deux ici obligerait l'appelant a rattraper
+        une exception pour la fondre aussitot.
+
+        Args:
+            clinic_id: la clinique dont on cherche le groupe proprietaire.
+
+        Returns:
+            L'identifiant du groupe proprietaire, ou `None` si aucune clinique
+            ne porte cet identifiant.
+        """
+
+
 class OrganizationUnitOfWork(AbstractUnitOfWork):
     """Unite de travail du module : sa transaction, ses depots, rien d'autre.
 
@@ -142,10 +184,11 @@ class OrganizationUnitOfWork(AbstractUnitOfWork):
     PROPRIETES, pas des attributs -- chaque acces repasse par la garde du
     bloc, et lever hors bloc reste la regle du port, partout.
 
-    Seuls les depots des deux relations sont exposes : aucun port ne lit
-    `Group` ni `Clinic` dans ce ticket, et une propriete sans consommateur
-    serait la surface de CRUD que la portee exclut. BACK-25 les ajoutera avec
-    ses cas d'usage.
+    Seuls les depots que l'authentification interroge sont exposes : aucun port
+    ne lit `Group`, et une propriete sans consommateur serait la surface de CRUD
+    que la portee exclut. BACK-25 l'ajoutera avec ses cas d'usage. `clinics` a
+    rejoint les deux relations en BACK-10c, non pour un CRUD mais pour la
+    seconde verification de `get_active_clinic`.
     """
 
     @property
@@ -161,6 +204,15 @@ class OrganizationUnitOfWork(AbstractUnitOfWork):
     @abstractmethod
     def assignments(self) -> AssignmentRepository:
         """Le depot d'affectations, servi par le bloc `async with` en cours.
+
+        Raises:
+            RuntimeError: si aucun bloc n'est ouvert sur cette unite.
+        """
+
+    @property
+    @abstractmethod
+    def clinics(self) -> ClinicRepository:
+        """Le depot de cliniques, servi par le bloc `async with` en cours.
 
         Raises:
             RuntimeError: si aucun bloc n'est ouvert sur cette unite.

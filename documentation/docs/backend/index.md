@@ -38,6 +38,7 @@ matière — prérequis, installation, démarrage — et cette section porte le 
 | [Vérification d'adresse (OTP)](./verification-email-otp.md) | Le code à six chiffres : haché, poivré, à usage unique, borné.             |
 | [Notifications](./notifications.md)                         | Les préférences par événement, le catalogue, la résolution des canaux.     |
 | [Jetons d'authentification](./jetons.md)                    | Les neuf claims, l'audience par application, l'appartenance vérifiée.      |
+| [Authentification des routes](./authentification.md)        | Les quatre dépendances qui protègent une route, et ce que le client voit.  |
 | [Mots de passe](./mots-de-passe.md)                         | La politique 14–128 sans composition, argon2id, la k-anonymity HIBP.       |
 | [Surface HTTP](./surface-http.md)                           | Le routeur `/api/v1`, les sondes, le contrat OpenAPI.                      |
 | [Erreurs](./erreurs.md)                                     | La hiérarchie `DomainError`, le format d'erreur unique, le 404-jamais-403. |

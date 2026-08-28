@@ -179,8 +179,8 @@ l'événement disparu — c'est-à-dire lui enverrait des messages qu'il avait c
 
 ## Ce que le module n'expose pas
 
-**Aucune route.** Lire ou écrire ses préférences suppose `get_current_active_account` (BACK-10c),
-et l'espace personnel se compose en BACK-23. Prendre l'identifiant de compte dans une URL en
+**Aucune route.** `get_current_active_account` existe depuis
+[BACK-10c](./authentification.md), mais l'espace personnel se compose en BACK-23. Prendre l'identifiant de compte dans une URL en
 attendant recréerait l'oracle d'existence de compte que BACK-17 a refusé.
 
 **Aucun journal d'envoi persisté.** Le critère demande de journaliser, ce que fait le cas d'usage ;

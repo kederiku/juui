@@ -9,19 +9,22 @@ CE QUE BACK-16 A LIVRE ICI
 Les entites `Group` (LE tenant, frontiere d'isolation, ADR-0004), `Clinic`
 (perimetre de travail, pas frontiere de securite), `Membership` et
 `Assignment` (deux relations N:M DATEES, ADR-0005), leur persistance, et les
-TROIS REQUETES qui sont sa seule surface publique :
+REQUETES DE L'AUTHENTIFICATION qui sont sa seule surface publique :
 
 1. les appartenances actives d'un compte -- l'emission du jeton (BACK-10a) ;
 2. le role d'un compte dans un groupe donne ;
 3. les affectations d'un compte dans le groupe actif -- `require_role`
-   scope="clinic" (BACK-10c).
+   scope="clinic" (BACK-10c) ;
+4. le groupe proprietaire d'une clinique -- `get_active_clinic` (BACK-10c),
+   ajoutee par la bordure et NON tenant, pour que sa verification soit
+   independante de celle des affectations.
 
 Aucun autre module n'accede a ses tables. PAS de CRUD, pas de parcours
 d'invitation, pas de contrat de remplacement : cas d'usage et routes
 appartiennent a BACK-25.
 
 SURFACE PUBLIQUE
-Les deux ports de depot et l'unite de travail qui portent les trois requetes,
+Les trois ports de depot et l'unite de travail qui portent ces requetes,
 les entites et les enums de roles qui forment leur contrat, et la dependance
 FastAPI que le point de composition consommera. `identity` ne peut PAS
 importer ce paquet (contrat `module-independence`) : le cablage de l'emission
@@ -41,6 +44,7 @@ from app.modules.organization.domain.entities import (
 )
 from app.modules.organization.domain.ports import (
     AssignmentRepository,
+    ClinicRepository,
     MembershipRepository,
     OrganizationUnitOfWork,
 )
@@ -49,6 +53,7 @@ from app.modules.organization.unit_of_work import OrganizationUowDep, get_organi
 __all__ = [
     "Assignment",
     "AssignmentRepository",
+    "ClinicRepository",
     "ClinicRole",
     "GroupRole",
     "Membership",

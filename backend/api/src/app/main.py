@@ -11,7 +11,11 @@ du service qui ait le droit de connaitre plus d'un module a la fois. Chaque
 module publie son routeur, ce fichier les monte, et c'est tout -- les modules,
 eux, restent etanches les uns aux autres. C'est a ce titre, et a ce titre seul,
 qu'il ouvre le magasin d'OTP d'`identity` (BACK-17) : une ressource de module que
-`shared` n'a pas le droit de nommer.
+`shared` n'a pas le droit de nommer. Et c'est au meme titre, mais pour deux
+modules a la fois, qu'il monte l'AUTHENTIFICATION (BACK-10c) : les dependances
+qui protegent les routes vivent dans `shared`, qui ne peut importer ni
+`identity` ni `organization` ; elles n'y connaissent que des formes, et ce
+fichier est le seul a pouvoir les remplir.
 
 L'application sert les sondes de sante (`/health/live`, `/health/ready`,
 BACK-08) ; les routes METIER, elles, vivront sous `/api/v1` -- le routeur
@@ -21,6 +25,8 @@ BACK-29. `/docs` n'affiche donc que le groupe `health`, ce qui est attendu.
 
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
+from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, FastAPI
 
@@ -29,6 +35,14 @@ from app.modules.identity import router as identity_router
 from app.modules.identity.infrastructure.clients.redis_otp_store import (
     OTP_STORE_STATE_KEY,
     build_otp_store,
+)
+from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
+from app.modules.organization.unit_of_work import SqlAlchemyOrganizationUnitOfWork
+from app.shared.infrastructure.api.dependencies.auth import (
+    AUTH_STATE_KEY,
+    AccountRecord,
+    ActiveAssignment,
+    Authentication,
 )
 from app.shared.infrastructure.api.error_handlers import register_error_handlers
 from app.shared.infrastructure.api.health import router as health_router
@@ -39,6 +53,7 @@ from app.shared.infrastructure.clients.s3_storage import STORAGE_STATE_KEY, buil
 from app.shared.infrastructure.db.base import Base, check_schema
 from app.shared.infrastructure.db.engine import build_engine, verify_connectivity
 from app.shared.infrastructure.db.session import STATE_KEY, Database, build_sessionmaker
+from app.shared.infrastructure.security.jwt_service import build_token_service
 from app.shared.infrastructure.tenancy import current_group_label
 
 
@@ -49,9 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Tout ce qui doit vivre aussi longtemps que le serveur -- et non le temps
     d'une requete -- se cree ici : le pool de connexions PostgreSQL (BACK-05),
     le client Redis (BACK-14), le client S3 (BACK-13), le magasin des codes de
-    verification (BACK-17). Le transport de courriel (BACK-22) n'y figure PAS, et
-    ce n'est pas un oubli : une session SMTP nait et meurt avec chaque message, il
-    n'y a rien a ouvrir ni a refermer. Ces ressources se rangent dans `app.state`,
+    verification (BACK-17), et le montage d'authentification (BACK-10c), qui
+    n'ouvre aucune connexion mais capture le `sessionmaker` et lie entre eux
+    deux modules que `shared` n'a pas le droit de nommer. Le transport de
+    courriel (BACK-22) n'y figure PAS, et ce n'est pas un oubli : une session
+    SMTP nait et meurt avec chaque message, il n'y a rien a ouvrir ni a
+    refermer. Ces ressources se rangent dans `app.state`,
     d'ou les dependances FastAPI les recuperent via `request.app.state`. Le
     broker TaskIQ (BACK-15) est a part : il demarre et s'arrete ici aussi, mais
     les routes qui declenchent une tache importent la tache elle-meme -- rien a
@@ -98,10 +116,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # sur une table deja creee.
         check_schema(Base.metadata)
 
+        sessionmaker = build_sessionmaker(engine)
+        setattr(app.state, STATE_KEY, Database(engine=engine, sessionmaker=sessionmaker))
+
+        # Montage de l'authentification (BACK-10c). Les quatre resolveurs sont
+        # le POINT DE PASSAGE entre `shared`, qui porte les dependances, et les
+        # deux modules qui detiennent les donnees. Chacun ouvre son unite de
+        # travail sur le `sessionmaker` : une lecture breve, close avant que la
+        # route ne commence la sienne -- l'authentification ne s'inscrit pas
+        # dans la transaction du cas d'usage, et n'a aucune raison de la tenir
+        # ouverte.
+        #
+        # Ici, et pas dans `create_app()` : ces closures capturent le
+        # `sessionmaker`, qui n'existe qu'une fois le moteur construit.
+
+        async def resolve_group_role(account_id: UUID, group_id: UUID, at: datetime) -> str | None:
+            """Rend le role de groupe d'un compte, a l'emission d'un jeton."""
+            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+                return await uow.memberships.find_active_role(account_id, group_id, at)
+
+        async def resolve_account(account_id: UUID) -> AccountRecord:
+            """Rend le compte porteur d'un jeton verifie."""
+            async with SqlAlchemyIdentityUnitOfWork(sessionmaker) as uow:
+                return await uow.accounts.get(account_id)
+
+        async def resolve_active_assignments(
+            account_id: UUID, at: datetime
+        ) -> Sequence[ActiveAssignment]:
+            """Rend les affectations actives d'un compte dans le groupe actif."""
+            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+                return await uow.assignments.list_active_for_account(account_id, at)
+
+        async def resolve_clinic_group(clinic_id: UUID) -> UUID | None:
+            """Rend le groupe proprietaire d'une clinique, sans filtre de tenance."""
+            async with SqlAlchemyOrganizationUnitOfWork(sessionmaker) as uow:
+                return await uow.clinics.find_group_id(clinic_id)
+
         setattr(
             app.state,
-            STATE_KEY,
-            Database(engine=engine, sessionmaker=build_sessionmaker(engine)),
+            AUTH_STATE_KEY,
+            Authentication(
+                tokens=build_token_service(settings, resolve_group_role),
+                resolve_account=resolve_account,
+                resolve_active_assignments=resolve_active_assignments,
+                resolve_clinic_group=resolve_clinic_group,
+            ),
         )
 
         # Troisieme ressource : le cache Redis (BACK-14), base 0. Comme le
@@ -207,9 +266,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # `organization` (BACK-16) n'a pas de routeur : son premier arrivera avec les
 # routes d'administration de BACK-25. Meme silence pour `medical_records`
 # (BACK-19) : ses routes arriveront avec BACK-30, et pour `notifications`
-# (BACK-22), dont la lecture et l'ecriture des preferences supposent
-# `get_current_active_account` (BACK-10c) et la surface de composition de
-# BACK-23. Les suivants s'ajouteront ici.
+# (BACK-22), dont la lecture et l'ecriture des preferences supposent la surface
+# de composition de BACK-23 -- `get_current_active_account`, lui, existe depuis
+# BACK-10c. Les suivants s'ajouteront ici.
+
+# Aucun routeur n'est encore monte avec `dependencies=[Depends(audience_of(...))]`
+# parce qu'aucun ne porte de route : le premier a en declarer une sera celui de
+# BACK-28 / BACK-29. Une route protegee montee SANS ce marqueur repond 500 --
+# echec ferme, jamais un acces accorde.
 _MODULE_ROUTERS: Sequence[APIRouter] = (identity_router,)
 
 

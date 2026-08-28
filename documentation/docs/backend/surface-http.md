@@ -68,8 +68,8 @@ la **construction** de l'application, d'après `AppSettings` seul — voir les �
 Le groupe actif voyage dans le **jeton** (claim `active_group_id`), la clinique active dans
 l'**en-tête** `X-Clinic-Id`, jamais l'inverse — et l'en-tête n'autorise rien. La convention, ses
 alternatives écartées et ce qu'elle coûte sont consignés dans
-l'[ADR-0012](../adr/0012-perimetre-de-requete.md) ; son application
-revient à BACK-10c (dépendance d'authentification) et BACK-10e (bascule de groupe). Le CORS
+l'[ADR-0012](../adr/0012-perimetre-de-requete.md) ; son application est
+livrée par [BACK-10c](./authentification.md), la bascule de groupe restant à BACK-10e. Le CORS
 autorise déjà cet en-tête, et les journaux portent déjà `clinic_id`.
 
 ## Les intergiciels, et le CORS
