@@ -97,7 +97,7 @@ défensif de l'`upgrade` aurait aplaties.
   aligné sur la forme indexée.
 - `backend/api/src/app/modules/identity/domain/policies.py` — `normalize_email`, la moitié
   applicative de la garantie.
-- `backend/api/tests/modules/identity/test_ports.py` — la preuve par `IntegrityError` que le
+- `backend/api/tests/modules/identity/infrastructure/test_ports.py` — la preuve par `IntegrityError` que le
   doublon de casse ne s'insère pas.
 - `docker/postgres/init/02-enable-extensions.sh` — les extensions du même ticket (`pg_trgm`,
   `unaccent`), qui n'interviennent pas dans cette décision : `lower()` est natif.

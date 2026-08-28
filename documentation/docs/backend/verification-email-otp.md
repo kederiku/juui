@@ -277,7 +277,7 @@ office là où trois plafonds par compte n'auraient rien vu.
 **4. Le message part réellement.** La pile levée, le test de bout en bout écrit dans la vraie boîte :
 
 ```bash
-uv run pytest tests/modules/identity/test_otp_email_delivery.py -q
+uv run pytest tests/modules/identity/infrastructure/test_otp_email_delivery.py -q
 ```
 
 Il émet par SMTP, relit le message dans l'**API HTTP de Mailpit** (`/api/v1/search`), en extrait le

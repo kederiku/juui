@@ -244,6 +244,11 @@ const sidebars: SidebarsConfig = {
           id: 'adr/0030-perimetre-obligatoire-a-la-bordure',
           label: 'Périmètre obligatoire à la bordure',
         },
+        {
+          type: 'doc',
+          id: 'adr/0031-strategie-de-test-a-trois-niveaux',
+          label: 'Stratégie de test à trois niveaux',
+        },
       ],
     },
     {

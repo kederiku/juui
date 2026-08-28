@@ -63,6 +63,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0028](./0028-frontieres-de-features.md)                        | Une application frontend se découpe par domaine, et sa frontière est tenue par ESLint     | Accepté |
 | [ADR-0029](./0029-message-choisi-par-le-client.md)                  | Le serveur choisit le code, le client choisit le message                                  | Accepté |
 | [ADR-0030](./0030-perimetre-obligatoire-a-la-bordure.md)            | L'audience vient de la route, le périmètre est obligatoire                                | Accepté |
+| [ADR-0031](./0031-strategie-de-test-a-trois-niveaux.md)             | L'arbre porte le module, la clôture porte le niveau, la transaction porte l'isolation     | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

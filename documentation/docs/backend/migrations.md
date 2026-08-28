@@ -95,6 +95,44 @@ sienne — charge à l'appelant de committer, ce que la fermeture de la connexio
 tout le DDL serait déroulé en arrière à la déconnexion, **sans erreur**. Le verrou, lui, est de
 niveau session et survit au commit.
 
+## Deux appelants, une seule voie de production
+
+Depuis BACK-12, `run_migrations_online()` a **deux** appelants, et il faut savoir lequel fait quoi
+avant de toucher à ce fichier.
+
+Depuis la ligne de commande — `make migrate`, `alembic upgrade head`, l'entrypoint des conteneurs
+`api` et `worker` — rien ne change : l'`env.py` construit son moteur depuis `Settings`, prend le
+verrou, committe et déroule. C'est la voie décrite ci-dessus, et elle n'a pas bougé d'un octet.
+
+Depuis le **harnais de tests**, la connexion est **fournie** : la fixture `engine` la dépose dans
+`config.attributes["connection"]`, et l'`env.py` migre dessus au lieu d'en ouvrir une.
+
+```python
+injected = context.config.attributes.get("connection")
+if injected is not None:
+    do_run_migrations(injected)
+    return
+asyncio.run(run_async_migrations())
+```
+
+**Ce n'est pas une préférence, c'est un mur.** Ce module se termine par `asyncio.run`, qui lève si
+une boucle d'événements tourne déjà : une fixture pytest asynchrone ne peut pas emprunter la voie
+ordinaire, quelle que soit la base qu'on lui désigne. Passer la connexion est la recette
+qu'Alembic documente pour ce cas.
+
+Deux conséquences à connaître :
+
+- **`configure_logger`** est le second attribut du contrat. `fileConfig` vaut
+  `disable_existing_loggers=True` par défaut : appelé en processus, il éteindrait tous les loggers
+  `app.*` déjà créés et poserait un handler `stderr` sur la racine. Le harnais le désactive.
+- **`alembic check` ne doit jamais être lancé en processus depuis pytest.** `Base.metadata` porte
+  alors les deux tables de stub du harnais, et l'autogénération proposerait de les supprimer.
+  `make migrate-check` reste un sous-processus visant la base applicative.
+
+La base de test, elle, reçoit `alembic upgrade head` **une fois par session**, sous le même verrou
+consultatif — ce qui sérialise la suite avec un `make migrate` lancé en parallèle. Le raisonnement
+complet est dans l'[ADR-0031](../adr/0031-strategie-de-test-a-trois-niveaux.md).
+
 ## Le mode hors ligne est refusé
 
 `alembic upgrade head --sql` — générer le SQL sans l'exécuter — lève une `CommandError`

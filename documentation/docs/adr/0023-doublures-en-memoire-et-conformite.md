@@ -5,9 +5,9 @@ description: Les fakes du projet sont livrées dans `src/` et non sous `tests/`,
 
 # ADR-0023 — Les doublures en mémoire vivent dans `src`, tenues par un test de conformité
 
-| Statut      | Date       | Tickets                     |
-| ----------- | ---------- | --------------------------- |
-| **Accepté** | 2026-08-26 | BACK-06c, BACK-12 (à venir) |
+| Statut      | Date       | Tickets           |
+| ----------- | ---------- | ----------------- |
+| **Accepté** | 2026-08-26 | BACK-06c, BACK-12 |
 
 ## Contexte
 
@@ -57,8 +57,8 @@ inspecteurs propres aux doublures.
 C'est où elles étaient, et c'est le réflexe. Écartée pour une raison mécanique : une classe rangée
 sous `tests/modules/identity/` n'est importable que par les tests qui la voisinent. Or
 `InMemoryCache` sert aux tests d'`identity` comme à ceux de `medical_records`, une sonde de
-documentation ne peut rien importer de `tests/` du tout, et BACK-12 devra les câbler dans des
-fixtures partagées. Le rangement par ticket produisait déjà trois copies partielles avant que le
+documentation ne peut rien importer de `tests/` du tout, et BACK-12 devait les câbler dans des
+fixtures partagées — ce qu'il a fait, sans avoir à les déplacer. Le rangement par ticket produisait déjà trois copies partielles avant que le
 quatrième consommateur existe.
 
 ### Un paquet `tests/doubles/` partagé, hors de `src/`
@@ -106,5 +106,5 @@ cas d'usage ne les consomme, et leurs _finders_ maison seraient réimplémentés
 socle générique rend leur ajout mécanique le jour où BACK-25 ou BACK-30 en auront besoin. Et la
 limite de la conformité est nommée : les contraintes du **stockage** — unicité, clé étrangère,
 `NOT NULL`, ordre des `NULL` dans un tri — ne sont pas reproduites, et ne doivent pas l'être. Elles
-sont l'objet des tests d'infrastructure sur vraie base, troisième niveau de la stratégie de
-BACK-12.
+sont l'objet des tests d'infrastructure sur vraie base, troisième niveau de la stratégie que
+BACK-12 a installée ([ADR-0031](./0031-strategie-de-test-a-trois-niveaux.md)).

@@ -30,8 +30,10 @@ faute de quoi une boucle de redémarrage de conteneur fuit un pool à chaque tou
 `build_engine(settings)` prend sa configuration **en argument** au lieu d'appeler
 `get_settings()`. Cette fonction est mise en cache : un constructeur qui l'appellerait de
 l'intérieur ne saurait pas fabriquer un moteur différent de celui du processus. Or
-l'`env.py` d'Alembic (BACK-07) tourne hors de l'application, et les fixtures de BACK-12
-auront besoin d'un moteur à elles.
+l'`env.py` d'Alembic (BACK-07) tourne hors de l'application, et les fixtures de test ont
+besoin d'un moteur à elles. BACK-12 a livré les trois paramètres facultatifs qui le
+permettent — `url`, `poolclass` et `application_name` : la fixture `engine` construit
+son moteur vers la base de test **par cette fabrique**, et non plus à la main.
 
 | Variable                        | Défaut | Ce qu'elle règle                                      |
 | ------------------------------- | ------ | ----------------------------------------------------- |

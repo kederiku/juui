@@ -17,17 +17,6 @@ fait renvoyer en revue.
 Cette page dit comment lancer la suite, comment lire ce qu'elle rend, et comment écrire les trois
 formes de test que le service emploie.
 
-:::note Un harnais intermédiaire, et il faut le savoir
-
-Le harnais complet appartient à **BACK-12** : arborescence par couche, marqueurs de _niveau_,
-migrations appliquées à la base de test, fabrique de jetons, fixture `client`, seuil de couverture.
-Ce qui existe aujourd'hui a été **tiré en avant** par BACK-06b (isolation), BACK-06c (conformité)
-et BACK-11 (observabilité), chaque emprunt étant consigné au
-[registre des écarts](../ecarts/back.md#écarts-assumés-avec-le-ticket-back-06b). La dernière
-section de cette page dit ce que BACK-12 changera ; le reste décrit ce qui tourne.
-
-:::
-
 ## Lancer la suite
 
 Deux `make test` existent, et ils ne couvrent pas la même chose :
@@ -38,6 +27,21 @@ Deux `make test` existent, et ils ne couvrent pas la même chose :
 | `make test-back` à la racine      | délègue à `backend/api/Makefile`                        |
 | `make test` depuis `backend/api/` | `uv run pytest` — la suite Python, et rien d'autre      |
 | `make test-front` à la racine     | `pnpm test`, qui exécute les trois programmes de preuve |
+
+Depuis `backend/api/`, quatre cibles découpent la suite. **L'axe qui les sépare est le service,
+pas la couche** — c'est ce qui rend la première utilisable sans rien démarrer :
+
+| Cible              | Ce qu'elle joue                                                               | Docker ?   |
+| ------------------ | ----------------------------------------------------------------------------- | ---------- |
+| `test`             | Tout                                                                          | Pile       |
+| `test-unit`        | `-m "unit and not slow"` — rien qui touche un service                         | **Aucun**  |
+| `test-integration` | `-m integration` — PostgreSQL, Redis, MinIO, Mailpit                          | Pile       |
+| `test-tenancy`     | `-m tenant_isolation` — la [catégorie obligatoire](#la-catégorie-obligatoire) | PostgreSQL |
+| `test-cov`         | Tout, plus la couverture et son seuil bloquant                                | Pile       |
+
+À la racine, `make test-back-unit` et `make test-back-cov` délèguent aux deux qui servent le plus
+souvent. Les autres se lancent depuis `backend/api/`, qui est aussi la voie pour passer des
+arguments à pytest (`-k`, `-m`, un chemin).
 
 Autrement dit : **`make test` à la racine enchaîne la suite Python et les trois programmes de preuve
 des workspaces pnpm** — la portée des clés de cache (FRONT-04), la traduction des erreurs (FRONT-10)
@@ -57,9 +61,10 @@ Trois prérequis, tous posés par
   et quatre champs n'ont pas de valeur par défaut — `POSTGRES_USER`, `POSTGRES_PASSWORD`,
   `POSTGRES_DB` et `JWT_SECRET_KEY`. Sans ce fichier, la suite ne compose même pas sa
   configuration.
-- **PostgreSQL démarré**, par `make dev` (ou `make up`) à la racine. La base de test s'appelle
-  `app_test` ; elle naît au premier démarrage du volume `postgres` (INFRA-01). Redis, MinIO et
-  Mailpit ne sont pas obligatoires — la section suivante dit ce qu'il en coûte.
+- **La pile docker**, par `make dev` (ou `make up`) à la racine — pour la suite **complète**
+  seulement. La base de test s'appelle `app_test` ; elle naît au premier démarrage du volume
+  `postgres` (INFRA-01), et la suite y applique elle-même les migrations. Redis, MinIO et Mailpit
+  ne sont pas obligatoires — la section suivante dit ce qu'il en coûte.
 
 La suite entière, depuis `backend/api/` :
 
@@ -67,66 +72,93 @@ La suite entière, depuis `backend/api/` :
 uv run pytest
 ```
 
-Attendu : la ligne de résumé de pytest, `… passed` — et, si Redis, MinIO ou Mailpit ne tournent
-pas, autant de `skipped` qu'il y a de moitiés réelles injoignables.
+Attendu : la ligne de résumé de pytest, `… passed` — et, si un service ne répond pas, autant de
+`skipped` que de moitiés réelles injoignables, précédés du bloc `services absents` qui les
+recense.
 
-**Sans PostgreSQL, la suite ne se saute pas : elle s'arrête.** La fixture `engine` du conftest
-racine appelle `pytest.exit()`, pour que la preuve d'isolation ne puisse pas disparaître en
-silence :
-
-```bash
-make down && uv run pytest ; make dev
-```
-
-Attendu : aucun test joué, et le message qui nomme le remède — `Connexion a la base de test
-impossible : …`, suivi de `PostgreSQL docker doit tourner (make dev a la racine)` ; le `make dev`
-final remet la pile debout. La décision est de BACK-06b, sa conséquence
-[consignée par BACK-06c](../ecarts/back.md#écarts-assumés-avec-le-ticket-back-06c) : l'arrêt
-emporte aussi les moitiés **en mémoire**, qui n'ont pourtant besoin d'aucun conteneur.
-
-Un fichier seul, en revanche, tourne sans rien démarrer du tout — dès lors qu'il ne demande pas la
-base :
+**Sans aucun service, la moitié unitaire tourne quand même**, et c'est le sens de la cible dédiée :
 
 ```bash
-uv run pytest tests/modules/identity/test_verify_otp.py -v
+make test-unit
 ```
 
-Attendu : tous les tests du fichier au vert, sans Docker. C'est la promesse des
-[doublures en mémoire](./doublures-en-memoire.md), et le sens de la
-[fixture de tables non `autouse`](#ceux-des-modules) décrite plus bas.
+Attendu : le domaine, les cas d'usage sur doublures et les moitiés en mémoire des suites de
+conformité, tous au vert, en quelques secondes, sans qu'un conteneur soit démarré. Aucun de ces
+tests ne demande la fixture `engine`, donc aucun ne cherche à joindre PostgreSQL.
 
-## Les skip, et pourquoi une suite verte ne prouve rien
+C'était l'arbitrage que BACK-06c avait laissé ouvert : la fixture `engine` appelait alors
+`pytest.exit()`, et l'arrêt emportait aussi les moitiés **en mémoire**, qui n'ont pourtant besoin
+d'aucun conteneur. Il n'en reste qu'un `pytest.exit`, et il est ailleurs — voir
+[la garde sur la base de test](#la-base-dintégration).
 
-**C'est le piège de cette suite, et le seul qu'il faut connaître avant tout le reste.** Les
-moitiés qui parlent à un vrai service se **sautent** quand ce service ne répond pas, avec le
-message qui dit quoi lancer. Elles n'échouent pas — donc une suite verte n'est pas la preuve que
-la conformité a tourné.
+## Les skip, et comment savoir ce qu'une exécution a vraiment prouvé
 
-| Service manquant | Ce qui se passe                                            |
-| ---------------- | ---------------------------------------------------------- |
-| **PostgreSQL**   | La session **s'arrête** — `pytest.exit()`, rien n'est joué |
-| **Redis**        | Les moitiés Redis du cache et du magasin d'OTP sont `skip` |
-| **MinIO**        | La moitié S3 du stockage objet est `skip`                  |
-| **Mailpit**      | Les tests de remise réelle de courriel sont `skip`         |
+Les moitiés qui parlent à un vrai service se **sautent** quand ce service ne répond pas. Elles
+n'échouent pas : une exécution verte sur un poste sans Redis ressemblerait donc, trait pour trait,
+à une exécution verte sur un poste complet.
 
-Le geste qui lève le doute est `-rs`, qui affiche la **raison** de chaque saut :
+**Trois pièces referment ce piège**, et il faut les connaître dans cet ordre :
+
+| Pièce                      | Ce qu'elle fait                                                            |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `-rs` dans `addopts`       | Le motif de chaque saut s'affiche à **chaque** exécution, sans le demander |
+| Le bloc `services absents` | Nomme les services qui ont manqué, juste avant le vert final               |
+| `--require-services`       | Transforme chaque saut en **échec**                                        |
+
+| Service manquant | Ce qui se passe                                          |
+| ---------------- | -------------------------------------------------------- |
+| **PostgreSQL**   | Les tests d'intégration sautent ; les unitaires tournent |
+| **Redis**        | Les moitiés Redis du cache et du magasin d'OTP sautent   |
+| **MinIO**        | La moitié S3 du stockage objet saute                     |
+| **Mailpit**      | Les tests de remise réelle de courriel sautent           |
+
+Le geste qui lève tout doute, avant d'ouvrir une pull request qui touche une doublure ou un
+adaptateur :
 
 ```bash
-uv run pytest -m conformance -rs
+uv run pytest -m conformance --require-services
 ```
 
-Attendu : la liste des tests joués, puis un bloc `short test summary info` où chaque `SKIPPED`
-porte son motif — `Redis n'est pas joignable : make up a la racine (INFRA-02).` ou
-`MinIO n'est pas joignable : make up a la racine (INFRA-03).` **L'absence de ce bloc** est la
-seule preuve que les deux moitiés ont réellement tourné.
-
-**Avant d'ouvrir une pull request qui touche une doublure ou un adaptateur, lancer la suite avec
-la pile complète démarrée**, et vérifier que ce bloc est vide.
+Attendu : `… passed`, **et pas un seul `skipped`**. C'est la seule preuve que les deux moitiés de
+chaque suite ont réellement tourné. Sur un poste incomplet, le même geste produit des ERREURS de
+mise en place nommant le service manquant — jamais un vert trompeur. C'est le drapeau que QA-01
+posera en CI.
 
 ## Les marqueurs
 
-Dix marqueurs sont déclarés dans `[tool.pytest.ini_options]` de
-`backend/api/pyproject.toml`. Ils nomment un **sujet**, jamais un niveau de test :
+Treize marqueurs sont déclarés dans `[tool.pytest.ini_options]` de
+`backend/api/pyproject.toml`, sur **deux axes qui ne répondent pas à la même question**.
+
+### Le niveau : ce qu'un test coûte
+
+`unit`, `integration` et `slow` répondent à « puis-je le lancer sans Docker, et va-t-il me rendre
+la main ? ».
+
+**Personne ne les pose à la main.** Le hook `pytest_collection_modifyitems` du conftest racine lit
+la **clôture de fixtures** de chaque test — celle que pytest calcule à la collecte, et qui est
+transitive — et pose `integration` dès qu'elle atteint une fixture de service, `unit` sinon. Un
+test qui demande `session` tire `engine` et se classe sans rien déclarer ; un test qui cesse
+d'avoir besoin d'une base se reclasse tout seul.
+
+Déduire le niveau du **chemin** aurait été plus simple et faux dès le premier jour :
+`notifications/infrastructure/test_channel_adapters.py` est en couche infrastructure et ne touche
+aucun service. Ce qu'un test _réclame_ est la seule chose qui ne puisse pas mentir.
+
+Quatre endroits portent le marqueur à la main, et un seul motif les explique : la moitié réelle et
+la doublure y demandent une fixture du **même nom** (`cache`, `storage`, `store`), qu'aucune
+règle ne peut départager. Il est alors posé **sur la classe, jamais sur le module** — un
+`pytestmark` de module marquerait aussi la moitié en mémoire, que `-m "not integration"` cesserait
+de jouer.
+
+`slow` est un **qualificatif**, pas un troisième niveau : un test peut être `unit` et `slow`.
+Traités comme exclusifs, les tests unitaires lents sortiraient de `-m unit` sans que rien ne le
+dise. `make test-unit` joue `-m "unit and not slow"` ; `make test` joue tout.
+
+### Le sujet : quel comportement un test garde
+
+Les dix autres répondent à « qu'est-ce que BACK-17 a livré ? ». Ils se posent à la main, par le
+ticket qui livre le comportement, et se **cumulent** avec le niveau — `-m "otp and not
+integration"` est une sélection légitime.
 
 | Marqueur           | Ce qu'il rassemble                                              | Ticket   |
 | ------------------ | --------------------------------------------------------------- | -------- |
@@ -147,8 +179,8 @@ Pour lire la liste depuis le dépôt plutôt que depuis cette page :
 uv run pytest --markers
 ```
 
-Attendu : les dix marqueurs ci-dessus, chacun avec sa description et le ticket qui l'a introduit,
-parmi les marqueurs internes de pytest.
+Attendu : les treize marqueurs, chacun avec sa description et le ticket qui l'a introduit, parmi
+les marqueurs internes de pytest.
 
 La sélection se fait par `-m`, qui accepte les expressions booléennes :
 
@@ -172,51 +204,62 @@ mieux tenir de cette page que de découvrir sur un rapport :
   doublures non plus. Pour ces derniers c'est délibéré (BACK-06c) : `tests/shared/memory/` ne
   compare rien, et les faire entrer dans `-m conformance` annoncerait une comparaison qui n'a pas
   lieu.
-- **`--strict-markers` n'est pas activé.** Un marqueur mal orthographié ne fait donc pas échouer
-  la collecte : il produit un `PytestUnknownMarkWarning` que rien ne lit. Recopier le nom depuis
-  le `pyproject.toml`, et l'y déclarer avant de l'employer.
+- **En revanche, `--strict-markers` est actif.** Un marqueur mal orthographié fait désormais
+  échouer la **collecte**, au lieu de produire un `PytestUnknownMarkWarning` que rien ne lisait.
+  C'est ce qui fait de la catégorie obligatoire autre chose qu'un vœu : une faute de frappe sur
+  `tenant_isolation` casse bruyamment, elle ne vide plus la sélection en silence.
 
 :::
 
 ## L'organisation de `tests/`
 
-**L'arbre des tests recopie celui de `src/app/`.** Un test vit à côté de ce qu'il éprouve ; sans
-cela, la frontière de module n'existerait que dans `src/`.
+**L'arbre des tests recopie celui de `src/app/`, module d'abord puis couche.** Un test vit à côté
+de ce qu'il éprouve ; sans cela, la frontière de module n'existerait que dans `src/`.
 
 ```text
 tests/
-  conftest.py                 <- moteur, session, gardes autouse (voir plus bas)
+  conftest.py                 <- niveaux, base d'integration, gardes autouse
   test_context_guards.py      <- les gardes du harnais, testees elles-memes
-  core/
-    logging_probes.py         <- sondes, PAS collecte (pas de prefixe test_)
-    test_config_jwt.py  test_logging.py  ...
-  shared/
-    api_probes.py             <- application reelle + client ASGI, PAS collecte
-    tenancy_stubs.py          <- la paire d'agregats stubs, PAS collectee
+  test_harness.py             <- le harnais lui-meme : client, jetons, transaction
+  support/                    <- ce qui AIDE a tester, et n'est pas un test
+    api.py                    <- asgi_client, l'application reelle
+    auth.py                   <- doublures d'authentification, routes de sonde
+    tokens.py                 <- TokenFactory, cles, audiences, identifiants figes
+    tenancy_stubs.py          <- la paire d'agregats stubs
+    logs.py                   <- sondes de journalisation
+  core/                       <- app.core n'a pas de couches, ses tests non plus
+  shared/                     <- miroir de src/app/shared/
     conformance/              <- depot, cache, stockage : reel ET doublure
-    memory/                   <- ce qui n'est vrai que de la doublure
-    security/                 <- jetons et hachage
-    test_pagination.py  test_error_handlers.py  ...
+    db/                       <- schema, isolation transactionnelle, tenance
+    memory/  security/
   modules/
     identity/
-      conftest.py             <- cree la table du module dans app_test
-      helpers.py              <- fabriques de donnees, PAS collectees
-      conformance/            <- les finders maison du module
-      test_request_otp.py  test_verify_otp.py  ...
-    organization/  medical_records/  notifications/  scheduling/
+      helpers.py              <- fabriques du module, a la RACINE : les trois
+                                 couches les consomment
+      domain/  application/  infrastructure/
+      conformance/            <- un contrat joue sur deux implementations
+    organization/  medical_records/  scheduling/
+      domain/  infrastructure/          <- pas d'application/ : il n'y en a pas
+    notifications/                         dans src/ non plus
+      domain/  application/  infrastructure/
 ```
 
-Trois conventions se lisent sur cet arbre :
+Quatre conventions se lisent sur cet arbre :
 
-- **Un module sans préfixe `test_` n'est pas collecté par pytest.** C'est ce qui range les
-  fabriques (`helpers.py`), les stubs (`tenancy_stubs.py`) et les sondes (`api_probes.py`,
-  `logging_probes.py`) à côté des tests sans qu'ils en deviennent.
-- **Une doublure, elle, ne vit jamais sous `tests/`.** Elle répond à un port, donc sa place est
-  dans `src/` à côté des autres implémentations de ce port — le raisonnement complet est dans
-  l'[ADR-0023](../adr/0023-doublures-en-memoire-et-conformite.md). Ce qui reste sous `tests/` est
-  ce qui ne répond à personne.
-- **`conformance/` est un sous-paquet, pas un suffixe de fichier.** Il sépare ce qui se compare de
-  ce qui ne se compare pas, et rend `-m conformance` lisible à l'œil sur l'arbre.
+- **On ne crée que les couches qui existent dans `src/`.** `organization`, `medical_records` et
+  `scheduling` n'ont pas de couche `application/`, et le
+  [contrat n° 2 d'Import Linter](./qualite-et-typage.md#import-linter) met déjà `(application)`
+  entre parenthèses pour cette raison. Un répertoire de tests naît le jour où la couche naît.
+- **`tests/support/` n'est pas `tests/shared/`.** Le second miroite `src/app/shared/` : ce qu'on y
+  trouve **teste** le noyau partagé. Le premier ne teste rien — il sert à tester autre chose.
+  Aucun de ses modules ne porte de préfixe `test_`, donc pytest ne les collecte pas.
+- **Une doublure ne vit jamais sous `tests/`.** Elle répond à un port, donc sa place est dans
+  `src/` à côté des autres implémentations de ce port —
+  [ADR-0023](../adr/0023-doublures-en-memoire-et-conformite.md). Ce qui reste sous `tests/` est ce
+  qui ne répond à personne.
+- **`conformance/` est un sous-paquet, pas une couche.** Un contrat joué sur deux implémentations
+  n'en est pas une : il reste frère des trois, et `-m conformance` reste lisible à l'œil sur
+  l'arbre.
 
 ### Comment se nomme un test
 
@@ -233,34 +276,103 @@ Deux règles Ruff sont relâchées dans `tests/`, et deux seulement :
 | `D1xx` | Relâchée — un test se nomme, il ne se documente pas       |
 | `ANN`  | **Active** — `-> None` sur chaque fonction de test        |
 
-Mypy, lui, ne regarde pas `tests/` : son périmètre est `src`, `alembic` et `scripts`. L'y faire
-entrer est une décision de BACK-12.
+Mypy, lui, ne regarde pas `tests/` : son périmètre est `src`, `alembic` et `scripts`. **BACK-12 a
+rendu cet arbitrage, et il le laisse dehors** : la mesure en donne des dizaines d'erreurs, dont la
+majorité n'est pas corrigeable proprement — le splat de mots-clés Pydantic, un `str` que Pydantic
+convertit en `SecretStr`, et surtout des tests **dont le sujet EST le mauvais type**, qu'on ne peut
+faire taire qu'en annotant le mensonge qu'ils dénoncent. `ANN` reste actif, ce qui capte l'essentiel
+du bénéfice à coût nul : toute signature de test est annotée. La mesure est reproductible par
+`uv run mypy --cache-dir=/dev/null tests`, et l'écart est
+[consigné](../ecarts/back.md#écarts-assumés-avec-le-ticket-back-12).
 
-## Les `conftest.py`
+## Le `conftest.py`
 
-### Celui de la racine
+**Il n'en reste qu'un, et c'est un résultat du ticket.** Il y en avait sept : un par module pour
+créer ses tables, plus un ré-export en tire-bouchon. `tests/conftest.py` porte désormais quatre
+choses — la déduction du niveau, la base d'intégration, le harnais HTTP, et les garde-fous.
 
-`tests/conftest.py` porte deux choses : les fixtures de base de données, et quatre **garde-fous**
-qui refusent qu'un test laisse un état de processus derrière lui.
+#### La base d'intégration
 
-| Fixture              | Portée  | Ce qu'elle donne                                              |
-| -------------------- | ------- | ------------------------------------------------------------- |
-| `engine`             | session | Le moteur vers `app_test`, en `NullPool`, tables stubs créées |
-| `session`            | test    | Une session neuve, **annulée** puis fermée en sortie          |
-| `group_a`, `group_b` | test    | Deux identifiants de groupe, pour éprouver le cloisonnement   |
+| Fixture               | Portée  | Ce qu'elle donne                                                       |
+| --------------------- | ------- | ---------------------------------------------------------------------- |
+| `engine`              | session | Le moteur vers la base de test, `NullPool`, **schéma migré**           |
+| `connection`          | test    | Une connexion sous transaction **externe**, annulée en sortie          |
+| `bound_sessionmaker`  | test    | Une fabrique de sessions inscrite dans cette transaction               |
+| `session`             | test    | Une session issue de cette fabrique                                    |
+| `database`            | test    | Le `Database` que le `lifespan` poserait, fabrique liée                |
+| `engine_sessionmaker` | test    | Une fabrique **non liée**, pour les deux cas que le patron ne sert pas |
+| `group_a`, `group_b`  | test    | Deux identifiants de groupe, pour éprouver le cloisonnement            |
 
-L'URL de la base de test dérive de la configuration réelle en remplaçant le nom de la base par
-`POSTGRES_TEST_DB` — défaut `app_test`, lu dans l'**environnement** et non dans les `Settings`.
-Rien n'est à décommenter dans `backend/api/.env` pour lancer la suite. Et si cette base était la
-base applicative, la session s'arrête avant d'avoir créé quoi que ce soit : les tests créent et
-détruisent des tables, ils ne tournent jamais contre la base de travail.
+**Le schéma vient des migrations.** `engine` prend le verrou consultatif d'`alembic/env.py` — la
+même clé, ce qui sérialise la suite avec un `make migrate` concurrent —, commite, puis applique
+`alembic upgrade head`. Les cinq `conftest.py` de module qui créaient leurs tables à la main ont
+disparu avec elle, ainsi que le ré-export en tire-bouchon de `shared/security/`.
 
-L'isolation entre tests se fait **par rollback** : rien n'est commité, et le teardown de `session`
-annule ce que le test a écrit. Ni savepoints, ni `TRUNCATE` — cette machinerie appartient à
-BACK-12. La seule exception est la [suite de conformité](#écrire-une-suite-de-conformité), qui
-commite pour de bon et purge ses deux tables stubs elle-même.
+`upgrade head` est **idempotent** : la base survit d'une exécution à l'autre, et le plan est alors
+vide. `--db-reset` défait tout d'abord (`alembic downgrade base`), pour le jour où un changement de
+branche a fait diverger le schéma. Il n'y a **jamais** de `DROP SCHEMA public CASCADE` : il
+emporterait `pg_trgm` et `unaccent`, posées une seule fois à la création du volume par un script
+d'initialisation qui ne rejoue pas.
 
-Les quatre gardes sont `autouse` : elles s'appliquent à **tous** les tests, sans être demandées.
+Le nom de la base vient du champ `POSTGRES_TEST_DB` de `DatabaseSettings`, et un validateur
+**refuse qu'il vaille la base applicative**. Le refus tombe à la configuration, avant toute
+collecte : la suite sait désormais appliquer et défaire des migrations, ce qui n'est pas une chose
+à pointer par erreur sur une base de travail.
+
+#### L'isolation : une transaction par test
+
+`connection` ouvre une transaction **externe** ; `bound_sessionmaker` y inscrit les sessions en
+`join_transaction_mode="create_savepoint"`. Un `commit()` applicatif **relâche alors un savepoint**
+— visible de la suite du test, invisible de toute autre connexion — et le rollback de `connection`
+emporte l'ensemble, y compris après un test interrompu.
+
+**Il n'y a donc plus aucune purge manuelle**, et c'est ce que le patron achète. Ce qu'il coûte est
+écrit noir sur blanc : `commit()` ne franchit plus la frontière de la connexion. La propriété
+« une écriture validée survit à la connexion qui l'a faite » est prouvée par un test qui sort
+exprès du patron, et les tests de concurrence prennent `engine_sessionmaker` — deux sessions
+entrelacées sur une même connexion cassent le relâchement des savepoints, qui se fait en pile.
+
+Ce que le patron achète surtout : **une route atteinte par le client HTTP voit le semis non
+commité du test**. Avant, les résolveurs d'authentification devaient être câblés à la main sur la
+session du test, parce qu'« une autre connexion ne verrait rien du semis ». Le contournement a
+disparu, et le point de composition testé est redevenu celui qui tourne.
+
+#### Le client HTTP et la fabrique de jetons
+
+| Fixture          | Ce qu'elle donne                                                                 |
+| ---------------- | -------------------------------------------------------------------------------- |
+| `tokens`         | La `TokenFactory` du test — celui qui signe **est** celui qui vérifie            |
+| `probe_client`   | Un client sur l'application de sonde : les dépendances transverses, sans base    |
+| `api_client`     | Un client sur l'application **réelle**, base branchée sur la transaction du test |
+| `authentication` | Le montage réel, dont seul le service de jetons vient du harnais                 |
+
+`api_client` monte `app.state` **à la main** et n'exécute pas le `lifespan` : celui-ci appelle
+`get_settings()` en direct, reconfigure la journalisation — ce que la garde `_ensure_pristine_logging`
+refuse —, ouvre Redis, S3, le magasin d'OTP et le broker, et construit un moteur poolé là où tout
+le harnais tient par `NullPool`. Poser le bon `Database` suffit : `get_identity_uow` et
+`get_organization_uow` en dérivent, donc les routes ouvrent leurs sessions dans la transaction du
+test **sans une seule surcharge de dépendance**.
+
+La fabrique est paramétrable par audience, groupe actif et rôle — alors que `create_access_token`
+n'a **pas** de paramètre `group_role`, parce qu'une appartenance est une relation datée et non une
+revendication de l'appelant. `group_role=` inscrit donc l'appartenance dans la table du résolveur
+puis émet : le même trajet qu'en production, un dictionnaire à la place du dépôt. Les cas de refus
+se fabriquent en **dégradant l'émission**, jamais en forgeant une charge utile :
+
+```python
+await tokens.bearer()                                    # le cas nominal
+await tokens.bearer(group_role="admin")                  # un autre role de groupe
+await tokens.bearer(audience=AUDIENCE_INDIVIDUAL)        # un jeton d'une autre application
+await tokens.bearer(expired=True)                        # emis dans le passe, donc perime
+await tokens.token(group_role=None)                      # leve : appartenance inactive
+```
+
+Le dernier mérite d'être connu : le refus tombe **à l'émission**, pas au décodage. Un test qui
+chercherait un 401 se tromperait d'endroit — le jeton n'existe jamais.
+
+#### Les garde-fous
+
+Quatre gardes sont `autouse` : elles s'appliquent à **tous** les tests, sans être demandées.
 
 | Garde                           | Ce qu'elle refuse                                                       |
 | ------------------------------- | ----------------------------------------------------------------------- |
@@ -281,23 +393,6 @@ une `asyncio.Task`, qui reçoit une **copie** du contexte. Le pendant asynchrone
 `pytest_runtest_setup` qui enveloppe le test pour vérifier **dans** sa tâche — et
 `test_context_guards.py` éprouve cette enveloppe, parce qu'une garde qui n'est pas testée n'est
 pas une garde.
-
-### Ceux des modules
-
-Chaque module porte un `conftest.py` qui crée **ses** tables dans la base de test, puis les
-détruit. Toujours avec une liste de tables nommées : jamais un `create_all` sans cible, qui
-toucherait aux tables sous migrations.
-
-Ces fixtures ne sont **pas `autouse`**, et c'est ce qui permet aux tests de domaine et de cas
-d'usage de tourner sans Docker. Un test d'infrastructure, lui, demande la sienne en toutes
-lettres :
-
-```python
-pytestmark = pytest.mark.usefixtures("_identity_tables")
-```
-
-Elles disparaîtront toutes le jour où BACK-12 appliquera les migrations à la base de test ;
-l'emprunt est consigné au registre.
 
 ## Écrire un test de cas d'usage sur doublure
 
@@ -432,38 +527,72 @@ divergences **du côté réel**, quatre autres en revue — est raconté sur la 
 
 :::
 
+## La catégorie obligatoire
+
+**Tout module portant un agrégat tenant doit avoir des tests marqués `tenant_isolation`.** Ce n'est
+pas une catégorie de confort : c'est la seule preuve que l'isolation entre groupes tient.
+
+```bash
+make test-tenancy
+```
+
+Deux modules sont concernés aujourd'hui — `organization` (cliniques, affectations) et `scheduling`
+(fiches praticien) — et c'est mécanique, pas déclaratif :
+`tests/shared/db/test_tenant_coverage.py` parcourt `app.modules`, importe le `models.py` de chacun,
+et compare la liste de ceux qui portent `TenantMixin` à celle qui est déclarée. Un agrégat qui gagne
+le mixin fait échouer tant que personne ne l'a inscrit — et l'inscrire est le moment où la question
+« où sont ses tests d'isolation ? » se pose.
+
+Il vérifie les **deux sens** : une déclaration qui ne désigne plus aucun agrégat tenant doit
+disparaître, parce qu'un marqueur qui ne désigne rien est un marqueur qu'on cessera de croire.
+
+Ce qu'il ne peut pas faire, et il faut le savoir : vérifier qu'un test marqué **existe**. La
+collecte pytest ne voit que la sélection courante, et une telle garde passerait au vert sous le
+premier `pytest -k`. Elle rendrait donc exactement le service qu'on n'attend pas d'elle.
+
+## La couverture
+
+```bash
+make test-cov
+```
+
+Attendu : deux rapports. Le premier couvre le **service entier** et ne juge rien — il est là pour
+être lu. Le second garde `domain/` et `application/`, et **échoue** sous le seuil.
+
+Le seuil ne porte que sur ces deux couches, et c'est délibéré : ce sont celles dont le
+_comportement_ est le sujet des tests. L'infrastructure est couverte par les tests d'intégration,
+dont le taux dépend des services joignables sur le poste — un seuil qui bougerait selon que Redis
+tourne ou non ne serait pas un seuil.
+
+**`--cov` n'est pas dans les `addopts`**, et c'est le réglage qui décide si un seuil survit. Il y
+rendrait `pytest tests/modules/identity/domain` mesurable à quelques pour cent du service, donc en
+échec — et un seuil qui mord sur chaque exécution ciblée, celle qu'on lance quarante fois par heure,
+finit désactivé. Il vit dans `make test-cov`, et là seulement.
+
+La couverture de **branches** est active : un `if` dont un seul côté est joué est un `if` à moitié
+testé, et c'est précisément la moitié qui casse.
+
 ## Ce que la CI ne fait pas encore
 
 `.github/workflows/ci-backend.yml` ne rejoue **que les contrats d'architecture**
 ([Import Linter](./qualite-et-typage.md#import-linter)). Ni Ruff, ni Mypy, ni pytest : ils
-entreront avec QA-01, qui déclarera aussi les services PostgreSQL et Redis du job et le seuil de
-couverture.
+entreront avec QA-01, à qui ce fichier appartient et qui déclarera les services du job.
+
+BACK-12 lui livre de quoi le faire sans rien inventer : les cibles `test-unit`,
+`test-integration`, `test-tenancy` et `test-cov`, et le drapeau `--require-services` qui fait d'une
+exécution verte une preuve plutôt qu'un rapport.
 
 Conséquence pratique, et elle n'est pas théorique : **une suite cassée arrive telle quelle sur
 `main`** si personne ne l'a lancée. Avant d'ouvrir une pull request qui touche `backend/api/`,
 l'enchaînement minimal est celui-ci, depuis `backend/api/` :
 
 ```bash
-make check && make test
+make check && make test-cov
 ```
 
 Attendu : Ruff, les contrats d'architecture, le formatage puis Mypy au vert — c'est l'ordre
 qu'enchaîne `make check`, et [celui qu'aura la CI](./qualite-et-typage.md) — suivis du résumé de
-pytest sans échec.
+pytest sans échec et des deux rapports de couverture.
 
-## Ce que BACK-12 changera
-
-La page sera à relire ce jour-là. Ce qui est aujourd'hui provisoire, et connu comme tel :
-
-| Aujourd'hui                                                                 | Avec BACK-12                                   |
-| --------------------------------------------------------------------------- | ---------------------------------------------- |
-| Chaque module crée ses tables dans un `conftest.py`                         | Les migrations sont appliquées à `app_test`    |
-| Sans PostgreSQL, la session **s'arrête** — moitiés mémoire incluses         | L'arbitrage est repris                         |
-| Des marqueurs de **sujet** seulement                                        | `unit`, `integration`, `slow` s'y ajoutent     |
-| Aucun seuil de couverture, bien que `pytest-cov` soit installé              | Un seuil sur `domain/` et `application/`       |
-| Les sondes HTTP ne sont partagées qu'à moitié — deux fichiers les recopient | Une fixture `client` et une fabrique de jetons |
-| `tests/` hors du périmètre de Mypy                                          | Décision à prendre                             |
-| Arborescence par module                                                     | Par module **puis par couche**                 |
-
-Les écarts assumés avec le ticket DOC-02d sont consignés au
-[registre des écarts](../ecarts/doc.md#écarts-assumés-avec-le-ticket-doc-02d).
+Les écarts assumés avec le ticket BACK-12 sont consignés au
+[registre des écarts](../ecarts/back.md#écarts-assumés-avec-le-ticket-back-12).

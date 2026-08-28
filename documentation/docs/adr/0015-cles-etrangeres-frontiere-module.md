@@ -94,5 +94,5 @@ tenant devra choisir, et dire pourquoi.
   clé composite et les identifiants de compte nus, avec leurs motifs sur place.
 - `backend/api/src/app/shared/infrastructure/db/mixins.py` — le mixin définitivement sans clé
   étrangère, et le geste de consentement documenté.
-- `backend/api/tests/modules/organization/test_ports.py` — la preuve par `IntegrityError` que la
+- `backend/api/tests/modules/organization/infrastructure/test_ports.py` — la preuve par `IntegrityError` que la
   clinique hors groupe ne s'insère pas.
