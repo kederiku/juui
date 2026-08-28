@@ -430,10 +430,15 @@ exclude_also = [
 # a l'import qu'elle couvrait.
 
 [tool.importlinter]
-# Le paquet a analyser. Il doit etre IMPORTABLE : c'est le cas, `uv sync`
-# installe le projet lui-meme, et `module-name = "app"` plus haut lui donne ce
-# nom-la.
-root_package = "app"
+# Les paquets a analyser. Ils doivent etre IMPORTABLES : `uv sync` installe le
+# projet lui-meme, et `module-name = "app"` plus haut lui donne ce nom-la ; le
+# paquet `tests` l'est par ses `__init__.py`.
+#
+# `tests` y entre avec BACK-12, pour le contrat 6 : le ticket range les tests par
+# module en disant pourquoi -- « sinon la frontiere de module n'existe que dans
+# src/ ». Or un arbre ne TIENT pas une frontiere, il l'affiche. Un contrat la
+# tient.
+root_packages = ["app", "tests"]
 
 # Fait entrer les paquets EXTERNES dans le graphe. Sans cette ligne, `fastapi`
 # ou `sqlalchemy` n'y existeraient pas et le contrat 1 ne pourrait pas les
@@ -579,6 +584,28 @@ id = "module-independence"
 name = "3. Independance des modules"
 type = "independence"
 modules = ["app.modules.*"]
+
+# --- Contrat 6 : l'independance des modules, dans la suite de tests aussi -----
+# Le miroir du contrat 3, applique a `tests.modules.*`. BACK-12 range les tests
+# par module en disant pourquoi -- « sinon la frontiere de module n'existe que
+# dans src/ ». Or un arbre AFFICHE une frontiere, il ne la tient pas : sans ce
+# contrat, un test d'`organization` important le `helpers.py` d'`identity` la
+# traverserait sans bruit, et le rangement deviendrait decoratif. Mesure : ce cas
+# precis fait bien echouer `lint-imports`.
+#
+# CE QU'IL NE GARDE PAS, et il faut le dire pour ne pas se reposer sur lui a
+# tort : un contrat d'independance regarde les imports ENTRE LES MODULES QU'IL
+# NOMME. Un test d'`organization` qui importerait `app.modules.identity` -- du
+# code de PRODUCTION, pas du code de test -- passe au travers. Ce cas-la reste
+# une affaire de revue ; `tests/test_species_vocabulary.py` en est l'exemple
+# legitime, un invariant inter-contextes qui compare les deux vocabulaires
+# d'especes et vit pour cette raison a la racine, avec les autres tests qui
+# n'appartiennent a aucun module.
+[[tool.importlinter.contracts]]
+id = "test-module-independence"
+name = "6. Independance des modules dans la suite de tests"
+type = "independence"
+modules = ["tests.modules.*"]
 
 # --- Contrat 4 : le sens des couches du noyau partage -----------------------
 # Hors portee litterale du ticket, et pourtant du meme bois : `app.shared` a un

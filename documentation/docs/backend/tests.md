@@ -265,6 +265,13 @@ Quatre conventions se lisent sur cet arbre :
   `src/` à côté des autres implémentations de ce port —
   [ADR-0023](../adr/0023-doublures-en-memoire-et-conformite.md). Ce qui reste sous `tests/` est ce
   qui ne répond à personne.
+- **La frontière de module est tenue par un contrat, pas par l'arbre.** Le
+  [contrat n° 6 d'Import Linter](./qualite-et-typage.md#import-linter) refuse qu'un test d'un module
+  en importe un autre — un test d'`organization` qui prendrait le `helpers.py` d'`identity` fait
+  échouer `make lint`. Ce qu'il ne garde pas : un import du code de **production** d'un autre
+  module. `tests/test_species_vocabulary.py` en est l'exemple légitime — il compare les deux
+  vocabulaires d'espèces, c'est un invariant inter-contextes, et il vit pour cette raison à la
+  racine avec les autres tests qui n'appartiennent à aucun module.
 - **`conformance/` est un sous-paquet, pas une couche.** Un contrat joué sur deux implémentations
   n'en est pas une : il reste frère des trois, et `-m conformance` reste lisible à l'œil sur
   l'arbre.
