@@ -175,9 +175,13 @@ class NoteUnitOfWork(AbstractUnitOfWork):
 class SqlAlchemyNoteUnitOfWork(SqlAlchemyUnitOfWork, NoteUnitOfWork):
     """Cote REEL de la conformite : PostgreSQL, par la base de test.
 
-    Elle COMMITE pour de bon -- c'est le sujet meme du critere 1, et c'est
-    pourquoi la fixture de conformite purge les deux tables avant et apres chaque
-    test au lieu de compter sur le rollback de la fixture `session`.
+    Elle COMMITE pour de bon -- c'est le sujet meme du critere 1. Depuis
+    BACK-12, la fixture de conformite ne purge plus rien pour autant : elle la
+    construit sur `bound_sessionmaker`, dont les sessions s'inscrivent en
+    SAVEPOINT dans la transaction du test, que le teardown annule. Le commit
+    reste un vrai commit du point de vue de la session ; ce qu'il ne franchit
+    plus, c'est la frontiere de la connexion -- et c'est l'objet du seul test qui
+    sort du patron, `test_a_commit_is_visible_from_another_connection`.
     """
 
     @property

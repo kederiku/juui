@@ -10,21 +10,17 @@ que la production refuse, une creation de compte passe au vert en test et echoue
 en production. C'est exactement la divergence que ce fichier existe pour fermer.
 """
 
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.identity.domain.entities import Account, AccountStatus, AccountType
 from app.modules.identity.domain.exceptions import AccountNotFoundError
 from app.modules.identity.domain.ports import IdentityUnitOfWork
-from app.modules.identity.infrastructure.db.models import AccountModel
 from app.modules.identity.infrastructure.memory.unit_of_work import InMemoryIdentityUnitOfWork
 from app.modules.identity.unit_of_work import SqlAlchemyIdentityUnitOfWork
-from app.shared.infrastructure.db.session import build_sessionmaker
 from tests.modules.identity.helpers import an_account
 
 pytestmark = pytest.mark.conformance
@@ -146,23 +142,16 @@ class AccountRepositoryConformance:
 class TestSqlAlchemyAccountRepositoryConformance(AccountRepositoryConformance):
     """La suite, jouee contre PostgreSQL par la base de test."""
 
-    @pytest_asyncio.fixture
-    async def uow(self, engine: AsyncEngine) -> AsyncIterator[IdentityUnitOfWork]:
-        """Unite de travail reelle, table purgee a chaque bout.
+    @pytest.fixture
+    def uow(self, bound_sessionmaker: async_sessionmaker[AsyncSession]) -> IdentityUnitOfWork:
+        """Unite de travail reelle, inscrite dans la transaction du test.
 
-        PURGE PLUTOT QUE ROLLBACK, meme motif que la conformite du socle : cette
-        moitie commite pour de bon, sans quoi elle ne prouverait pas ce que le
-        ticket lui demande de prouver.
+        PLUS DE PURGE, meme motif que la conformite du socle (BACK-12) : cette
+        moitie commite toujours pour de bon, mais la transaction externe de
+        `connection` l'annule -- y compris apres un test interrompu, ce que la
+        purge « avant » ne faisait que reparer.
         """
-        await self._purge(engine)
-        yield SqlAlchemyIdentityUnitOfWork(build_sessionmaker(engine))
-        await self._purge(engine)
-
-    @staticmethod
-    async def _purge(engine: AsyncEngine) -> None:
-        """Vide la table des comptes de la base de TEST."""
-        async with engine.begin() as connection:
-            await connection.execute(delete(AccountModel))
+        return SqlAlchemyIdentityUnitOfWork(bound_sessionmaker)
 
 
 class TestInMemoryAccountRepositoryConformance(AccountRepositoryConformance):
