@@ -17,7 +17,7 @@ application le transpile.
 | `openapi.json`        | Le contrat exporté depuis FastAPI, versionné ([ADR-0019](../adr/0019-contrat-openapi-exporte.md)).                |
 | `orval.config.ts`     | Les deux sorties du générateur — les hooks, puis les schémas Zod.                                                 |
 | `src/mutator.ts`      | L'unique porte de sortie HTTP : base URL, en-têtes, erreurs.                                                      |
-| `src/errors.ts`       | `ApiError` et la normalisation du format d'erreur unique.                                                         |
+| `src/errors/`         | `ApiError`, la normalisation, et la table code → message ([Erreurs à l'écran](./erreurs-a-l-ecran.md)).           |
 | `src/runtime.ts`      | L'adresse de l'API et le point d'injection de l'identité.                                                         |
 | `src/query-*`         | La couche de cache : fournisseur, politique, clés, hydratation ([Données côté client](./donnees-cote-client.md)). |
 | `src/unauthorized.ts` | La couture du 401 : un gestionnaire global, un verrou par épisode.                                                |
@@ -46,7 +46,7 @@ Les imports passent par la carte `exports`, jamais par un chemin relatif :
 ```ts
 import { useCheckReadiness } from '@repo/api-client/api/health';
 import type { ReadinessReport } from '@repo/api-client/model/readiness-report';
-import { isApiError } from '@repo/api-client/errors';
+import { isApiError } from '@repo/api-client/errors/api-error';
 ```
 
 Il n'existe **aucun export racine** : `import … from '@repo/api-client'` est refusé par le
@@ -109,17 +109,22 @@ Le nom du hook dérive de l'`operation_id` de la route : `check_readiness` côt�
 'use client';
 
 import { useCheckReadiness } from '@repo/api-client/api/health';
+import { resolveApiError } from '@repo/api-client/errors/messages';
 
 export function ServiceStatus() {
   const { data, isPending, error } = useCheckReadiness();
 
   if (isPending) return <p>Vérification…</p>;
-  if (error) return <p>Service injoignable.</p>;
+  // Le message vient de la table code → message, jamais du corps de la réponse.
+  if (error) return <p>{resolveApiError(error).message}</p>;
 
   // `data.status` et `data.components.postgres` sont typés par le contrat.
   return <p>{data.status === 'ready' ? 'Service prêt' : 'Service dégradé'}</p>;
 }
 ```
+
+Le rendu complet d'une erreur — bloc d'alerte et identifiant d'incident copiable — est décrit sur
+[Erreurs à l'écran](./erreurs-a-l-ecran.md).
 
 Le schéma Zod du même contrat s'importe depuis `@repo/api-client/zod/health`, pour valider une saisie
 avec les contraintes exactes du backend.
@@ -153,6 +158,12 @@ Ce qu'il fait aujourd'hui :
   et un préflight CORS refusé ne parlent pas ce format, et l'appelant n'a pas à le savoir.
 - **L'identifiant de corrélation**, lu de l'en-tête `X-Request-ID` et attaché à l'erreur : c'est lui
   qu'on cite dans un rapport d'incident pour retrouver la requête dans les journaux.
+- **Le type d'erreur des hooks générés** (FRONT-10). Orval cherche littéralement
+  `export type ErrorType` dans ce fichier ; l'y trouvant, il type chaque hook
+  `TError = ErrorType<…>` au lieu de déduire l'erreur des réponses déclarées dans l'OpenAPI. La
+  déduction était **fausse** : le code généré annonçait que `useCheckReadiness` échouait avec un
+  `ReadinessReport` — le modèle du 503 —, alors que le mutator lève une `ApiError` sur tout échec. Un
+  appelant qui lisait `error.status` compilait sur un type qui ne le porte pas.
 
 Ce qu'il **prévoit sans le faire** — deux crochets laissés ouverts, pour que les tickets suivants
 remplacent une fonction au lieu de récrire le mutator :
@@ -197,9 +208,11 @@ d'erreur compris.
 pnpm --filter @repo/api-client test
 ```
 
-La portée des clés de cache, **hors ligne** : ni pile, ni compilation, ni dépendance. C'est la seule
-preuve mécanique de la frontière de tenance côté navigateur tant que QA-02 n'a pas posé de runner —
-détaillée sur [Données côté client](./donnees-cote-client.md#vérifier-sans-lancer-dapplication).
+Deux programmes **hors ligne** : ni pile, ni compilation, ni dépendance. Ce sont les seules preuves
+mécaniques dont ces deux sujets disposent tant que QA-02 n'a pas posé de runner — la frontière de
+tenance côté navigateur, détaillée sur
+[Données côté client](./donnees-cote-client.md#vérifier-sans-lancer-dapplication), et les règles de
+non-divulgation, détaillées sur [Erreurs à l'écran](./erreurs-a-l-ecran.md#vérifier).
 
 ```bash
 make verify-api-client
@@ -212,7 +225,8 @@ Exige la pile démarrée (`make dev`) : c'est le vrai service qui est interrogé
 
 ## Ce qui viendra
 
-- **FRONT-05** — le patron de formulaire, qui réutilisera les schémas Zod de ce package.
+- **FRONT-05** — le patron de formulaire, qui réutilisera les schémas Zod de ce package, et le
+  `toFieldErrors` d'[Erreurs à l'écran](./erreurs-a-l-ecran.md).
 - **FRONT-07** — le flux d'authentification : jeton dans le mutator, rafraîchissement sur 401.
 - **QA-02** — l'outillage de test frontend, qui rejouera les hooks eux-mêmes et remplacera le
   montage de compilation jetable de `make verify-api-client`.

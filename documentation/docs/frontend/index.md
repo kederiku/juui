@@ -24,6 +24,7 @@ métier. Le cœur d'authentification leur est commun et n'est écrit qu'une fois
 | [La bibliothèque @repo/ui](./bibliotheque-ui.md)          | Les composants shadcn/ui partagés, le thème, la `DataTable`.                 |
 | [Le client d'API généré](./client-api-genere.md)          | Le package `@repo/api-client` : régénérer, consommer un hook, le mutator.    |
 | [Données côté client](./donnees-cote-client.md)           | Le `QueryProvider` partagé, la politique de cache, les clés et leur portée.  |
+| [Erreurs à l'écran](./erreurs-a-l-ecran.md)               | La table code → message, les deux règles de non-divulgation, l'identifiant.  |
 | [Les trois applications](./les-trois-applications.md)     | Le socle commun FRONT-01 à 03, le volet SEO, le back-office et sa garde.     |
 | [Structure par domaine](./structure-par-domaine.md)       | Le rangement par sujet, la surface d'une feature, le garde-fou qui la tient. |
 
@@ -33,7 +34,7 @@ métier. Le cœur d'authentification leur est commun et n'est écrit qu'une fois
 - L'**accessibilité** au-delà du lint : parcours clavier et lecteurs d'écran.
 
 :::note Apportée par les tickets FRONT et SHARED
-Le client d'API généré est arrivé avec SHARED-03, et la couche de **cache** posée au-dessus avec
-FRONT-04 : chacun a désormais sa page. Les tickets à venir — FRONT-05 et suivants — rempliront les
-deux sujets restants à leur livraison.
+Le client d'API généré est arrivé avec SHARED-03, la couche de **cache** posée au-dessus avec
+FRONT-04, et la traduction des **erreurs** avec FRONT-10 : chacun a désormais sa page. Les tickets à
+venir — FRONT-05 et suivants — rempliront les deux sujets restants à leur livraison.
 :::

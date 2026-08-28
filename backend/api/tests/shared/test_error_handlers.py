@@ -436,3 +436,31 @@ async def test_openapi_schema_still_serves() -> None:
         response = await client.get("/openapi.json")
     assert response.status_code == 200
     assert response.json()["info"]["title"] == "Juui API"
+
+
+async def test_openapi_publishes_the_error_format() -> None:
+    """Le format d'erreur est ANNONCE dans le contrat, et pas seulement respecte.
+
+    FRONT-10 derive son type TypeScript de ce composant plutot que de le
+    reecrire a la main : sans cette declaration, Orval ne genere rien et le
+    client d'API recopie un contrat qu'il ne controle pas. `/health/ready`
+    declare le 500 -- elle le produit reellement, le test ci-dessus le prouve --,
+    ce qui suffit a faire entrer le schema dans `components`.
+
+    `details` et `request_id` portent un defaut Pydantic, donc sortent
+    FACULTATIVES : le type genere est plus permissif que la promesse « quatre
+    cles toujours presentes ». C'est le contrat publie qui fait foi cote client,
+    d'ou l'assertion sur `required` plutot qu'un commentaire.
+    """
+    async with _client(create_app()) as client:
+        response = await client.get("/openapi.json")
+    document = response.json()
+
+    assert "ErrorResponse" in document["components"]["schemas"]
+    schema = document["components"]["schemas"]["ErrorResponse"]
+    assert set(schema["properties"]) == {"code", "message", "details", "request_id"}
+    assert schema["required"] == ["code", "message"]
+
+    responses = document["paths"]["/health/ready"]["get"]["responses"]
+    reference = responses["500"]["content"]["application/json"]["schema"]["$ref"]
+    assert reference == "#/components/schemas/ErrorResponse"

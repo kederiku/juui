@@ -1,6 +1,57 @@
 {
   "components": {
     "schemas": {
+      "ErrorResponse": {
+        "description": "Corps de toute reponse d'erreur : { code, message, details, request_id }.\n\nSerialise avec ses quatre cles TOUJOURS presentes -- les handlers passent\npar `model_dump(mode=\"json\")` sans `exclude_none`, et c'est voulu : un\ncontrat dont les cles apparaissent et disparaissent n'est pas un contrat.",
+        "examples": [
+          {
+            "code": "identity.account.not_found",
+            "message": "Aucun compte ne porte l'identifiant demande."
+          }
+        ],
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "JsonValue": {},
       "LivenessReport": {
         "description": "Reponse de la sonde de vie : le processus repond, rien de plus.",
         "properties": {
@@ -112,6 +163,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Une erreur interne est survenue."
           },
           "503": {
             "content": {

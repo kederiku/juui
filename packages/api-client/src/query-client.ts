@@ -31,16 +31,21 @@
  * surface.
  *
  * CE QUE CE FICHIER NE FAIT PAS
- * Il ne pose pas `throwOnError` : renvoyer les erreurs a une frontiere d'erreur
- * est une decision d'AFFICHAGE, elle appartient a FRONT-10 -- et les etats de
- * chargement a FRONT-18a. Il ne touche ni a `networkMode` ni a
- * `structuralSharing`, dont les defauts n'ont ete mis en defaut par aucune
+ * Il ne pose pas `throwOnError`, et FRONT-10 -- a qui la decision revenait --
+ * A TRANCHE DE NE PAS LE POSER : une erreur s'affiche LA ou la donnee etait
+ * attendue, a cote de ce qui a echoue et de ce qui a reussi. Une frontiere
+ * d'erreur remplace la page entiere, ce qui est le bon geste pour un ecran
+ * casse, jamais pour un tableau qui n'a pas pu se charger. La frontiere
+ * elle-meme viendra avec FRONT-18a, avec le reessai. Voir
+ * l'ADR-0029 et la page « Erreurs a l'ecran » du site de documentation.
+ * Les etats de chargement restent a FRONT-18a. Il ne touche ni a `networkMode`
+ * ni a `structuralSharing`, dont les defauts n'ont ete mis en defaut par aucune
  * mesure. A rouvrir si l'une le demande.
  */
 
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
-import { isApiError } from './errors';
+import { isApiError } from './errors/api-error';
 import { reportUnauthorized } from './unauthorized';
 
 import type { DefaultOptions } from '@tanstack/react-query';
@@ -60,11 +65,16 @@ const STALE_TIME_MS = 60_000;
  * Faut-il rejouer cette requete ?
  *
  * LA SIGNATURE VIENT DE TANSTACK, PAS DU GENERE, ET LA DIFFERENCE EST OPERANTE.
- * Le `TError` des hooks d'Orval vaut `unknown` (liveness) ou `ReadinessReport`
- * (readiness) ; celui des defauts du QueryClient vaut `Error`. Ni l'un ni
- * l'autre n'est `ApiError`. Ce qui ARRIVE reellement est ce que le mutator a
- * leve -- d'ou la garde `isApiError` plutot qu'un acces direct a `.status`, qui
- * ne compilerait pas et, s'il compilait, mentirait.
+ * Celui des defauts du QueryClient vaut `Error` : cette fonction ne voit donc
+ * pas le type des hooks, et rien ne lui garantit une `ApiError`. D'ou la garde
+ * `isApiError` plutot qu'un acces direct a `.status`, qui ne compilerait pas
+ * et, s'il compilait, mentirait -- un abandon de requete remonte ici en
+ * `DOMException`, jamais en `ApiError`.
+ *
+ * COTE HOOKS, EN REVANCHE, LE TYPE A ETE CORRIGE. Le `TError` d'Orval valait
+ * `unknown` (liveness) ou `ReadinessReport` (readiness) -- le modele du 503,
+ * qui n'arrive jamais par ce chemin. Depuis FRONT-10, le mutator declare
+ * `ErrorType`, et les hooks types l'erreur reellement levee.
  */
 function shouldRetryQuery(failureCount: number, error: Error): boolean {
   // JAMAIS DE REESSAI COTE SERVEUR, et ce n'est pas decoratif : le defaut « 0
@@ -81,8 +91,8 @@ function shouldRetryQuery(failureCount: number, error: Error): boolean {
   }
 
   // TOUT CE QUI N'EST PAS UNE ApiError SORT ICI, ET C'EST L'ARBITRAGE.
-  // `ApiConfigurationError` est une classe A PART (errors.ts : « L'API n'a rien
-  // refuse : c'est le deploiement qui est faux ») : une base URL absente ne
+  // `ApiConfigurationError` est une classe A PART (errors/api-error.ts : « L'API
+  // n'a rien refuse : c'est le deploiement qui est faux ») : une base URL ne
   // devient pas presente parce qu'on redemande. Un `instanceof ApiConfigurationError` explicite serait du code
   // mort -- cette ligne l'attrape deja. La panne qu'il eviterait est reelle,
   // alors elle est nommee ici plutot qu'ecrite : quiconque remplacera ce
@@ -92,10 +102,10 @@ function shouldRetryQuery(failureCount: number, error: Error): boolean {
     return false;
   }
 
-  // `status: 0` SIGNIFIE « AUCUNE REPONSE N'EST PARVENUE » (errors.ts) : reseau,
-  // DNS, 500 sans en-tetes CORS, preflight refuse. C'est le cas ou reessayer
+  // `status: 0` SIGNIFIE « AUCUNE REPONSE N'EST PARVENUE » (errors/api-error.ts) :
+  // reseau, DNS, 500 sans CORS, preflight refuse. C'est le cas ou reessayer
   // sert le plus, et celui qu'il ne faut surtout pas confondre avec un refus de
-  // l'API -- errors.ts le dit deja : « un `if (error.status === 401)` ne doit
+  // l'API -- api-error.ts le dit deja : « un `if (error.status === 401)` ne doit
   // jamais confondre l'API a refuse et l'API n'a pas repondu ».
   if (error.status === 0) {
     return true;

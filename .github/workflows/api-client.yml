@@ -25,6 +25,12 @@
 # `packages/api-client/**`, que ce workflow surveille deja. Elle ne demande ni
 # pile demarree ni compilation -- c'est ce qui la rend eligible ici, la ou
 # `make verify-api-client` ne le sera jamais.
+#
+# FRONT-10 L'A ELARGIE SANS CHANGER CE RAISONNEMENT : le meme `pnpm test` joue
+# desormais aussi les sondes de traduction des erreurs -- non-divulgation a
+# l'inscription, vocabulaire du 404, repli d'un code inconnu. Meme eligibilite,
+# meme motif de `paths`, et deux regles de securite qui rougissent en CI plutot
+# que de se relire en revue.
 name: Client d'API
 
 # LES DEUX LISTES `paths` SONT RECOPIEES A L'IDENTIQUE, comme dans
@@ -69,7 +75,7 @@ concurrency:
 
 jobs:
   drift:
-    name: Client d'API a jour, clefs de cache isolees
+    name: Client d'API a jour, clefs isolees, erreurs traduites
     runs-on: ubuntu-latest
 
     # PAS de `defaults.run.working-directory`, contrairement a ci-backend.yml :
@@ -142,10 +148,11 @@ jobs:
         run: make generate-api-check
 
       # APRES la verification anti-derive, et non avant : une sortie generee
-      # perimee rendrait le second echec incomprehensible. Ce programme est hors
-      # ligne -- `node` execute src/query-keys.ts sans compilation, le fichier
-      # n'ayant aucun import de valeur (FRONT-04). Sa violation ne rougirait
-      # nulle part ailleurs : elle produirait des donnees medicales d'un groupe
-      # affichees dans un autre.
-      - name: Verifier la portee des clefs de cache
+      # perimee rendrait le second echec incomprehensible. Ces programmes sont
+      # hors ligne -- `node` execute src/query-keys.ts et src/errors/messages.ts
+      # sans compilation, ni l'un ni l'autre n'ayant d'import de valeur
+      # (FRONT-04, FRONT-10). Leurs violations ne rougiraient nulle part
+      # ailleurs : l'une afficherait les donnees medicales d'un groupe dans un
+      # autre, l'autre revelerait qu'une adresse e-mail est deja inscrite.
+      - name: Verifier la portee des clefs et la traduction des erreurs
         run: pnpm --filter @repo/api-client test

@@ -269,10 +269,12 @@ souche, et pour écrire l'intention à l'endroit du montage.
 pnpm --filter @repo/api-client test
 ```
 
-Six contrôles **hors ligne**, sans pile démarrée, sans compilation et sans dépendance : la bascule
-de groupe, la clé d'Orval reprise intacte, la portée publique sans tenance, le préfixe de purge qui
-n'atteint que son groupe, deux cliniques qui ne partagent pas d'entrée, et le refus d'un identifiant
-vide ou blanc.
+Cette commande lance **deux** programmes ; celui des clés de cache tient six contrôles **hors
+ligne**, sans pile démarrée, sans compilation et sans dépendance : la bascule de groupe, la clé
+d'Orval reprise intacte, la portée publique sans tenance, le préfixe de purge qui n'atteint que son
+groupe, deux cliniques qui ne partagent pas d'entrée, et le refus d'un identifiant vide ou blanc.
+Le second, arrivé avec FRONT-10, tient les règles de non-divulgation —
+[Erreurs à l'écran](./erreurs-a-l-ecran.md#vérifier).
 
 C'est possible parce que `src/query-keys.ts` n'a **aucun import de valeur** : Node 24 efface les
 types à la volée et exécute le fichier tel quel. **Cette pureté est porteuse** — un seul import de
@@ -295,8 +297,10 @@ Exige la pile démarrée (`make dev`).
 - **FRONT-07** — le flux d'authentification : c'est lui qui posera `setUnauthorizedHandler` et qui
   saura dire quel est le groupe actif.
 - **FRONT-08** — la bascule de groupe, et la purge par `tenantScopeKey`.
-- **FRONT-10** et **FRONT-18a** — l'affichage des erreurs et les états de chargement, restés hors de
-  la politique de cache à dessein.
+- **FRONT-18a** — les états de chargement, restés hors de la politique de cache à dessein.
+  L'affichage des erreurs, lui, est arrivé avec FRONT-10 : voir
+  [Erreurs à l'écran](./erreurs-a-l-ecran.md). C'est ce ticket qui a tranché le renvoi laissé ici sur
+  `throwOnError` — il n'est **pas** posé, une erreur s'affichant là où la donnée était attendue.
 - **QA-02** — le runner de test frontend, qui rejouera les hooks eux-mêmes.
 
 Les écarts assumés avec le ticket FRONT-04 sont consignés au

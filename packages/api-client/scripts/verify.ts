@@ -13,7 +13,8 @@
  * la politique de cache reellement posee, le predicat de reessai, l'appariement
  * PAR PREFIXE d'un vrai QueryCache, et le routage global des 401. L'algebre des
  * clefs, elle, se prouve hors ligne et sans rien installer --
- * `scripts/verify-query-keys.ts`, lance par `pnpm test`.
+ * `scripts/verify-query-keys.ts`, lance par `pnpm test` avec le
+ * `scripts/verify-errors.ts` de FRONT-10.
  *
  * Ce qu'il ne fait toujours pas, c'est RENDRE le hook : cela demande un runner
  * de test frontend, qui appartient a QA-02. L'ecart est consigne au registre.
@@ -29,7 +30,7 @@
    verify-api-client`. La regle vise le code d'application, ou une trace oubliee
    part en production ; ce fichier ne quitte jamais le poste. */
 
-import { ApiConfigurationError, ApiError, isApiError } from '../src/errors';
+import { ApiConfigurationError, ApiError, isApiError } from '../src/errors/api-error';
 import {
   checkLiveness,
   checkReadiness,

@@ -34,9 +34,9 @@
  * MUTATOR, pas dans le cache. Ici il n'y a qu'une prise de courant.
  */
 
-import { isApiError } from './errors';
+import { isApiError } from './errors/api-error';
 
-import type { ApiError } from './errors';
+import type { ApiError } from './errors/api-error';
 
 /** Ce que l'application fait quand l'API declare la session finie. */
 export type UnauthorizedHandler = (error: ApiError) => void | Promise<void>;

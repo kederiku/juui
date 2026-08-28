@@ -61,6 +61,7 @@ le reste est gelé — l'historique d'une décision vaut souvent autant que la d
 | [ADR-0026](./0026-fiche-technique-praticien.md)                     | La fiche technique du praticien est portée par la clinique et déclarée en heure murale    | Accepté |
 | [ADR-0027](./0027-portee-des-cles-de-cache.md)                      | Une clé de cache déclare sa portée : publique, groupe, clinique                           | Accepté |
 | [ADR-0028](./0028-frontieres-de-features.md)                        | Une application frontend se découpe par domaine, et sa frontière est tenue par ESLint     | Accepté |
+| [ADR-0029](./0029-message-choisi-par-le-client.md)                  | Le serveur choisit le code, le client choisit le message                                  | Accepté |
 
 Les huit premiers ADR ont été rédigés a posteriori (DOC-02b) : les décisions dataient des tickets
 cités dans leur contexte, seule leur consignation date d'août 2026. À partir d'ici, un ADR s'écrit

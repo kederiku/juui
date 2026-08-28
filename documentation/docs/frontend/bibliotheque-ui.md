@@ -13,13 +13,13 @@ identité visuelle, ajout d'un composant, `DataTable` et contrôle du thème.
 partagés par les trois frontends. Le package n'est **jamais compilé** : il
 s'exporte en source TypeScript, et chaque application le transpile.
 
-| Chemin                   | Contenu                                                                           |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `src/components/`        | Composants shadcn/ui, `theme-provider.tsx`, `theme-toggle.tsx`, `data-table.tsx`. |
-| `src/hooks/`             | Hooks partagés — `use-mobile.ts`, dont dépend la barre latérale.                  |
-| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.                 |
-| `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application.             |
-| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                                  |
+| Chemin                   | Contenu                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `src/components/`        | Composants shadcn/ui, `theme-provider.tsx`, `theme-toggle.tsx`, `data-table.tsx`, `error/`. |
+| `src/hooks/`             | Hooks partagés — `use-mobile.ts`, dont dépend la barre latérale.                            |
+| `src/lib/utils.ts`       | `cn()` — fusion de classes Tailwind avec résolution des conflits.                           |
+| `src/styles/globals.css` | Renvoi vers le thème partagé — le fichier qu'importe une application.                       |
+| `components.json`        | Configuration de la CLI shadcn en mode monorepo.                                            |
 
 Les imports passent par la carte `exports` du package, jamais par un chemin
 relatif :
@@ -82,14 +82,18 @@ Select, Sonner (notifications), Field (primitives de formulaire), Table, Badge,
 Skeleton — plus Separator, tiré par Field. FRONT-03 y a ajouté Sidebar et
 Breadcrumb, les deux primitives d'un back-office, avec ce que Sidebar réclame :
 Sheet (son volet mobile), Tooltip (ses info-bulles une fois repliée) et le hook
-`use-mobile`.
+`use-mobile`. FRONT-10 y a ajouté Alert, sur lequel s'appuie le bloc d'erreur.
 
-S'y ajoutent trois composants maison, absents du registre shadcn :
+S'y ajoutent cinq composants maison, absents du registre shadcn :
 `theme-provider.tsx`, qui pose la classe `.dark`, `theme-toggle.tsx`, le bouton
-qui la commande, et `data-table.tsx`, décrit juste après. Le deuxième a d'abord
-vécu dans `frontend-professional` (FRONT-01) ; FRONT-02 l'a remonté ici plutôt
-que de le recopier dans une deuxième application — c'est la règle que pose le
-ticket, et la raison d'être du package.
+qui la commande, `data-table.tsx`, décrit juste après, et le couple
+`error/error-state.tsx` et `error/request-id.tsx`, décrit sur
+[Erreurs à l'écran](./erreurs-a-l-ecran.md) — le premier sous-dossier de
+`src/components/`, que la carte `exports` couvre sans rien changer, son joker
+appariant aussi les barres obliques. Le `theme-toggle` a d'abord vécu dans
+`frontend-professional` (FRONT-01) ; FRONT-02 l'a remonté ici plutôt que de le
+recopier dans une deuxième application — c'est la règle que pose le ticket, et la
+raison d'être du package.
 
 ### `DataTable` — la table de données
 

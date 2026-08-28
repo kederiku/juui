@@ -1,8 +1,11 @@
 'use client';
 
 import { getCheckReadinessQueryKey, useCheckReadiness } from '@repo/api-client/api/health';
+import { resolveApiError } from '@repo/api-client/errors/messages';
 import { publicQueryKey } from '@repo/api-client/query-keys';
 import { Badge } from '@repo/ui/components/badge';
+import { ErrorState } from '@repo/ui/components/error/error-state';
+import { RequestId } from '@repo/ui/components/error/request-id';
 
 /**
  * FRONT-04 -- La preuve, a l'ecran, que le QueryProvider est REELLEMENT au-dessus
@@ -21,9 +24,22 @@ import { Badge } from '@repo/ui/components/badge';
  * soit ECRIT plutot que deduit d'une absence. Un ecran de tenance ecrirait
  * `groupQueryKey(scope, ...)`, que le typage refuse de composer sans groupe.
  *
- * TROIS ETATS, ET RIEN DE PLUS. Le squelette de chargement appartient a
- * FRONT-18a, le rendu des erreurs a FRONT-10 : ce qui est ici est le minimum
- * qui rende le cablage VISIBLE, et il disparaitra avec le premier ecran metier.
+ * QUATRE ETATS. Le squelette de chargement appartient toujours a FRONT-18a ;
+ * le rendu des erreurs, lui, est arrive avec FRONT-10 et c'est ICI qu'il se
+ * voit : sans consommateur, rien ne prouverait que la chaine code -> message ->
+ * ecran tient. Ce composant disparaitra avec le premier ecran metier.
+ *
+ * POUR LE VOIR : `make dev`, puis `docker compose stop redis`. La sonde repond
+ * alors 503 PAR LA ROUTE NORMALE -- donc en traversant tous les intergiciels,
+ * donc avec `X-Request-ID` expose --, et le bloc complet s'affiche, identifiant
+ * copiable compris. Arreter l'API entiere ne le montrerait PAS : la requete
+ * echouerait au transport, sans reponse, donc sans identifiant.
+ *
+ * CE QUE CETTE DEMONSTRATION NE PROUVE PAS : la table par module. Le corps de ce
+ * 503 est un `ReadinessReport` et non une erreur BACK-09 -- la sonde repond la
+ * meme forme en panne et en sante --, si bien que le mutator pose son propre
+ * code plutot que d'en lire un. Les entrees metier attendent BACK-28 ; les
+ * sondes hors ligne les couvrent d'ici la.
  *
  * A SAVOIR : un service degrade repond 503, que le mutator normalise en
  * ApiError -- il arrive donc par `isError`, jamais par `data`. Le cas
@@ -37,7 +53,7 @@ import { Badge } from '@repo/ui/components/badge';
  * ce qui est consigne au registre des ecarts.
  */
 export function ServiceStatus() {
-  const { data, isPending, isError, fetchStatus } = useCheckReadiness({
+  const { data, isPending, isError, error, fetchStatus } = useCheckReadiness({
     query: { queryKey: publicQueryKey(getCheckReadinessQueryKey()) },
   });
 
@@ -55,7 +71,18 @@ export function ServiceStatus() {
   }
 
   if (isError) {
-    return <Badge variant="destructive">Service injoignable</Badge>;
+    // `error` est type `ErrorType<...>`, c'est-a-dire l'`ApiError` que le
+    // mutator leve reellement (FRONT-10). Avant, le code genere le typait
+    // d'apres les reponses declarees dans l'OpenAPI -- ici `ReadinessReport`,
+    // qui n'arrive jamais par ce chemin.
+    const resolved = resolveApiError(error);
+    return (
+      <ErrorState className="max-w-xs" title="Service injoignable" message={resolved.message}>
+        {resolved.visibleRequestId === null ? null : (
+          <RequestId requestId={resolved.visibleRequestId} />
+        )}
+      </ErrorState>
+    );
   }
 
   return (

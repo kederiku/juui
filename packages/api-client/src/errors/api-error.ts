@@ -1,5 +1,11 @@
 /**
- * SHARED-03 -- Les erreurs de l'API, telles que le navigateur les voit.
+ * SHARED-03, repris par FRONT-10 -- Les erreurs de l'API, telles que le
+ * navigateur les voit.
+ *
+ * CE FICHIER NE CHOISIT AUCUN MESSAGE. Il normalise ; c'est `messages.ts`, a
+ * cote, qui traduit un code en phrase lisible. La separation est le sujet meme
+ * de FRONT-10 : `ApiError.message` est un message de JOURNAL, ecrit pour un
+ * developpeur, et il ne s'affiche jamais.
  *
  * POURQUOI CE FICHIER EXISTE
  * BACK-09 promet UN format d'erreur, quatre clefs toujours presentes :
@@ -13,22 +19,32 @@
  * respecte le contrat ou non : le code appelant n'a jamais a distinguer les deux
  * mondes.
  *
- * POURQUOI LE TYPE DU CORPS EST ECRIT ICI ET NON IMPORTE DU GENERE
- * `ErrorResponse` est declare cote backend sur le routeur v1, mais AUCUNE route
- * v1 n'existe encore : le composant n'apparait donc pas dans l'OpenAPI
- * d'aujourd'hui, et Orval n'en genere aucun type. A remplacer par un
- * `import type { ErrorResponse } from './generated/api/model/error-response'`
- * des la premiere route metier (BACK-28) -- un import de TYPE, sans couplage a
- * l'execution.
+ * LE TYPE DU CORPS VIENT DU GENERE, ET C'EST FRONT-10 QUI L'A RENDU POSSIBLE
+ * SHARED-03 avait du l'ecrire a la main : `ErrorResponse` n'etait declare que
+ * sur le 422 du routeur v1, qui n'a encore aucune route, si bien que le
+ * composant n'entrait pas dans l'OpenAPI. FRONT-10 a declare le 500 sur
+ * `/health/ready` -- qui le produit reellement --, le composant est publie, et
+ * ce fichier LIT desormais le contrat au lieu de le recopier. Un import de
+ * TYPE : il disparait a la compilation, donc aucun couplage a l'execution, et
+ * le module reste executable par Node sans compilation (voir `messages.ts`).
+ *
+ * SI LE BACKEND RECULAIT, la regeneration (`clean: true`) supprimerait le
+ * fichier importe et la compilation tomberait. C'est voulu : une divergence de
+ * contrat doit s'entendre.
  */
 
-/** Le corps d'erreur promis par BACK-09, quatre clefs toujours presentes. */
-export type ApiErrorBody = {
-  code: string;
-  message: string;
-  details: Record<string, unknown> | null;
-  request_id: string | null;
-};
+import type { ErrorResponse } from '../generated/api/model/error-response';
+
+/**
+ * Le corps d'erreur promis par BACK-09, tel que le contrat le publie.
+ *
+ * `code` et `message` sont exiges ; `details` et `request_id` portent un defaut
+ * cote Pydantic et sortent donc FACULTATIFS du schema, alors que les handlers
+ * les serialisent toujours. Le contrat publie etant plus permissif que la
+ * promesse, c'est lui qu'on suit -- `normalizeErrorResponse` n'exige de toute
+ * facon que les deux premiers.
+ */
+export type ApiErrorBody = ErrorResponse;
 
 /**
  * Codes fabriques PAR LE CLIENT, quand le serveur n'en a pas fourni.
@@ -43,7 +59,25 @@ export const CLIENT_ERROR_CODES = {
   unreachable: 'api_client.transport.unreachable',
   /** Une reponse est arrivee, hors du format d'erreur de BACK-09. */
   malformed: 'api_client.response.malformed',
+  /**
+   * Le deploiement est faux -- une base URL absente (FRONT-10).
+   *
+   * Pose par `resolveApiError` et non par le mutator : c'est une
+   * `ApiConfigurationError` qui remonte, et elle n'est deliberement PAS une
+   * `ApiError`. Le code n'existe donc que pour l'affichage.
+   */
+  configuration: 'api_client.configuration.invalid',
+  /** Ce qui a ete attrape n'est pas une erreur d'API reconnaissable (FRONT-10). */
+  unrecognized: 'api_client.error.unrecognized',
 } as const;
+
+/*
+ * CE REGISTRE ET LA TABLE DE `messages.ts` SE TIENNENT PAR UNE SONDE, ET NON PAR
+ * UN IMPORT. `messages.ts` ne peut rien importer en VALEUR -- c'est ce qui le
+ * rend executable par Node sans compilation, et son en-tete le motive. Les deux
+ * fichiers recopient donc les memes chaines, et `scripts/verify-errors.ts`
+ * verifie que chaque code declare ici a bien son message la-bas.
+ */
 
 /**
  * Configuration inutilisable -- une base URL absente.
