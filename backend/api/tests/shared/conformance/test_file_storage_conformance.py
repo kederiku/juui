@@ -193,6 +193,14 @@ class FileStorageConformance:
 class TestS3FileStorageConformance(FileStorageConformance):
     """La suite, jouee contre le MinIO du poste."""
 
+    # SUR LA CLASSE, ET JAMAIS SUR LE MODULE (BACK-12) : un `pytestmark`
+    # de module marquerait aussi la moitie EN MEMOIRE, que
+    # `-m "not integration"` cesserait alors de jouer -- l'inverse exact de
+    # ce que la doublure existe pour permettre. La deduction automatique ne
+    # peut pas trancher ici : les deux moities demandent une fixture du meme
+    # nom, seul MinIO distingue celle-ci.
+    pytestmark = pytest.mark.integration
+
     @pytest_asyncio.fixture
     async def storage(self) -> AsyncIterator[FileStorage]:
         """Stockage S3 reel, ou test ignore si le bucket ne repond pas."""

@@ -228,6 +228,11 @@ class CacheConformance:
         with use_group(group_a), pytest.raises(ValueError, match="vide"):
             await cache.invalidate_pattern("")
 
+    # Le seul test de cette suite qui ATTEND vraiment : il laisse un TTL d'une
+    # seconde s'ecouler, des deux cotes du contrat. `slow` est un qualificatif,
+    # pas un niveau -- la moitie en memoire reste `unit`, elle est juste ecartee
+    # de `make test-unit`, qu'on lance en boucle et qui doit rendre la main.
+    @pytest.mark.slow
     async def test_an_entry_expires_on_its_own(self, cache: Cache, group_a: UUID) -> None:
         """LE SEUL TEST QUI DORT de toute la suite, et il ne peut pas faire autrement.
 
@@ -246,6 +251,14 @@ class CacheConformance:
 
 class TestRedisCacheConformance(CacheConformance):
     """La suite, jouee contre le Redis du poste."""
+
+    # SUR LA CLASSE, ET JAMAIS SUR LE MODULE (BACK-12) : un `pytestmark`
+    # de module marquerait aussi la moitie EN MEMOIRE, que
+    # `-m "not integration"` cesserait alors de jouer -- l'inverse exact de
+    # ce que la doublure existe pour permettre. La deduction automatique ne
+    # peut pas trancher ici : les deux moities demandent une fixture du meme
+    # nom, seul Redis distingue celle-ci.
+    pytestmark = pytest.mark.integration
 
     @pytest_asyncio.fixture
     async def cache(self) -> AsyncIterator[Cache]:

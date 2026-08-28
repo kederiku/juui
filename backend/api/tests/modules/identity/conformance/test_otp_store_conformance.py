@@ -186,6 +186,14 @@ class OtpStoreConformance:
 class TestRedisOtpStoreConformance(OtpStoreConformance):
     """La suite, jouee contre le Redis du poste."""
 
+    # SUR LA CLASSE, ET JAMAIS SUR LE MODULE (BACK-12) : un `pytestmark`
+    # de module marquerait aussi la moitie EN MEMOIRE, que
+    # `-m "not integration"` cesserait alors de jouer -- l'inverse exact de
+    # ce que la doublure existe pour permettre. La deduction automatique ne
+    # peut pas trancher ici : les deux moities demandent une fixture du meme
+    # nom, seul Redis distingue celle-ci.
+    pytestmark = pytest.mark.integration
+
     @pytest_asyncio.fixture
     async def store(self) -> AsyncIterator[OtpStore]:
         """Magasin Redis reel, ou test ignore si l'instance ne repond pas.

@@ -301,19 +301,49 @@ init_typed = true
 warn_required_dynamic_aliases = true
 warn_untyped_fields = true
 
-# Configuration MINIMALE de pytest, tiree en avant par BACK-06b pour ses tests
-# d'isolation -- ecart consigne au registre. Le harnais complet appartient a
-# BACK-12 : les marqueurs unit/integration/slow, --strict-markers, la
-# couverture et les fixtures generales s'ajouteront ici.
+# ---------------------------------------------------------------------------
+# Harnais de test a trois niveaux (BACK-12)
+# ---------------------------------------------------------------------------
+# DEUX AXES DE MARQUEURS, ET ILS NE REPONDENT PAS A LA MEME QUESTION. Le NIVEAU
+# dit ce qu'un test COUTE -- « puis-je le lancer sans Docker ? » ; il est pose
+# automatiquement par `pytest_collection_modifyitems` (tests/conftest.py). Le
+# SUJET dit quel comportement il garde -- « qu'est-ce que BACK-17 a livre ? » ;
+# il se pose a la main, par le ticket qui livre le comportement. Les deux se
+# cumulent : `-m "otp and not integration"` est une selection legitime.
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Mode auto : chaque test async tourne sans decorateur, decision anticipee sur
-# BACK-12 -- necessaire pour ecrire le premier test asynchrone.
+# Mode auto : chaque test async tourne sans decorateur.
 asyncio_mode = "auto"
 # Fige le defaut actuel de pytest-asyncio et fait taire son avertissement.
 asyncio_default_fixture_loop_scope = "function"
+# `--strict-markers` : un marqueur non declare devient une ERREUR de collecte.
+#   Sans lui `pytest.mark.integrtion` est un no-op silencieux, et
+#   `make test-integration` annoncerait « 0 selected » sans que rien ne soit
+#   faux. C'est la contrepartie indispensable de la liste ci-dessous, et ce qui
+#   rend la categorie obligatoire `tenant_isolation` autre chose qu'un voeu.
+# `--strict-config` : une cle inconnue dans cette section echoue au lieu d'etre
+#   ignoree -- meme raison, appliquee a la configuration.
+# `-rs` : les motifs de chaque saut s'affichent A CHAQUE EXECUTION. La page
+#   Tests l'enseignait a la demande ; le rendre permanent est une des trois
+#   pieces qui empechent une suite verte de cacher une moitie non jouee -- les
+#   deux autres sont le recensement de `pytest_terminal_summary` et
+#   `--require-services`.
+# PAS DE `--cov` ICI, A DESSEIN : il rendrait `pytest -k foo` echouant au seuil,
+#   et un seuil qui mord sur chaque execution ciblee finit desactive. La
+#   barriere vit dans `make test-cov`.
+addopts = ["--strict-markers", "--strict-config", "-rs"]
 markers = [
-    "tenant_isolation: tests d'isolation multi-tenant (BACK-06b)",
+    # --- NIVEAU : pose automatiquement, exactement un par test --------------
+    "unit: test qui ne demande aucun service reel -- tourne sans Docker (BACK-12)",
+    "integration: test adosse a un service reel -- PostgreSQL, Redis, MinIO, Mailpit (BACK-12)",
+    # `slow` est un QUALIFICATIF, pas un troisieme niveau. Traite comme
+    # exclusif, un test unitaire ET lent sortirait de `-m unit`, et
+    # `make test-unit` cesserait de le jouer sans que rien ne le dise --
+    # exactement l'accident que ce ticket ferme ailleurs.
+    "slow: test dont la duree justifie de pouvoir l'ecarter (BACK-12)",
+
+    # --- SUJET : pose a la main, cumulable avec le niveau -------------------
+    "tenant_isolation: tests d'isolation multi-tenant (BACK-06b, obligatoires depuis BACK-12)",
     "pagination: tests de la convention de pagination (BACK-24)",
     "observability: tests de la journalisation et des intergiciels HTTP (BACK-11)",
     "otp: tests de la verification d'adresse par code OTP (BACK-17)",

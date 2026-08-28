@@ -62,6 +62,60 @@ from tests.shared.tenancy_stubs import PlainNoteModel, TenantNoteModel
 _STUB_TABLES = [TenantNoteModel.__table__, PlainNoteModel.__table__]
 
 
+# Fixtures qui ouvrent un SERVICE REEL, et qui suffisent donc a classer un test.
+#
+# La cloture de fixtures que pytest calcule a la collecte est TRANSITIVE :
+# `session`, `connection`, `bound_sessionmaker` et `database` tirent toutes
+# `engine`, si bien qu'un test qui demande l'une d'elles est vu ici sans avoir
+# rien a declarer. C'est ce qui rend le classement gratuit a maintenir -- un
+# test qui cesse d'avoir besoin d'une base est reclasse tout seul.
+#
+# POURQUOI PAS LE CHEMIN. Deduire le niveau de `.../infrastructure/` classerait
+# faux des le premier jour : `test_channel_adapters.py` et les tests des
+# doublures en memoire sont de l'infrastructure qui ne demande aucun service, et
+# `test_species_vocabulary.py` compare deux vocabulaires sans toucher a rien.
+# Ce que le test RECLAME est la seule chose qui ne puisse pas mentir.
+#
+# Redis et MinIO n'y figurent pas, et c'est structurel : dans les suites de
+# conformite, la moitie reelle et la doublure demandent une fixture du MEME NOM
+# (`cache`, `storage`, `store`). Un nom ne peut pas les departager -- ces
+# quatre endroits portent donc `pytest.mark.integration` a la main, SUR LA
+# CLASSE reelle et jamais sur le module, sans quoi la moitie en memoire
+# cesserait d'etre jouee par `-m "not integration"`.
+_SERVICE_FIXTURES: Final = frozenset({"engine", "mailpit"})
+
+# Les marqueurs de niveau deja poses a la main, que le hook ne doit pas doubler.
+_LEVEL_MARKERS: Final = frozenset({"unit", "integration"})
+
+
+# `tryfirst` : la deselection par `-m` se fait elle aussi dans ce hook, cote
+# greffon integre. Les conftests passent avant les greffons, mais on ne se repose
+# pas sur un ordre implicite quand `make test-unit` en depend.
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Pose sur chaque test le niveau que sa cloture de fixtures revele.
+
+    Ni `pytestmark` recopie dans cinquante fichiers -- cinquante lignes a tenir
+    vraies, dont l'oubli est SILENCIEUX puisque le test tourne quand meme, il
+    devient seulement invisible aux filtres --, ni deduction du chemin, qui
+    classerait faux (voir `_SERVICE_FIXTURES`). Ce qu'un test demande est la
+    seule source de verite qui se maintienne toute seule.
+
+    Un test qui porte deja `unit` ou `integration` n'est pas retouche : la
+    surcharge a la main reste possible, et elle est meme obligatoire aux quatre
+    endroits ou deux implementations partagent un nom de fixture.
+
+    Args:
+        items: les tests collectes, dans l'ordre de la selection courante.
+    """
+    for item in items:
+        if _LEVEL_MARKERS & {mark.name for mark in item.iter_markers()}:
+            continue
+        requested = frozenset(getattr(item, "fixturenames", ()))
+        level = "integration" if requested & _SERVICE_FIXTURES else "unit"
+        item.add_marker(getattr(pytest.mark, level))
+
+
 def _test_database_url() -> URL:
     """Compose l'URL de la base de test a partir de la configuration reelle."""
     settings = DatabaseSettings()
