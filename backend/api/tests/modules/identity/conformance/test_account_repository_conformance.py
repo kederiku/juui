@@ -143,7 +143,6 @@ class AccountRepositoryConformance:
         assert found.id == account.id
 
 
-@pytest.mark.usefixtures("_identity_tables")
 class TestSqlAlchemyAccountRepositoryConformance(AccountRepositoryConformance):
     """La suite, jouee contre PostgreSQL par la base de test."""
 

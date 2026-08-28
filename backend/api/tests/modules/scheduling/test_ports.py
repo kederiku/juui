@@ -44,7 +44,7 @@ from app.shared.infrastructure.tenancy import MissingTenantContextError, use_gro
 
 # Les trois tables du module naissent avec la fixture de session du conftest
 # local -- demandee ici, et seulement ici : les tests purs n'exigent pas Docker.
-pytestmark = [pytest.mark.scheduling, pytest.mark.usefixtures("_scheduling_tables")]
+pytestmark = pytest.mark.scheduling
 
 _EIGHT = 8 * 60
 _NINE = 9 * 60

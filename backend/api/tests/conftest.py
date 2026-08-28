@@ -1,59 +1,66 @@
-"""Fixtures minimales des tests d'isolation de tenance et garde-fous de contexte.
+"""Harnais de la suite de tests : niveaux, base d'integration, garde-fous.
 
-Deux sujets cohabitent ici, et c'est assume tant que BACK-12 n'a pas hisse le
-harnais complet : les fixtures de base de donnees des tests d'isolation
-(BACK-06b) et les trois garde-fous `autouse` qui refusent qu'un test laisse un
-etat de PROCESSUS derriere lui (BACK-06b pour la tenance, BACK-11 pour le
-contexte de requete et la journalisation).
+Trois sujets vivent ici, et ce sont les trois que BACK-12 avait a livrer.
 
-HARNAIS TIRE EN AVANT SUR BACK-12
-Le harnais complet -- fixtures generales, fabrique de jetons, client HTTP,
-migrations appliquees a la base de test -- appartient a BACK-12. Ce conftest ne
-porte que le strict necessaire aux tests d'isolation : un moteur NullPool vers
-la base de test, les deux tables stubs, une session par test annulee en sortie.
-Chaque emprunt sur BACK-12 est consigne au registre des ecarts.
+LE NIVEAU D'UN TEST SE DEDUIT DE CE QU'IL RECLAME
+`pytest_collection_modifyitems` lit la cloture de fixtures -- transitive -- et
+pose `unit` ou `integration`. Personne n'a de marqueur a tenir a jour, et un
+test qui cesse d'avoir besoin d'une base se reclasse tout seul.
 
-LA BASE DE TEST, SANS TOUCHER `DatabaseSettings`
-L'URL derive de la configuration reelle en remplacant le nom de la base par
-`POSTGRES_TEST_DB` (defaut `app_test`, creee par INFRA-01 au premier demarrage
-du cluster docker). Le champ dedie de `DatabaseSettings` et la decommentation
-de `.env.example` restent a BACK-12 -- meme geste que `alembic/env.py`, qui
-construit son moteur sans passer par `build_engine`.
+LA BASE D'INTEGRATION RECOIT LES MIGRATIONS, ET CHAQUE TEST ANNULE SA
+TRANSACTION
+`engine` applique `alembic upgrade head` a la base de test, une fois par
+session, sur sa propre connexion et sous le verrou consultatif d'`env.py`. Les
+cinq conftests de module qui creaient leurs tables a la main ont disparu avec
+elle. `connection` ouvre ensuite une transaction EXTERNE par test, et
+`bound_sessionmaker` y inscrit les sessions en `create_savepoint` : un
+`commit()` applicatif relache un savepoint, le teardown emporte tout. Plus
+aucune purge manuelle.
 
-POURQUOI NullPool
-Le moteur nait sur la boucle d'evenements de la session pytest et sert des
-tests qui tournent chacun sur la leur : un pool ordinaire lierait sa file a la
-premiere boucle venue. NullPool ouvre une connexion par emprunt et la ferme a
-la restitution -- la raison meme pour laquelle `engine.py` promet ce parametre
-aux fixtures de BACK-12.
+UN SERVICE ABSENT NE REND PLUS LA SUITE VERTE, ET NE L'ARRETE PLUS NON PLUS
+`pytest.exit()` a disparu : il empechait les tests qui ne demandent RIEN de
+tourner sans Docker. `require_service` saute et RECENSE ; le recensement
+s'affiche en fin d'execution, et `--require-services` le transforme en echec.
+C'est ce qui fait d'une CI verte une preuve, la ou une execution locale verte
+reste un rapport.
 
-ISOLATION ENTRE TESTS PAR ROLLBACK
-Les tests ne committent jamais : semis et ecritures restent dans la
-transaction de LEUR session, que le teardown annule. Ni savepoints ni
-truncate -- cette machinerie appartient a BACK-12.
+Les quatre garde-fous `autouse` en bas de fichier, eux, sont d'un autre ordre :
+ils refusent qu'un test laisse un etat de PROCESSUS derriere lui (BACK-06b pour
+la tenance, BACK-11 pour le contexte de requete et la journalisation, BACK-10b
+pour le reseau).
 """
 
 import functools
 import inspect
 import logging
-import os
 from collections.abc import AsyncIterator, Iterator
 from contextvars import ContextVar
-from typing import Final, cast
+from pathlib import Path
+from typing import Final, NoReturn, cast
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import URL, make_url
+from alembic import command
+from alembic.config import Config
+from alembic.util import CommandError
+from sqlalchemy import text
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+)
 from sqlalchemy.pool import NullPool
 
-from app.core.config import DatabaseSettings
+from app.core import get_settings
 from app.core.correlation import current_account_id, current_clinic_id, current_request_id
 from app.shared.infrastructure.db.base import Base
-from app.shared.infrastructure.db.session import build_sessionmaker
+from app.shared.infrastructure.db.engine import build_engine
+from app.shared.infrastructure.db.session import Database, build_sessionmaker
 from app.shared.infrastructure.tenancy import current_group_id
 from tests.shared.tenancy_stubs import PlainNoteModel, TenantNoteModel
 
@@ -116,56 +123,305 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
         item.add_marker(getattr(pytest.mark, level))
 
 
-def _test_database_url() -> URL:
-    """Compose l'URL de la base de test a partir de la configuration reelle."""
-    settings = DatabaseSettings()
-    test_db = os.environ.get("POSTGRES_TEST_DB", "app_test")
-    if test_db == settings.db:
-        message = (
-            f"La base de test « {test_db} » est la base applicative : les tests "
-            "creent et detruisent des tables, ils ne tournent jamais contre elle. "
-            "Renseigner POSTGRES_TEST_DB avec une base dediee."
-        )
-        pytest.exit(message)
-    return make_url(settings.sqlalchemy_url).set(database=test_db)
+# ---------------------------------------------------------------------------
+# Services absents : sauter en le disant, ou echouer si on l'a demande
+# ---------------------------------------------------------------------------
+
+# Services de la pile locale qui n'ont pas repondu, et leur remede. Un ENSEMBLE
+# et non un compteur : ce qui interesse le lecteur du rapport n'est pas combien
+# de tests ont saute -- le resume `-rs` le dit deja -- mais LESQUELS des quatre
+# services manquaient, donc quelle part de la suite n'a rien prouve.
+_MISSING_SERVICES: Final = pytest.StashKey[dict[str, str]]()
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Declare les deux options du harnais, et pas une de plus."""
+    parser.addoption(
+        "--require-services",
+        action="store_true",
+        default=False,
+        help=(
+            "Echoue au lieu de sauter quand un service de la pile locale ne "
+            "repond pas. A poser en CI : une execution verte devient une preuve."
+        ),
+    )
+    parser.addoption(
+        "--db-reset",
+        action="store_true",
+        default=False,
+        help=(
+            "Defait toutes les migrations (`alembic downgrade base`) avant de les "
+            "rejouer sur la base de test. A employer apres un changement de branche "
+            "qui a fait deriver son schema."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Ouvre le recensement des services absents."""
+    config.stash[_MISSING_SERVICES] = {}
+
+
+def require_service(config: pytest.Config, *, name: str, remedy: str) -> NoReturn:
+    """Saute le test faute de service -- ou echoue, si on a demande le contraire.
+
+    UN SEUL ENDROIT POUR LES QUATRE SERVICES. Avant BACK-12 ils avaient trois
+    comportements pour une meme situation : Redis, MinIO et Mailpit sautaient
+    chacun avec son `pytest.skip` muet, et PostgreSQL tuait la SESSION ENTIERE
+    par `pytest.exit()` -- y compris les moities en memoire, qui n'ont besoin de
+    rien. C'est cet arret-la que le ticket avait a reprendre.
+
+    Le saut est RECENSE, et c'est la piece qui manquait : un `skip` se lit dans
+    `-rs`, mais il s'y noie. Le bloc de fin de session dit lesquels des quatre
+    services ont manque, juste avant le vert final.
+
+    Args:
+        config: la configuration de la session, qui porte le recensement.
+        name: le service qui n'a pas repondu.
+        remedy: le geste qui le rend joignable, en toutes lettres.
+
+    Raises:
+        Failed: sous `--require-services`, ou l'absence est une panne.
+        Skipped: sinon.
+    """
+    message = f"{name} ne repond pas. {remedy}"
+    if config.getoption("--require-services"):
+        pytest.fail(message, pytrace=False)
+    config.stash[_MISSING_SERVICES][name] = remedy
+    pytest.skip(message)
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter, exitstatus: int, config: pytest.Config
+) -> None:
+    """Nomme les services absents, donc la part de la suite qui n'a rien prouve.
+
+    Sans ce bloc, une execution verte sur un poste sans Redis ressemble trait
+    pour trait a une execution verte sur un poste complet. La page Tests appelait
+    cela « le piege de cette suite » ; c'est ici qu'il se referme.
+    """
+    missing = config.stash.get(_MISSING_SERVICES, {})
+    if not missing:
+        return
+    skipped = len(terminalreporter.stats.get("skipped", []))
+    terminalreporter.write_sep("=", "services absents", yellow=True, bold=True)
+    for name, remedy in sorted(missing.items()):
+        terminalreporter.write_line(f"  {name} -- {remedy}")
+    terminalreporter.write_line(
+        f"{skipped} test(s) sautes : cette execution NE PROUVE PAS ce qu'ils couvrent. "
+        "`--require-services` fait echouer la suite au lieu de sauter."
+    )
+
+
+# ---------------------------------------------------------------------------
+# La base d'integration : migrations une fois par session, transaction par test
+# ---------------------------------------------------------------------------
+
+# Racine du service, d'ou `alembic.ini` se lit. Derivee de `__file__` et jamais
+# du repertoire courant : `uv run pytest` se lance aussi bien depuis la racine
+# du depot que depuis `backend/api`.
+_ALEMBIC_INI: Final = Path(__file__).resolve().parents[1] / "alembic.ini"
+
+# MEME CLE QUE `alembic/env.py`, et c'est tout l'interet : elle serialise cette
+# suite avec un `make migrate` lance en parallele sur le meme cluster, ou avec
+# une seconde execution de la suite dans un autre terminal.
+_MIGRATION_LOCK_KEY: Final = 0x6A75_7569
+
+
+def _alembic_config(sync_connection: Connection) -> Config:
+    """Compose la configuration Alembic branchee sur une connexion deja ouverte.
+
+    Les deux attributs sont le contrat passe avec `alembic/env.py` :
+
+    - `connection` : la connexion a employer. `env.py` la prefere a celle qu'il
+      construirait, et n'appelle donc pas `asyncio.run` -- impossible depuis la
+      boucle d'une fixture pytest, et c'est un mur et non une preference.
+    - `configure_logger` : `fileConfig` vaut `disable_existing_loggers=True` par
+      defaut. En processus, il eteindrait tous les loggers `app.*` deja crees et
+      poserait un handler stderr sur la racine.
+    """
+    config = Config(str(_ALEMBIC_INI))
+    config.attributes["connection"] = sync_connection
+    config.attributes["configure_logger"] = False
+    return config
+
+
+def _upgrade_to_head(sync_connection: Connection) -> None:
+    """Deroule les migrations jusqu'a la tete, sur la connexion du harnais."""
+    command.upgrade(_alembic_config(sync_connection), "head")
+
+
+def _downgrade_to_base(sync_connection: Connection) -> None:
+    """Defait toutes les migrations. JAMAIS `DROP SCHEMA public CASCADE`.
+
+    Le schema `public` de la base de test porte `pg_trgm` et `unaccent`, posees
+    une seule fois par `docker/postgres/init/02-enable-extensions.sh` a la
+    creation du volume -- un script d'initialisation ne rejoue jamais. Les
+    detruire rendrait la base irreparable sans `docker compose down -v`.
+    """
+    command.downgrade(_alembic_config(sync_connection), "base")
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")
-async def engine() -> AsyncIterator[AsyncEngine]:
-    """Moteur vers la base de test, tables stubs creees puis detruites."""
-    test_engine = create_async_engine(
-        _test_database_url(),
+async def engine(request: pytest.FixtureRequest) -> AsyncIterator[AsyncEngine]:
+    """Moteur vers la base de test, schema a jour, tables stubs creees.
+
+    PORTEE SESSION, BOUCLE SESSION ET `NullPool` VONT ENSEMBLE. Le moteur nait
+    dans la boucle de la session et sert des tests qui tournent chacun sur la
+    leur ; `NullPool` ouvre une socket par emprunt et la ferme a la restitution,
+    si bien qu'aucune file interne n'est liee a une boucle. C'est le parametre
+    qu'`engine.py` promettait nommement aux fixtures de ce ticket.
+
+    LE SCHEMA VIENT DES MIGRATIONS, PLUS DE `create_all`. Les cinq conftests de
+    module qui creaient leurs propres tables ont disparu : ce qui est teste est
+    desormais ce que `alembic upgrade head` pose en production. `upgrade head`
+    est idempotent -- la base survit d'une execution a l'autre et le plan est
+    alors vide --, et ce que `create_all` achetait au passage, a savoir la
+    pression pour qu'un index vive dans le MODELE et pas seulement dans sa
+    migration, est rachete par `test_schema_matches_models`.
+    """
+    settings = get_settings()
+    test_engine = build_engine(
+        settings,
+        url=settings.db.sqlalchemy_test_url,
         poolclass=NullPool,
-        connect_args={"timeout": 10, "server_settings": {"application_name": "juui-tests"}},
+        application_name="juui-tests",
     )
     try:
-        async with test_engine.begin() as connection:
+        async with test_engine.connect() as connection:
+            # Verrou consultatif de SESSION, relache a la deconnexion. Il ne
+            # couvre QUE les migrations : le tenir toute la suite empecherait
+            # deux executions de cohabiter, ce qui n'a aucune raison d'etre une
+            # fois le schema pose.
+            await connection.execute(
+                text("SELECT pg_advisory_lock(CAST(:lock_key AS bigint))"),
+                {"lock_key": _MIGRATION_LOCK_KEY},
+            )
+            # COMMIT OBLIGATOIRE, exactement pour la raison qu'`env.py`
+            # documente : l'execute ci-dessus a ouvert une transaction par
+            # autobegin, et Alembic qui en trouve une deja ouverte cesse de gerer
+            # la sienne -- tout le DDL serait annule a la deconnexion, SANS LA
+            # MOINDRE ERREUR. Le verrou, lui, est de niveau session et survit au
+            # commit.
+            await connection.commit()
+            if request.config.getoption("--db-reset"):
+                await connection.run_sync(_downgrade_to_base)
+            await connection.run_sync(_upgrade_to_head)
+            # Les deux tables stubs ne figurent dans AUCUNE migration, a dessein :
+            # `env.py` n'importe jamais `tenancy_stubs`, donc `alembic check` ne
+            # les voit pas. Elles se creent donc a la main, APRES les migrations,
+            # et elles seules seront detruites en sortie.
             await connection.run_sync(Base.metadata.create_all, tables=_STUB_TABLES)
-    except (OSError, SQLAlchemyError) as error:
+            await connection.commit()
+    except (OSError, SQLAlchemyError, CommandError) as error:
         await test_engine.dispose()
-        message = (
-            f"Connexion a la base de test impossible : {error}\n"
-            "PostgreSQL docker doit tourner (`make dev` a la racine) et la base "
-            "`app_test` exister -- elle nait au premier demarrage du volume "
-            "postgres (INFRA-01) ; un volume anterieur se recree par "
-            "`docker compose down -v` puis `make dev`."
+        require_service(
+            request.config,
+            name="postgres",
+            remedy=(
+                f"({error}) `make dev` a la racine demarre la pile, et la base de "
+                "test nait au premier demarrage du volume postgres (INFRA-01) ; "
+                "un volume anterieur se recree par `docker compose down -v` puis "
+                "`make dev`."
+            ),
         )
-        pytest.exit(message)
     yield test_engine
+    # `tables=` OBLIGATOIRE. Un `drop_all()` nu detruirait ici tout le schema
+    # migre en laissant `alembic_version` a la tete : l'execution suivante
+    # verrait un `upgrade head` sans rien a faire contre une base VIDE, et chaque
+    # test echouerait sur `UndefinedTable` sans que la cause soit visible nulle
+    # part. `test_schema_matches_models` est le filet qui nomme ce sabotage.
     async with test_engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all, tables=_STUB_TABLES)
     await test_engine.dispose()
 
 
 @pytest_asyncio.fixture
-async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
-    """Session neuve par test, annulee puis fermee en sortie."""
-    test_session = build_sessionmaker(engine)()
-    try:
-        yield test_session
-    finally:
-        await test_session.rollback()
-        await test_session.close()
+async def connection(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    """Connexion dediee au test, sous une transaction que la sortie annule.
+
+    C'est la piece qui remplace le rollback de session de BACK-06b ET les purges
+    manuelles des suites de conformite. Ce que le test valide atterrit dans un
+    SAVEPOINT ; le rollback ci-dessous emporte le savepoint et tout le reste --
+    y compris apres un test interrompu, ce que la purge « avant » ne faisait que
+    reparer apres coup.
+
+    PORTEE FONCTION, ET C'EST STRUCTUREL. Avec
+    `asyncio_default_fixture_loop_scope = "function"`, cette fixture tourne dans
+    LA BOUCLE DU TEST : la connexion asyncpg y nait, et c'est la seule facon
+    qu'elle y soit utilisable. Une connexion de portee session, nee dans la
+    boucle du moteur, serait touchee depuis une autre boucle a chaque test --
+    le mode d'echec le plus deroutant d'asyncpg. `NullPool` est ce qui rend
+    l'arrangement possible.
+    """
+    async with engine.connect() as opened:
+        transaction = await opened.begin()
+        try:
+            yield opened
+        finally:
+            # Inconditionnel : les sessions du test ont pu commiter pour de bon,
+            # la transaction EXTERNE est restee ouverte au-dessus de leurs
+            # savepoints. Le test n'est pas cense la fermer -- s'il l'a fait,
+            # `is_active` le dit et on n'insiste pas.
+            if transaction.is_active:
+                await transaction.rollback()
+
+
+@pytest.fixture
+def bound_sessionmaker(connection: AsyncConnection) -> async_sessionmaker[AsyncSession]:
+    """Fabrique de sessions inscrite dans la transaction du test.
+
+    `create_savepoint` fait exactement une chose : chaque session ouvre un
+    SAVEPOINT au lieu de piloter la transaction qu'elle trouve deja ouverte. Un
+    `commit()` applicatif RELACHE alors son savepoint -- visible de la suite du
+    test, invisible de toute autre connexion -- et le rollback de `connection`
+    efface l'ensemble.
+
+    LA LIMITE, ecrite ici parce qu'elle se paie ailleurs : les savepoints se
+    relachent EN PILE. Deux sessions imbriquees LIFO cohabitent, et c'est le
+    chemin nominal -- les resolveurs d'authentification referment leur bloc avant
+    que la route n'ouvre le sien. Deux sessions ENTRELACEES, ce que produit un
+    `asyncio.gather` de deux requetes, font echouer le relachement. Un test de
+    concurrence prend `engine_sessionmaker` et se nettoie lui-meme.
+    """
+    return build_sessionmaker(connection, join_transaction_mode="create_savepoint")
+
+
+@pytest_asyncio.fixture
+async def session(
+    bound_sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    """Session neuve par test, inscrite dans la transaction du test.
+
+    Le `rollback` de sortie n'est plus ce qui isole -- c'est `connection` -- il
+    n'est plus que l'hygiene du savepoint.
+    """
+    async with bound_sessionmaker() as opened:
+        yield opened
+
+
+@pytest.fixture
+def database(engine: AsyncEngine, bound_sessionmaker: async_sessionmaker[AsyncSession]) -> Database:
+    """Les ressources de persistance, telles que le `lifespan` les poserait.
+
+    LE MOTEUR ET NON LA CONNEXION dans le premier champ, et ce n'est pas une
+    approximation : `/health/ready` sonde `database.engine` et doit ouvrir sa
+    PROPRE connexion, comme en production. Seule la fabrique de sessions est liee
+    a la transaction du test -- c'est-a-dire tout ce que les unites de travail
+    traversent, donc tout ce qu'une route ouvre.
+    """
+    return Database(engine=engine, sessionmaker=bound_sessionmaker)
+
+
+@pytest.fixture
+def engine_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
+    """Fabrique NON liee, pour les rares tests que le patron ne peut pas servir.
+
+    Deux cas, et deux seulement : un test qui doit prouver qu'un commit est
+    visible d'une AUTRE connexion, et un test qui lance deux requetes en
+    parallele. Les deux commitent pour de bon et PURGENT EUX-MEMES.
+    """
+    return build_sessionmaker(engine)
 
 
 @pytest.fixture

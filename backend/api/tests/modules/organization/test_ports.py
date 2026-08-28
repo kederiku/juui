@@ -29,7 +29,6 @@ from app.shared.infrastructure.tenancy import MissingTenantContextError, use_gro
 
 # Les quatre tables du module naissent avec la fixture de session du conftest
 # local -- demandee ici, et seulement ici : les tests purs n'exigent pas Docker.
-pytestmark = pytest.mark.usefixtures("_organization_tables")
 
 _AT = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
 _RECENT_START = _AT - timedelta(days=30)

@@ -27,6 +27,7 @@ from app.modules.identity.infrastructure.clients.redis_otp_store import (
     derive_otp_pepper,
 )
 from app.shared.infrastructure.clients.cache_keys import environment_slug
+from tests.conftest import require_service
 from tests.modules.identity.helpers import a_client_ip, otp_rules
 
 # AU NIVEAU DU MODULE, contrairement aux suites de conformite : il n'y a pas
@@ -52,12 +53,14 @@ def _account_quota_key(account_id: UUID) -> str:
 
 
 @pytest.fixture
-async def store() -> RedisOtpStore:
+async def store(pytestconfig: pytest.Config) -> RedisOtpStore:
     """Magasin adosse au Redis du poste, ou test ignore s'il ne repond pas."""
     opened = build_otp_store(get_settings())
     if not await opened.ping():
         await opened.aclose()
-        pytest.skip("Redis n'est pas joignable : `make up` a la racine (INFRA-02).")
+        require_service(
+            pytestconfig, name="redis", remedy="`make up` a la racine demarre la pile (INFRA-02)."
+        )
     yield opened
     await opened.aclose()
 

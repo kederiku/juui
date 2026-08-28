@@ -30,6 +30,7 @@ from app.core import get_settings
 from app.modules.identity.domain.ports import OtpConsumption, OtpStore
 from app.modules.identity.infrastructure.clients.redis_otp_store import build_otp_store
 from app.modules.identity.infrastructure.memory.otp import InMemoryOtpStore
+from tests.conftest import require_service
 from tests.modules.identity.helpers import a_client_ip, otp_rules
 
 pytestmark = pytest.mark.conformance
@@ -195,7 +196,7 @@ class TestRedisOtpStoreConformance(OtpStoreConformance):
     pytestmark = pytest.mark.integration
 
     @pytest_asyncio.fixture
-    async def store(self) -> AsyncIterator[OtpStore]:
+    async def store(self, pytestconfig: pytest.Config) -> AsyncIterator[OtpStore]:
         """Magasin Redis reel, ou test ignore si l'instance ne repond pas.
 
         Les identifiants de compte sont tires au hasard a chaque test et les
@@ -205,7 +206,11 @@ class TestRedisOtpStoreConformance(OtpStoreConformance):
         opened = build_otp_store(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            pytest.skip("Redis n'est pas joignable : `make up` a la racine (INFRA-02).")
+            require_service(
+                pytestconfig,
+                name="redis",
+                remedy="`make up` a la racine demarre la pile (INFRA-02).",
+            )
         yield opened
         await opened.aclose()
 

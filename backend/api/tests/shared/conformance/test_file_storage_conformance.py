@@ -42,6 +42,7 @@ from app.shared.infrastructure.clients.s3_storage import (
 )
 from app.shared.infrastructure.clients.storage_keys import build_storage_key
 from app.shared.infrastructure.memory.file_storage import InMemoryFileStorage
+from tests.conftest import require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -202,12 +203,16 @@ class TestS3FileStorageConformance(FileStorageConformance):
     pytestmark = pytest.mark.integration
 
     @pytest_asyncio.fixture
-    async def storage(self) -> AsyncIterator[FileStorage]:
+    async def storage(self, pytestconfig: pytest.Config) -> AsyncIterator[FileStorage]:
         """Stockage S3 reel, ou test ignore si le bucket ne repond pas."""
         opened = build_file_storage(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            pytest.skip("MinIO n'est pas joignable : `make up` a la racine (INFRA-03).")
+            require_service(
+                pytestconfig,
+                name="minio",
+                remedy="`make up` a la racine demarre la pile (INFRA-03).",
+            )
         yield opened
         await opened.aclose()
 

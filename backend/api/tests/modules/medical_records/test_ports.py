@@ -30,7 +30,6 @@ from app.modules.medical_records.infrastructure.db.repositories import (
 
 # Les deux tables du module naissent avec la fixture de session du conftest
 # local -- demandee ici, et seulement ici : les tests purs n'exigent pas Docker.
-pytestmark = pytest.mark.usefixtures("_medical_records_tables")
 
 _AT = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
 _FIRST_START = _AT - timedelta(days=90)

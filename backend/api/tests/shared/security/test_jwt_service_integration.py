@@ -32,7 +32,7 @@ from app.shared.infrastructure.security.jwt_service import (
     build_token_service,
 )
 
-pytestmark = [pytest.mark.tokens, pytest.mark.usefixtures("_organization_tables")]
+pytestmark = pytest.mark.tokens
 
 _AUDIENCE_PRO = "test-pro"
 _SIGNING_KEY = "cle-de-test-assez-longue-pour-hs256-0123456"

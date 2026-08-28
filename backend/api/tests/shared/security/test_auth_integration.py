@@ -54,7 +54,7 @@ from tests.shared.auth_probes import (
     jwt_settings,
 )
 
-pytestmark = [pytest.mark.authorization, pytest.mark.usefixtures("_organization_tables")]
+pytestmark = pytest.mark.authorization
 
 # Instant REEL et non date en dur : PyJWT verifie le `iat` contre son horloge
 # murale, qu'aucun argument ne remplace.

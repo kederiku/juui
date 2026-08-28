@@ -35,6 +35,7 @@ from app.shared.domain.ports.cache import MISSING, Cache, CacheScope
 from app.shared.infrastructure.clients.redis_cache import build_cache
 from app.shared.infrastructure.memory.cache import build_in_memory_cache
 from app.shared.infrastructure.tenancy import MissingTenantContextError, use_group
+from tests.conftest import require_service
 
 pytestmark = pytest.mark.conformance
 
@@ -261,12 +262,16 @@ class TestRedisCacheConformance(CacheConformance):
     pytestmark = pytest.mark.integration
 
     @pytest_asyncio.fixture
-    async def cache(self) -> AsyncIterator[Cache]:
+    async def cache(self, pytestconfig: pytest.Config) -> AsyncIterator[Cache]:
         """Cache Redis reel, ou test ignore si l'instance ne repond pas."""
         opened = build_cache(get_settings())
         if not await opened.ping():
             await opened.aclose()
-            pytest.skip("Redis n'est pas joignable : `make up` a la racine (INFRA-02).")
+            require_service(
+                pytestconfig,
+                name="redis",
+                remedy="`make up` a la racine demarre la pile (INFRA-02).",
+            )
         yield opened
         await opened.aclose()
 
